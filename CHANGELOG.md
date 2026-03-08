@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.2
+
+- add MIT license and project URLs to PyPI metadata
+
 ## v0.1.1
 
 - add README as PyPI long description
