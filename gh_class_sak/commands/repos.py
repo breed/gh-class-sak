@@ -1,11 +1,15 @@
 import difflib
+from concurrent.futures import ThreadPoolExecutor
+import os
+import re
 import sys
 
 import click
 
 from gh_class_sak.core import (
     gh_class_sak, get_session, output, error, resolve_name,
-    get_config, get_canvas_session, resolve_course_mapping, normalize_course_name,
+    get_config, get_canvas, resolve_course_mapping, normalize_course_name,
+    config_ini,
 )
 from gh_class_sak.github_api import (
     list_classrooms, list_assignments, list_accepted_assignments,
@@ -13,7 +17,7 @@ from gh_class_sak.github_api import (
 )
 from gh_class_sak.canvas_api import (
     list_courses, list_group_categories, list_groups_in_category,
-    list_group_users,
+    list_group_users, graphql_enrollments, get_user_profile,
 )
 
 
@@ -62,29 +66,159 @@ def match_groups(repos_gh_names, groups_data):
     return result
 
 
-def fetch_canvas_groups(classroom, group_category):
-    """Fetch Canvas groups for a classroom and group category."""
+def resolve_canvas_course(classroom):
+    """Resolve a GitHub classroom to a Canvas course, returning shared context."""
     config = get_config()
-    canvas_session, canvas_url = get_canvas_session()
+    canvas = get_canvas()
     canvas_partial = resolve_course_mapping(config, classroom)
 
-    courses = list_courses(canvas_session, canvas_url)
+    courses = list_courses(canvas)
     for c in courses:
-        c["name"] = normalize_course_name(c.get("name", ""))
+        c.name = normalize_course_name(c.name)
     course = resolve_name(courses, normalize_course_name(canvas_partial), "canvas course")
 
-    categories = list_group_categories(canvas_session, canvas_url, course["id"])
+    return canvas, course
+
+
+def fetch_canvas_groups(classroom, group_category, canvas_ctx=None):
+    """Fetch Canvas groups for a classroom and group category."""
+    if canvas_ctx is None:
+        canvas_ctx = resolve_canvas_course(classroom)
+    canvas, course = canvas_ctx
+
+    categories = list_group_categories(course)
     category = resolve_name(categories, group_category, "group category")
 
-    groups = list_groups_in_category(canvas_session, canvas_url, category["id"])
+    groups = list_groups_in_category(category)
     groups_data = []
     for g in groups:
-        users = list_group_users(canvas_session, canvas_url, g["id"])
+        users = list_group_users(g)
         groups_data.append({
-            "name": g["name"],
-            "members": [u["name"] for u in users if u.get("name")],
+            "name": g.name,
+            "members": [u.name for u in users if u.name],
         })
     return groups_data
+
+
+_github_re = re.compile(r'github\.com/([a-zA-Z0-9_-]+)')
+
+
+def extract_github_username(profile):
+    """Extract GitHub username from a Canvas user profile."""
+    for link in profile.get("links", []):
+        url = link.get("url", "") if isinstance(link, dict) else str(link)
+        m = _github_re.search(url)
+        if m:
+            return m.group(1)
+    bio = profile.get("bio", "")
+    if bio:
+        m = _github_re.search(bio)
+        if m:
+            return m.group(1)
+    return None
+
+
+def fetch_enrollment_data(classroom, canvas_ctx=None):
+    """Fetch Canvas enrollment data mapping students to instructors by section."""
+    if canvas_ctx is None:
+        canvas_ctx = resolve_canvas_course(classroom)
+    canvas, course = canvas_ctx
+
+    # single GraphQL call gets all roles, names, emails, and sections
+    nodes = graphql_enrollments(canvas, course.id)
+
+    students = {}
+    instructors = {}
+    for node in nodes:
+        role = node.get("role", {}).get("name", "")
+        user = node.get("user", {})
+        user_id = user.get("_id")
+        if not user_id:
+            continue
+        section_id = node.get("courseSectionId")
+
+        if role in ("TeacherEnrollment", "TaEnrollment"):
+            if user_id not in instructors:
+                instructors[user_id] = {
+                    "name": user.get("name", ""),
+                    "email": user.get("email", ""),
+                    "section_ids": set(),
+                }
+            instructors[user_id]["section_ids"].add(section_id)
+        elif role == "StudentEnrollment":
+            if user_id not in students:
+                students[user_id] = {
+                    "name": user.get("name", ""),
+                    "email": user.get("email", ""),
+                    "section_ids": set(),
+                }
+            students[user_id]["section_ids"].add(section_id)
+
+    # fetch GitHub usernames for instructors from Canvas profiles in parallel
+    def _fetch_github(uid):
+        try:
+            profile = get_user_profile(canvas, uid)
+            github = extract_github_username(profile)
+            if not github:
+                from gh_class_sak.core import warn
+                warn(f"no github link found in canvas profile for {instructors[uid]['name']}"
+                     f" (fields: {', '.join(profile.keys())})")
+            return uid, github
+        except Exception as exc:
+            from gh_class_sak.core import warn
+            warn(f"failed to fetch canvas profile for {instructors[uid]['name']}: {exc}")
+            return uid, None
+
+    with ThreadPoolExecutor() as pool:
+        for uid, github in pool.map(lambda uid: _fetch_github(uid), instructors):
+            instructors[uid]["github"] = github
+
+    return {
+        "students": list(students.values()),
+        "instructors": list(instructors.values()),
+    }
+
+
+def match_canvas_students(member_logins, user_cache, enrollment_data):
+    """Match GitHub logins to Canvas students by name. Returns dict of login -> canvas student."""
+    result = {}
+    if not enrollment_data:
+        return result
+    for login in member_logins:
+        u = user_cache.get(login, {})
+        gh_name = u.get("name", "")
+        if not gh_name:
+            continue
+        for s in enrollment_data["students"]:
+            if names_match(gh_name, s["name"]):
+                result[login] = s
+                break
+    return result
+
+
+def find_instructors_for_sections(matched_sections, enrollment_data):
+    """Find Canvas instructors that share any of the given section IDs."""
+    result = []
+    seen = set()
+    for inst in enrollment_data["instructors"]:
+        if inst["section_ids"] & matched_sections:
+            key = inst.get("github") or inst["name"]
+            if key not in seen:
+                seen.add(key)
+                result.append(inst)
+    return result
+
+
+def format_label(login, name=None, email=None, show_name=False, show_email=False):
+    """Format a user label with optional name/email annotations."""
+    annotations = []
+    if show_name and name:
+        annotations.append(name)
+    if show_email and email:
+        annotations.append(email)
+    if annotations:
+        return f"{login}({','.join(annotations)})"
+    return login
 
 
 @gh_class_sak.group()
@@ -97,19 +231,31 @@ def repos():
 @click.argument("classroom")
 @click.argument("assignment")
 @click.option("--repo", is_flag=True, default=False, help="show repo full name")
-@click.option("--name", "show_name", is_flag=True, default=False, help="show member names")
+@click.option("--members", is_flag=True, default=False, help="show members column")
+@click.option("--instructors", "show_instructors", is_flag=True, default=False,
+              help="show instructors column")
+@click.option("--name", "show_name", is_flag=True, default=False, help="annotate with names")
+@click.option("--email", "show_email", is_flag=True, default=False, help="annotate with emails")
 @click.option("--group", "group_category", default=None, type=str,
               help="match Canvas group category (partial name)")
 @click.option("--show-empty", is_flag=True, default=False, help="include teams with no members")
-def repos_list(classroom, assignment, repo, show_name, group_category, show_empty):
+def repos_list(classroom, assignment, repo, members, show_instructors, show_name, show_email,
+               group_category, show_empty):
     """List repos for a classroom assignment."""
     session = get_session()
     user_cache = {}
 
-    # if --group is given, fetch canvas groups data up front
+    # resolve Canvas course once if any Canvas feature is needed
+    need_canvas = (group_category or show_instructors or show_email) and os.path.exists(config_ini)
+    canvas_ctx = resolve_canvas_course(classroom) if need_canvas else None
+
     groups_data = None
     if group_category:
-        groups_data = fetch_canvas_groups(classroom, group_category)
+        groups_data = fetch_canvas_groups(classroom, group_category, canvas_ctx)
+
+    enrollment_data = None
+    if (show_instructors or show_email) and canvas_ctx:
+        enrollment_data = fetch_enrollment_data(classroom, canvas_ctx)
 
     # resolve classroom
     rooms = list_classrooms(session)
@@ -123,6 +269,11 @@ def repos_list(classroom, assignment, repo, show_name, group_category, show_empt
     asn = resolve_name(assignments, assignment, "assignment")
 
     slug = asn.get("slug", "")
+
+    # determine if we need GitHub user profiles (for name matching or annotations)
+    need_profiles = (groups_data is not None
+                     or enrollment_data is not None
+                     or (members and (show_name or show_email)))
 
     # first pass: collect all rows and compute column widths
     rows = []
@@ -149,19 +300,40 @@ def repos_list(classroom, assignment, repo, show_name, group_category, show_empt
                 continue
             member_logins.append(c["login"])
 
-        # format member labels
-        member_labels = []
-        for login in member_logins:
-            if show_name or groups_data is not None:
+        # fetch GitHub profiles if needed
+        if need_profiles:
+            for login in member_logins:
                 if login not in user_cache:
                     user_cache[login] = get_user(session, login)
-                u = user_cache[login]
-                if show_name and u.get("name"):
-                    member_labels.append(f"{login}({u['name']})")
-                else:
-                    member_labels.append(login)
-            else:
-                member_labels.append(login)
+
+        # match members to Canvas students once per repo
+        canvas_matches = match_canvas_students(member_logins, user_cache, enrollment_data)
+
+        # format member labels
+        member_labels = []
+        if members:
+            for login in member_logins:
+                u = user_cache.get(login, {})
+                gh_name = u.get("name") if need_profiles else None
+                cs = canvas_matches.get(login)
+                email = None
+                if show_email:
+                    email = cs.get("email") if cs else u.get("email")
+                member_labels.append(format_label(login, name=gh_name, email=email,
+                                                  show_name=show_name, show_email=show_email))
+
+        # find instructors for this group using cached matches
+        instructor_labels = []
+        if show_instructors and enrollment_data:
+            matched_sections = set()
+            for cs in canvas_matches.values():
+                matched_sections.update(cs["section_ids"])
+            for inst in find_instructors_for_sections(matched_sections, enrollment_data):
+                gh = inst.get("github") or "?"
+                instructor_labels.append(format_label(gh, name=inst.get("name"),
+                                                      email=inst.get("email"),
+                                                      show_name=show_name,
+                                                      show_email=show_email))
 
         # collect gh profile names for group matching
         gh_names = []
@@ -175,6 +347,7 @@ def repos_list(classroom, assignment, repo, show_name, group_category, show_empt
             "team": team,
             "full_name": full_name,
             "members": ",".join(member_labels),
+            "instructors": ",".join(instructor_labels),
             "gh_names": gh_names,
         }
         rows.append(row)
@@ -189,16 +362,29 @@ def repos_list(classroom, assignment, repo, show_name, group_category, show_empt
         for row in rows:
             row["group"] = None
 
-    # filter empty teams
-    if not show_empty:
+    # filter empty teams (only when members column is shown)
+    if members and not show_empty:
         rows = [row for row in rows if row["members"]]
 
-    # build columns and compute widths
+    # build header and columns
+    headers = ["TEAM"]
+    if repo:
+        headers.append("REPO")
+    if members:
+        headers.append("MEMBERS")
+    if show_instructors:
+        headers.append("INSTRUCTORS")
+    if groups_data is not None:
+        headers.append("GROUP")
+
     for row in rows:
         cols = [row["team"]]
         if repo:
             cols.append(row["full_name"])
-        cols.append(row["members"])
+        if members:
+            cols.append(row["members"])
+        if show_instructors:
+            cols.append(row["instructors"])
         if groups_data is not None:
             cols.append(row["group"])
         row["_cols"] = cols
@@ -206,11 +392,20 @@ def repos_list(classroom, assignment, repo, show_name, group_category, show_empt
     if not rows:
         return
 
-    num_cols = len(rows[0]["_cols"])
-    widths = [0] * num_cols
+    num_cols = len(headers)
+    widths = [len(h) for h in headers]
     for row in rows:
         for i, col in enumerate(row["_cols"]):
             widths[i] = max(widths[i], len(col))
+
+    # print header
+    parts = []
+    for i, h in enumerate(headers):
+        if i < num_cols - 1:
+            parts.append(h.ljust(widths[i]))
+        else:
+            parts.append(h)
+    output("  ".join(parts))
 
     for row in rows:
         parts = []

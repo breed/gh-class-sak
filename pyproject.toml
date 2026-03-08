@@ -10,6 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"
 dependencies = [
+    "canvasapi>=3.0",
     "click>=8.1",
     "requests>=2.28",
 ]

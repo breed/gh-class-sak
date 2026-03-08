@@ -78,22 +78,29 @@ def output(message):
     click.echo(message)
 
 
+def _get_name(item):
+    """get name from a dict or canvasapi object."""
+    if isinstance(item, dict):
+        return item.get("name", "")
+    return getattr(item, "name", "")
+
+
 def resolve_name(items, name, label):
     """find one item by partial name match, error on 0 or ambiguous matches."""
-    matches = [i for i in items if name.lower() in i["name"].lower()]
+    matches = [i for i in items if name.lower() in _get_name(i).lower()]
     if len(matches) == 0:
         error(f'no {label} found matching "{name}". options are:')
         for i in items:
-            error(f"    {i['name']}")
+            error(f"    {_get_name(i)}")
         sys.exit(2)
     if len(matches) > 1:
         # check for exact match
-        exact = [i for i in matches if i["name"].lower() == name.lower()]
+        exact = [i for i in matches if _get_name(i).lower() == name.lower()]
         if len(exact) == 1:
             return exact[0]
         error(f'multiple {label}s found matching "{name}":')
         for i in matches:
-            error(f"    {i['name']}")
+            error(f"    {_get_name(i)}")
         sys.exit(2)
     return matches[0]
 
@@ -119,18 +126,14 @@ def get_config():
     return config
 
 
-def get_canvas_session():
+def get_canvas():
+    from gh_class_sak.canvas_api import get_canvas as _get_canvas
     config = get_config()
-    url = config.get("CANVAS", "url", fallback=None)
-    token = config.get("CANVAS", "token", fallback=None)
-    if not url or not token:
-        error("missing url or token in [CANVAS] section")
+    try:
+        return _get_canvas(config)
+    except ValueError as e:
+        error(str(e))
         sys.exit(1)
-    session = requests.Session()
-    session.headers.update({
-        "Authorization": f"Bearer {token}",
-    })
-    return session, url
 
 
 def resolve_course_mapping(config, classroom_name):
