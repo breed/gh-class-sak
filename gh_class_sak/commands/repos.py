@@ -437,6 +437,70 @@ def repos_list(classroom, assignment, repo, members, show_instructors, show_name
         output("  ".join(parts))
 
 
+@repos.command("members")
+@click.argument("classroom")
+@click.argument("assignment")
+def repos_members(classroom, assignment):
+    """List members and their emails extracted from commit history."""
+    session = get_session()
+
+    # resolve classroom and assignment
+    rooms = list_classrooms(session)
+    room = resolve_name(rooms, classroom, "classroom")
+
+    assignments = list_assignments(session, room["id"])
+    for a in assignments:
+        a.setdefault("name", a.get("title", ""))
+    asn = resolve_name(assignments, assignment, "assignment")
+
+    slug = asn.get("slug", "")
+    accepted = list_accepted_assignments(session, asn["id"])
+
+    rows = []
+    for aa in accepted:
+        repo_info = aa.get("repository", {})
+        full_name = repo_info.get("full_name", "")
+        if not full_name:
+            continue
+        owner, repo_name = full_name.split("/", 1)
+
+        if slug and repo_name.startswith(slug + "-"):
+            team = repo_name[len(slug) + 1:]
+        else:
+            team = repo_name
+
+        # scan commits for (login, name, email) triples
+        seen = set()
+        for commit in list_commits(session, owner, repo_name):
+            author = commit.get("author")
+            login = author.get("login") if author else None
+            commit_author = commit.get("commit", {}).get("author", {})
+            name = commit_author.get("name", "")
+            email = commit_author.get("email", "")
+            if not email or "@users.noreply.github.com" in email:
+                continue
+            key = (login or "", email)
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append((team, login or "?", name, email))
+
+    if not rows:
+        return
+
+    # compute column widths
+    headers = ("REPO", "GITHUB_ID", "NAME", "EMAIL")
+    widths = [len(h) for h in headers]
+    for row in rows:
+        for i, col in enumerate(row):
+            widths[i] = max(widths[i], len(col))
+
+    fmt = "  ".join(f"{{:{w}}}" for w in widths[:-1]) + "  {}"
+    output(fmt.format(*headers))
+    for row in rows:
+        output(fmt.format(*row))
+
+
 @repos.command("missing")
 @click.argument("classroom")
 @click.argument("assignment")
