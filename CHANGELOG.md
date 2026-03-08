@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.1
+
+- add README as PyPI long description
+
 ## v0.1.0
 
 - initial release
