@@ -7,11 +7,16 @@ name = "gh-class-sak"
 version = "0.1.1"
 description = "Command-line Swiss Army Knife for GitHub Classrooms"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.9"
 dependencies = [
     "click>=8.1",
     "requests>=2.28",
 ]
+
+[project.urls]
+Homepage = "https://github.com/breed/gh-class-sak"
+Source = "https://github.com/breed/gh-class-sak"
 
 [tool.setuptools.packages.find]
 include = ["gh_class_sak*"]
