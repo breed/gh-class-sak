@@ -333,9 +333,12 @@ def repos_list(classroom, assignment, repo, members, show_instructors, show_name
                 cs = canvas_matches.get(login)
                 email = None
                 if show_email:
-                    email = (commit_emails.get(login)
-                             or (cs.get("email") if cs else None)
-                             or u.get("email"))
+                    commit_email = commit_emails.get(login)
+                    canvas_email = cs.get("email") if cs else None
+                    if commit_email and canvas_email and commit_email != canvas_email:
+                        email = f"{commit_email},{canvas_email}"
+                    else:
+                        email = commit_email or canvas_email or u.get("email")
                 member_labels.append(format_label(login, name=gh_name, email=email,
                                                   show_name=show_name, show_email=show_email))
 
