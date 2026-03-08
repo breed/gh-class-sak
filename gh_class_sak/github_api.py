@@ -35,6 +35,11 @@ def remove_collaborator(session, owner, repo, username):
     return resp
 
 
+def list_commits(session, owner, repo):
+    url = f"{GITHUB_API}/repos/{owner}/{repo}/commits"
+    return paginate(session, url)
+
+
 def get_user(session, username):
     url = f"{GITHUB_API}/users/{username}"
     resp = session.get(url)

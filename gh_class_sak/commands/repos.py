@@ -13,7 +13,7 @@ from gh_class_sak.core import (
 )
 from gh_class_sak.github_api import (
     list_classrooms, list_assignments, list_accepted_assignments,
-    list_collaborators, get_user,
+    list_collaborators, list_commits, get_user,
 )
 from gh_class_sak.canvas_api import (
     list_courses, list_group_categories, list_groups_in_category,
@@ -306,6 +306,21 @@ def repos_list(classroom, assignment, repo, members, show_instructors, show_name
                 if login not in user_cache:
                     user_cache[login] = get_user(session, login)
 
+        # extract member emails from commit history
+        commit_emails = {}
+        if show_email:
+            member_set = set(member_logins)
+            for commit in list_commits(session, owner, repo_name):
+                author = commit.get("author")
+                if not author:
+                    continue
+                login = author.get("login")
+                if login not in member_set or login in commit_emails:
+                    continue
+                email = commit.get("commit", {}).get("author", {}).get("email", "")
+                if email and "@users.noreply.github.com" not in email:
+                    commit_emails[login] = email
+
         # match members to Canvas students once per repo
         canvas_matches = match_canvas_students(member_logins, user_cache, enrollment_data)
 
@@ -318,7 +333,9 @@ def repos_list(classroom, assignment, repo, members, show_instructors, show_name
                 cs = canvas_matches.get(login)
                 email = None
                 if show_email:
-                    email = cs.get("email") if cs else u.get("email")
+                    email = (commit_emails.get(login)
+                             or (cs.get("email") if cs else None)
+                             or u.get("email"))
                 member_labels.append(format_label(login, name=gh_name, email=email,
                                                   show_name=show_name, show_email=show_email))
 
