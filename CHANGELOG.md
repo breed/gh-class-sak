@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.2.0
+
+- add `repos members` subcommand to list emails from commit history
+- add `--members`, `--instructors`, `--email` flags to `repos list`
+- add header row to `repos list` output
+- find instructors per group via shared Canvas course sections
+- switch Canvas API access to `canvasapi` library
+- use GraphQL for enrollment data (roles, names, emails, sections in one query)
+- fetch instructor Canvas profiles in parallel
+- extract member emails from repo commit history, show both when commit and canvas emails differ
+- handle empty repos gracefully
+
 ## v0.1.2
 
 - add MIT license and project URLs to PyPI metadata
