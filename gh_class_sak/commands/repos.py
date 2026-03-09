@@ -310,7 +310,11 @@ def repos_list(classroom, assignment, repo, members, show_instructors, show_name
         commit_emails = {}
         if show_email:
             member_set = set(member_logins)
-            for commit in list_commits(session, owner, repo_name):
+            try:
+                commits = list_commits(session, owner, repo_name)
+            except Exception:
+                commits = []
+            for commit in commits:
                 author = commit.get("author")
                 if not author:
                     continue
@@ -471,7 +475,11 @@ def repos_members(classroom, assignment):
 
         # scan commits for (login, name, email) triples
         seen = set()
-        for commit in list_commits(session, owner, repo_name):
+        try:
+            commits = list_commits(session, owner, repo_name)
+        except Exception:
+            continue
+        for commit in commits:
             author = commit.get("author")
             login = author.get("login") if author else None
             commit_author = commit.get("commit", {}).get("author", {})
