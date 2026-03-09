@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.1
+
+- fall back to GitHub search API (by email, then by name) when instructor Canvas profile has no GitHub link
+
 ## v0.2.0
 
 - add `repos members` subcommand to list emails from commit history

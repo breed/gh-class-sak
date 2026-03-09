@@ -14,6 +14,7 @@ from gh_class_sak.core import (
 from gh_class_sak.github_api import (
     list_classrooms, list_assignments, list_accepted_assignments,
     list_collaborators, list_commits, get_user,
+    resolve_email_to_username, resolve_name_to_username,
 )
 from gh_class_sak.canvas_api import (
     list_courses, list_group_categories, list_groups_in_category,
@@ -118,7 +119,7 @@ def extract_github_username(profile):
     return None
 
 
-def fetch_enrollment_data(classroom, canvas_ctx=None):
+def fetch_enrollment_data(classroom, canvas_ctx=None, gh_session=None):
     """Fetch Canvas enrollment data mapping students to instructors by section."""
     if canvas_ctx is None:
         canvas_ctx = resolve_canvas_course(classroom)
@@ -156,18 +157,28 @@ def fetch_enrollment_data(classroom, canvas_ctx=None):
 
     # fetch GitHub usernames for instructors from Canvas profiles in parallel
     def _fetch_github(uid):
+        from gh_class_sak.core import warn
+        github = None
+        # try Canvas profile first
         try:
             profile = get_user_profile(canvas, uid)
             github = extract_github_username(profile)
-            if not github:
-                from gh_class_sak.core import warn
-                warn(f"no github link found in canvas profile for {instructors[uid]['name']}"
-                     f" (fields: {', '.join(profile.keys())})")
-            return uid, github
         except Exception as exc:
-            from gh_class_sak.core import warn
             warn(f"failed to fetch canvas profile for {instructors[uid]['name']}: {exc}")
-            return uid, None
+
+        # fall back to GitHub search API by email, then by name
+        if not github and gh_session:
+            email = instructors[uid].get("email")
+            if email:
+                github = resolve_email_to_username(gh_session, email)
+            if not github:
+                name = instructors[uid].get("name")
+                if name:
+                    github = resolve_name_to_username(gh_session, name)
+
+        if not github:
+            warn(f"could not resolve github id for {instructors[uid]['name']}")
+        return uid, github
 
     with ThreadPoolExecutor() as pool:
         for uid, github in pool.map(lambda uid: _fetch_github(uid), instructors):
@@ -255,7 +266,7 @@ def repos_list(classroom, assignment, repo, members, show_instructors, show_name
 
     enrollment_data = None
     if (show_instructors or show_email) and canvas_ctx:
-        enrollment_data = fetch_enrollment_data(classroom, canvas_ctx)
+        enrollment_data = fetch_enrollment_data(classroom, canvas_ctx, gh_session=session)
 
     # resolve classroom
     rooms = list_classrooms(session)

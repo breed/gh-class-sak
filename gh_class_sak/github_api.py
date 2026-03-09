@@ -55,3 +55,13 @@ def resolve_email_to_username(session, email):
     if data.get("total_count", 0) == 1:
         return data["items"][0]["login"]
     return None
+
+
+def resolve_name_to_username(session, name):
+    url = f"{GITHUB_API}/search/users"
+    resp = session.get(url, params={"q": f"fullname:{name}"})
+    resp.raise_for_status()
+    data = resp.json()
+    if data.get("total_count", 0) == 1:
+        return data["items"][0]["login"]
+    return None
