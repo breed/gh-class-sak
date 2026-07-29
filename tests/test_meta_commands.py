@@ -38,18 +38,22 @@ def env(tmp_path, monkeypatch):
 
 
 def seed_meta(env, course=COURSE, prefix=PREFIX, template=None, tas=(), rows=()):
-    """put a meta repo with recorded state into the fake org."""
+    """put a meta repo with recorded state into the fake org.
+
+    call it again with another course to seed a second classroom directory.
+    """
     bare = env.root / "meta.git"
     GitRepo.init(bare, bare=True)
     work = ms.checkout_meta(str(bare), "seed-work")
-    ms.save_course(work, course, prefix, template, tas=list(tas), rows=list(rows))
+    ms.save_classroom(work, course, prefix, template, tas=list(tas), rows=list(rows))
     ms.commit_and_push(work, "seed")
-    env.org._repos.append(FakeRepo(ORG, "meta", clone_url=str(bare)))
+    if not any(r.name == "meta" for r in env.org.get_repos()):
+        env.org._repos.append(FakeRepo(ORG, "meta", clone_url=str(bare)))
 
 
 def meta_state(env, course=COURSE):
     """the course state as the commands see it, from a fresh checkout."""
-    return ms.load_meta_courses(env.gh, ORG)[course]
+    return ms.load_meta_classrooms(env.gh, ORG)[course]
 
 
 class TestMetaInit:
@@ -89,7 +93,7 @@ class TestMetaInit:
 def normalize_org_course(env):
     """course state for the no-config case, where the org names the course dir."""
     course = core.normalize_course_name(ORG)
-    return ms.load_meta_courses(env.gh, ORG)[course]
+    return ms.load_meta_classrooms(env.gh, ORG)[course]
 
 
 class TestMetaShow:
@@ -195,9 +199,9 @@ class TestMetaApply:
         assert result.exit_code == 0, result.output
         assert "would grant push to msmith" in result.output
         assert "would revoke intruder" in result.output
-        assert 'would create team "tas"' in result.output
-        assert 'would add ta-one to team "tas"' in result.output
-        assert f'would grant team "tas" pull on {repo.full_name}' in result.output
+        assert 'would create team "cmpe_195a-tas"' in result.output
+        assert 'would add ta-one to team "cmpe_195a-tas"' in result.output
+        assert f'would grant team "cmpe_195a-tas" pull on {repo.full_name}' in result.output
         assert repo.collab_log == []
 
     def test_reconciles_and_never_touches_admins(self, env):
@@ -209,7 +213,7 @@ class TestMetaApply:
         assert ("remove", "intruder", None) in repo.collab_log
         assert not any(login == "prof" for _op, login, _p in repo.collab_log)
 
-        team = env.org.get_team_by_slug("tas")
+        team = env.org.get_team_by_slug("cmpe_195a-tas")
         assert [m.login for m in team.get_members()] == ["ta-one"]
         assert ("grant", repo.full_name, "pull") in team.log
 
@@ -229,13 +233,38 @@ class TestMetaApply:
         assert ("add", "msmith", "push") in created.collab_log
         assert meta_state(env)["rows"][0]["repo_id"] == created.id
 
+    def test_each_classroom_gets_its_own_tas_team(self, env):
+        # two classrooms in one org: TAs of one never gain access to the other
+        repo_a = FakeRepo(ORG, f"{PREFIX}-team-1", collaborators=[])
+        repo_b = FakeRepo(ORG, "sp26-cmpe-195b-project-team-9", collaborators=[])
+        env.org._repos += [repo_a, repo_b]
+        seed_meta(env, course="cmpe_195a", prefix=PREFIX, tas=["ta-ana"],
+                  rows=[{"name": "team-1", "students": [],
+                         "repo": repo_a.html_url, "repo_id": repo_a.id}])
+        seed_meta(env, course="cmpe_195b", prefix="sp26-cmpe-195b-project",
+                  tas=["ta-bob"],
+                  rows=[{"name": "team-9", "students": [],
+                         "repo": repo_b.html_url, "repo_id": repo_b.id}])
+
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+
+        team_a = env.org.get_team_by_slug("cmpe_195a-tas")
+        team_b = env.org.get_team_by_slug("cmpe_195b-tas")
+        assert [m.login for m in team_a.get_members()] == ["ta-ana"]
+        assert [m.login for m in team_b.get_members()] == ["ta-bob"]
+        assert ("grant", repo_a.full_name, "pull") in team_a.log
+        assert ("grant", repo_b.full_name, "pull") not in team_a.log
+        assert ("grant", repo_b.full_name, "pull") in team_b.log
+        assert ("grant", repo_a.full_name, "pull") not in team_b.log
+
     def test_team_pull_covers_renamed_recorded_repos(self, env):
         renamed = FakeRepo(ORG, "totally-renamed", collaborators=[])
         env.org._repos.append(renamed)
         seed_meta(env, rows=[{"name": "team-r", "students": [],
                               "repo": renamed.html_url, "repo_id": renamed.id}])
         run(env.runner, "meta", "apply", ORG, "--no-dryrun")
-        team = env.org.get_team_by_slug("tas")
+        team = env.org.get_team_by_slug("cmpe_195a-tas")
         assert ("grant", renamed.full_name, "pull") in team.log
 
 
@@ -262,11 +291,13 @@ class TestMetaDiscovery:
         assert result.exit_code == 0, result.output
         assert "red-team" in result.output
 
-    def test_classrooms_prefers_meta_prefixes(self, env, tmp_path, monkeypatch):
+    def test_classrooms_lists_meta_classroom_dirs(self, env, tmp_path, monkeypatch):
+        # with a meta repo, each classroom directory is a classroom — not the org
         seed_meta(env)
         path = tmp_path / "cfg.ini"
         path.write_text(f"[CANVAS]\nurl = u\ntoken = t\n\n[COURSES]\nCMPE-195A = {ORG}\n")
         monkeypatch.setattr(core, "config_ini", str(path))
         result = run(env.runner, "classrooms")
         assert result.exit_code == 0, result.output
-        assert f"{ORG}: {PREFIX}" in result.output
+        assert f"{COURSE}: {PREFIX}" in result.output
+        assert f"{ORG}: {PREFIX}" not in result.output

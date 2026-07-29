@@ -2,24 +2,26 @@
 
 ## v0.4.0
 
-The meta repo: course state moves into a private repo named `meta` inside the org — one
-directory per course holding `course.ini` (repo prefix, optional template repo), `tas`
-(one login or email per line), and `students.tsv` (`NAME  STUDENTS  REPO  REPO_ID`, where
-the instructor supplies the first two columns and the tool records the repo URL and
-GitHub's permanent numeric id when it creates the repo).
+The meta repo: classroom state moves into a private repo named `meta` inside the org. An
+org can host several classrooms; each is a directory holding `classroom.ini` (repo
+prefix, optional template repo), `tas` (one login or email per line), and `students.tsv`
+(`NAME  STUDENTS  REPO  REPO_ID`, where the instructor supplies the first two columns and
+the tool records the repo URL and GitHub's permanent numeric id when it creates the repo).
 
-- `meta init` — create the meta repo, record a course, seed TAs from Canvas enrollments
+- `meta init` — create the meta repo, record a classroom, seed TAs from Canvas enrollments
 - `meta assign` — import a NAME + STUDENTS table (emails resolved to logins, loud error
-  when one doesn't resolve), create the repos privately (from the course template when
+  when one doesn't resolve), create the repos privately (from the classroom template when
   set), record them, grant the students push. Re-imports never clobber a recorded repo.
-- `meta apply` — full reconcile: realize hand-added rows, keep the org team `tas` matching
-  the tas file with read on every assignment repo, keep each repo's non-admin
-  collaborators exactly its listed students. Admins are never touched; a second run
-  prints `nothing to do`. All of it previews under the default dryrun.
-- `meta show` — print a course's recorded state
+- `meta apply` — full reconcile of every classroom: realize hand-added rows, keep each
+  classroom's `COURSENAME-tas` team matching its tas file and added with read to that
+  classroom's student repos, keep each repo's non-admin collaborators exactly its listed
+  students. Admins are never touched; a second run prints `nothing to do`. All of it
+  previews under the default dryrun.
+- `meta show` — print a classroom's recorded state
 - discovery (`repos list/members/missing/clone`, `classrooms`) now consults the meta:
-  the course prefix anchors assignment matching, and recorded repos are found by their
-  permanent id — so repos renamed away from the prefix are no longer invisible
+  the classroom prefix anchors assignment matching, and recorded repos are found by their
+  permanent id — so repos renamed away from the prefix are no longer invisible. with a
+  meta repo, `classrooms` lists classroom directories rather than the org
 
 ## v0.3.0
 

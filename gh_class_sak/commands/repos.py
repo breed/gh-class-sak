@@ -40,7 +40,7 @@ from gh_class_sak.github_api import (
     resolve_name_to_username,
     split_collaborators,
 )
-from gh_class_sak.meta_store import load_meta_courses
+from gh_class_sak.meta_store import load_meta_classrooms
 
 
 def normalize_name(name):
@@ -115,10 +115,10 @@ def resolve_assignment_repos(classroom, assignment):
     # the meta repo, when present, knows the real prefix and the recorded repos
     effective_prefix = assignment
     recorded_rows = []
-    course_key = normalize_course_name(course_partial) if course_partial else None
-    meta_courses = load_meta_courses(gh, org, get_token())
-    for course, data in sorted(meta_courses.items()):
-        if course_key and course != course_key:
+    classroom_key = normalize_course_name(course_partial) if course_partial else None
+    meta_classrooms = load_meta_classrooms(gh, org, get_token())
+    for classroom_dir, data in sorted(meta_classrooms.items()):
+        if classroom_key and classroom_dir != classroom_key:
             continue
         prefix = data.get("prefix") or ""
         if assignment.lower() in prefix.lower():
