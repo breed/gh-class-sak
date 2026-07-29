@@ -1,8 +1,10 @@
-import gh_class_sak.core
-from gh_class_sak.commands import *
+from gh_class_sak import commands  # noqa: F401  - importing registers the subcommands
+from gh_class_sak.core import gh_class_sak as cli
+
 
 def main():
-    gh_class_sak.core.gh_class_sak()
+    cli()
+
 
 if __name__ == "__main__":
     main()

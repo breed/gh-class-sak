@@ -1,0 +1,71 @@
+name: Feature request
+description: Propose a specific, actionable addition or change
+title: "[Feature] "
+labels: ["enhancement", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For open-ended ideas, "would you consider…", or design brainstorming, please
+        open a **[Discussion](https://github.com/breed/gh-class-sak/discussions)**
+        instead. Issues are for specific, actionable work.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: |
+        Describe the situation, not the solution. This is the most important field —
+        we can often solve the underlying problem in a way you hadn't considered.
+
+        Course setups vary a lot: how your org is named, whether repos share a prefix,
+        whether you use Canvas groups or sections. Telling us how yours is arranged
+        usually matters more than the feature itself.
+      placeholder: |
+        I'm trying to ... and currently I have to ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would the command or output look like? Sketch the usage.
+      placeholder: |
+        ```
+        $ gh-class-sak repos ... --new-flag
+        TEAM      ...
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+      description: Including workarounds you're using today.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: breaking
+    attributes:
+      label: Would this change existing output or flags?
+      description: |
+        Output format is a compatibility surface here — people pipe these tables into
+        scripts.
+      options:
+        - "No"
+        - "Yes"
+        - "Not sure"
+      default: 2
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I'd be willing to work on this (we'll help you get started)
+          required: false

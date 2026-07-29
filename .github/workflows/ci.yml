@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      # lint and import sorting only. `ruff format` is deliberately not enforced:
+      # the codebase is hand-aligned and adopting the formatter would be a
+      # whole-tree reformat, which is a separate decision from turning on CI.
+      - name: ruff check
+        run: ruff check gh_class_sak tests
+
+  test:
+    name: test py${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        include:
+          # the other two platforms only at the ends of the supported range,
+          # which is where packaging and path handling actually break
+          - {os: macos-latest, python-version: "3.9"}
+          - {os: macos-latest, python-version: "3.14"}
+          - {os: windows-latest, python-version: "3.9"}
+          - {os: windows-latest, python-version: "3.14"}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[dev]"
+      - name: pytest
+        run: pytest -q
+      # turn "one of 9 configs failed" into something a contributor can run
+      - if: failure()
+        run: |
+          echo "::notice::Reproduce on py${{ matrix.python-version }}: python -m venv .venv && .venv/bin/pip install -e '.[dev]' && .venv/bin/pytest -q"
+
+  # the layer that catches broken packaging: build the wheel, install it into a
+  # clean environment, and drive the CLI from outside the source tree
+  install:
+    name: install the built wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build
+      - name: build sdist and wheel
+        run: python -m build
+      - name: install the wheel into a clean venv
+        run: |
+          python -m venv /tmp/clean
+          /tmp/clean/bin/pip install dist/*.whl
+      - name: consume it from outside the repo
+        working-directory: /tmp
+        run: |
+          /tmp/clean/bin/python -c "import gh_class_sak; print('import ok')"
+          /tmp/clean/bin/gh-class-sak --version
+          /tmp/clean/bin/gh-class-sak --help
+          /tmp/clean/bin/gh-class-sak repos clone --help
+      - name: the sdist must build a wheel too
+        run: |
+          python -m venv /tmp/fromsdist
+          /tmp/fromsdist/bin/pip install dist/*.tar.gz
+          cd /tmp && /tmp/fromsdist/bin/gh-class-sak --version

@@ -1,0 +1,54 @@
+name: Share your course setup
+description: Tell us how you actually use gh-class-sak — good or bad
+title: "[Experience] "
+labels: ["experience"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Issue trackers only ever hear from people something broke for. If a tool works,
+        nobody files anything — so a project with plenty of happy users looks abandoned.
+
+        So this is us asking directly. If you ran a course with this, we'd like to hear
+        about it, even if you have nothing to complain about. It genuinely changes what
+        we work on: course setups vary enormously and we only see our own.
+
+        No token or student data, please — this is a public tracker.
+
+  - type: textarea
+    id: setup
+    attributes:
+      label: How is your course set up?
+      description: |
+        Roughly: how many students and teams, how your org and repos are named, whether
+        you use Canvas, and whether repos are per-student or per-team.
+      placeholder: |
+        ~120 students in 30 teams, one org per semester, repos named project-<team>,
+        Canvas for the roster and group categories.
+    validations:
+      required: true
+
+  - type: textarea
+    id: usage
+    attributes:
+      label: Which commands do you actually run?
+      description: The ones that ended up in your notes or a shell script.
+    validations:
+      required: true
+
+  - type: textarea
+    id: friction
+    attributes:
+      label: What was awkward?
+      description: |
+        Anything you worked around, scripted over, or gave up on. Small annoyances are
+        useful — they're the ones we never hear about.
+    validations:
+      required: false
+
+  - type: textarea
+    id: missing
+    attributes:
+      label: What did you wish it did?
+    validations:
+      required: false

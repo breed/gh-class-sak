@@ -1,21 +1,27 @@
-import click
-
-from gh_class_sak.core import gh_class_sak, get_session, output, error
-from gh_class_sak.github_api import list_classrooms, list_assignments
+from gh_class_sak.core import configured_orgs, error, get_github, gh_class_sak, output
+from gh_class_sak.github_api import infer_assignment_prefixes, list_org_repos
 
 
 @gh_class_sak.command()
 def classrooms():
-    """List classrooms and their assignments."""
-    session = get_session()
-    rooms = list_classrooms(session)
-    if not rooms:
+    """List classrooms (GitHub orgs) and their assignments."""
+    gh = get_github()
+
+    orgs = configured_orgs()
+    if not orgs:
+        # no config: fall back to every org the token can see
+        orgs = [o.login for o in gh.get_user().get_orgs()]
+
+    if not orgs:
         error("no classrooms found")
+        error("add orgs to the [COURSES] section of the config, or join an org")
         return
-    for room in rooms:
-        assignments = list_assignments(session, room["id"])
-        if not assignments:
-            output(f"{room['name']}: (no assignments)")
+
+    for org in orgs:
+        repos = list_org_repos(gh, org)
+        prefixes = infer_assignment_prefixes([r.name for r in repos])
+        if not prefixes:
+            output(f"{org}: (no assignments)")
         else:
-            for a in assignments:
-                output(f"{room['name']}: {a['title']}")
+            for prefix, _count in prefixes:
+                output(f"{org}: {prefix}")

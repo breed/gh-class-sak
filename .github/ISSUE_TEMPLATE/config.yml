@@ -1,0 +1,19 @@
+# Forces users through the templates instead of a blank textarea.
+blank_issues_enabled: false
+
+contact_links:
+  - name: Question / help using gh-class-sak
+    url: "https://github.com/breed/gh-class-sak/discussions/categories/q-a"
+    about: Ask here rather than opening an issue — you'll usually get an answer faster.
+
+  - name: Idea or design discussion
+    url: "https://github.com/breed/gh-class-sak/discussions/categories/ideas"
+    about: Open-ended proposals and brainstorming, before they become concrete issues.
+
+  - name: Show and tell
+    url: "https://github.com/breed/gh-class-sak/discussions/categories/show-and-tell"
+    about: Running a course with this? We'd genuinely like to hear how you set it up.
+
+  - name: Security vulnerability
+    url: "https://github.com/breed/gh-class-sak/security/advisories/new"
+    about: Please report privately, not in a public issue. This tool handles API tokens.

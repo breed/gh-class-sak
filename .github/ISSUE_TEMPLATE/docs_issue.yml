@@ -1,0 +1,53 @@
+name: Documentation issue
+description: Something in the docs is wrong, missing, or confusing
+title: "[Docs] "
+labels: ["documentation", "good first issue"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Documentation problems are real bugs and we treat them that way.
+
+        If you're new here, fixing one is an excellent first contribution — and writing
+        the explanation you wish you'd had is usually the fastest way to learn a
+        codebase. We're happy to help you get started.
+
+  - type: input
+    id: location
+    attributes:
+      label: Where?
+      description: URL, or path to the file.
+      placeholder: "README.md, the 'How group matching works' section"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of problem?
+      options:
+        - "Wrong — it says something untrue or out of date"
+        - "Missing — there's nothing about this at all"
+        - "Confusing — it's technically right but I couldn't follow it"
+        - "Example doesn't work"
+      default: 2
+    validations:
+      required: true
+
+  - type: textarea
+    id: detail
+    attributes:
+      label: What happened?
+      description: |
+        If something was confusing, tell us what you expected it to say — that's
+        usually the most useful signal we get, and it's hard for us to see ourselves.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I'd be willing to submit a PR fixing this
+          required: false

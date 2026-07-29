@@ -1,24 +1,43 @@
 import difflib
-from concurrent.futures import ThreadPoolExecutor
 import os
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
 import click
 
+from gh_class_sak.canvas_api import (
+    get_user_profile,
+    graphql_enrollments,
+    list_courses,
+    list_group_categories,
+    list_group_users,
+    list_groups_in_category,
+)
 from gh_class_sak.core import (
-    gh_class_sak, get_session, output, error, resolve_name,
-    get_config, get_canvas, resolve_course_mapping, normalize_course_name,
-    config_ini,
+    dryrun_option,
+    error,
+    get_canvas,
+    get_config,
+    get_github,
+    get_token,
+    gh_class_sak,
+    load_config,
+    normalize_course_name,
+    output,
+    resolve_classroom,
+    resolve_course_mapping,
+    resolve_name,
+    warn,
+    would,
 )
 from gh_class_sak.github_api import (
-    list_classrooms, list_assignments, list_accepted_assignments,
-    list_collaborators, list_commits, get_user,
-    resolve_email_to_username, resolve_name_to_username,
-)
-from gh_class_sak.canvas_api import (
-    list_courses, list_group_categories, list_groups_in_category,
-    list_group_users, graphql_enrollments, get_user_profile,
+    find_assignment_repos,
+    list_commit_authors,
+    list_org_repos,
+    resolve_email_to_username,
+    resolve_name_to_username,
+    split_collaborators,
 )
 
 
@@ -57,7 +76,7 @@ def match_groups(repos_gh_names, groups_data):
     assigned_repos = set()
     assigned_groups = set()
     result = {}
-    for score, repo_idx, group_name in pairs:
+    for _score, repo_idx, group_name in pairs:
         if repo_idx in assigned_repos or group_name in assigned_groups:
             continue
         result[repo_idx] = group_name
@@ -67,24 +86,55 @@ def match_groups(repos_gh_names, groups_data):
     return result
 
 
-def resolve_canvas_course(classroom):
-    """Resolve a GitHub classroom to a Canvas course, returning shared context."""
+class Classroom:
+    """A resolved classroom: the GitHub org plus the Canvas course it maps to.
+
+    course_partial is None when the org hosts several Canvas courses and the
+    argument didn't say which; Canvas lookups then report the ambiguity.
+    """
+
+    def __init__(self, org, course_partial):
+        self.org = org
+        self.course_partial = course_partial
+
+
+def resolve_assignment_repos(classroom, assignment):
+    """Resolve a classroom/assignment pair to the repos backing it.
+
+    Returns (Classroom, [(team, repo)]). The classroom argument is a GitHub org
+    (or a partial matching one configured in [COURSES]); the assignment is the
+    repo name prefix those repos share.
+    """
+    gh = get_github()
+    org, course_partial = resolve_classroom(classroom)
+    repos = list_org_repos(gh, org)
+    found = find_assignment_repos(repos, assignment)
+    if not found:
+        error(f'no repos in "{org}" matching assignment "{assignment}". repos are:')
+        for r in repos:
+            error(f"    {r.name}")
+        sys.exit(2)
+    return Classroom(org, course_partial), found
+
+
+def resolve_canvas_course(room):
+    """Resolve a classroom to a Canvas course, returning shared context."""
     config = get_config()
     canvas = get_canvas()
-    canvas_partial = resolve_course_mapping(config, classroom)
+    course_partial = room.course_partial or resolve_course_mapping(config, room.org)
 
     courses = list_courses(canvas)
     for c in courses:
         c.name = normalize_course_name(c.name)
-    course = resolve_name(courses, normalize_course_name(canvas_partial), "canvas course")
+    course = resolve_name(courses, normalize_course_name(course_partial), "canvas course")
 
     return canvas, course
 
 
-def fetch_canvas_groups(classroom, group_category, canvas_ctx=None):
-    """Fetch Canvas groups for a classroom and group category."""
+def fetch_canvas_groups(room, group_category, canvas_ctx=None):
+    """Fetch Canvas groups for a classroom's course and a group category."""
     if canvas_ctx is None:
-        canvas_ctx = resolve_canvas_course(classroom)
+        canvas_ctx = resolve_canvas_course(room)
     canvas, course = canvas_ctx
 
     categories = list_group_categories(course)
@@ -119,10 +169,43 @@ def extract_github_username(profile):
     return None
 
 
-def fetch_enrollment_data(classroom, canvas_ctx=None, gh_session=None):
+def _github_from_canvas_profiles(canvas, people):
+    """Fill in each person's "github" from their Canvas profile, in parallel.
+
+    Only Canvas is hit concurrently; the GitHub fallbacks below run serially
+    because a PyGithub client shares one connection.
+    """
+    def _fetch(uid):
+        try:
+            return uid, extract_github_username(get_user_profile(canvas, uid))
+        except Exception as exc:
+            warn(f"failed to fetch canvas profile for {people[uid]['name']}: {exc}")
+            return uid, None
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for uid, github in pool.map(_fetch, list(people)):
+            people[uid]["github"] = github
+
+
+def _github_from_search(gh, people):
+    """For anyone still unresolved, search GitHub by email then by name."""
+    for person in people.values():
+        if person.get("github"):
+            continue
+        github = None
+        if person.get("email"):
+            github = resolve_email_to_username(gh, person["email"])
+        if not github and person.get("name"):
+            github = resolve_name_to_username(gh, person["name"])
+        person["github"] = github
+        if not github:
+            warn(f"could not resolve github id for {person['name']}")
+
+
+def fetch_enrollment_data(room, canvas_ctx=None, gh=None, resolve_students=False):
     """Fetch Canvas enrollment data mapping students to instructors by section."""
     if canvas_ctx is None:
-        canvas_ctx = resolve_canvas_course(classroom)
+        canvas_ctx = resolve_canvas_course(room)
     canvas, course = canvas_ctx
 
     # single GraphQL call gets all roles, names, emails, and sections
@@ -139,50 +222,26 @@ def fetch_enrollment_data(classroom, canvas_ctx=None, gh_session=None):
         section_id = node.get("courseSectionId")
 
         if role in ("TeacherEnrollment", "TaEnrollment"):
-            if user_id not in instructors:
-                instructors[user_id] = {
-                    "name": user.get("name", ""),
-                    "email": user.get("email", ""),
-                    "section_ids": set(),
-                }
-            instructors[user_id]["section_ids"].add(section_id)
+            bucket = instructors
         elif role == "StudentEnrollment":
-            if user_id not in students:
-                students[user_id] = {
-                    "name": user.get("name", ""),
-                    "email": user.get("email", ""),
-                    "section_ids": set(),
-                }
-            students[user_id]["section_ids"].add(section_id)
+            bucket = students
+        else:
+            continue
 
-    # fetch GitHub usernames for instructors from Canvas profiles in parallel
-    def _fetch_github(uid):
-        from gh_class_sak.core import warn
-        github = None
-        # try Canvas profile first
-        try:
-            profile = get_user_profile(canvas, uid)
-            github = extract_github_username(profile)
-        except Exception as exc:
-            warn(f"failed to fetch canvas profile for {instructors[uid]['name']}: {exc}")
+        if user_id not in bucket:
+            bucket[user_id] = {
+                "name": user.get("name", ""),
+                "email": user.get("email", ""),
+                "section_ids": set(),
+            }
+        bucket[user_id]["section_ids"].add(section_id)
 
-        # fall back to GitHub search API by email, then by name
-        if not github and gh_session:
-            email = instructors[uid].get("email")
-            if email:
-                github = resolve_email_to_username(gh_session, email)
-            if not github:
-                name = instructors[uid].get("name")
-                if name:
-                    github = resolve_name_to_username(gh_session, name)
+    _github_from_canvas_profiles(canvas, instructors)
+    if gh:
+        _github_from_search(gh, instructors)
 
-        if not github:
-            warn(f"could not resolve github id for {instructors[uid]['name']}")
-        return uid, github
-
-    with ThreadPoolExecutor() as pool:
-        for uid, github in pool.map(lambda uid: _fetch_github(uid), instructors):
-            instructors[uid]["github"] = github
+    if resolve_students:
+        _github_from_canvas_profiles(canvas, students)
 
     return {
         "students": list(students.values()),
@@ -190,19 +249,18 @@ def fetch_enrollment_data(classroom, canvas_ctx=None, gh_session=None):
     }
 
 
-def match_canvas_students(member_logins, user_cache, enrollment_data):
-    """Match GitHub logins to Canvas students by name. Returns dict of login -> canvas student."""
+def match_canvas_students(members, enrollment_data):
+    """Match GitHub users to Canvas students by name. Returns dict of login -> student."""
     result = {}
     if not enrollment_data:
         return result
-    for login in member_logins:
-        u = user_cache.get(login, {})
-        gh_name = u.get("name", "")
+    for m in members:
+        gh_name = m.name
         if not gh_name:
             continue
         for s in enrollment_data["students"]:
             if names_match(gh_name, s["name"]):
-                result[login] = s
+                result[m.login] = s
                 break
     return result
 
@@ -232,6 +290,21 @@ def format_label(login, name=None, email=None, show_name=False, show_email=False
     return login
 
 
+def print_table(headers, rows):
+    """Print space-padded columns; the last column is never padded."""
+    if not rows:
+        return
+    widths = [len(h) for h in headers]
+    for row in rows:
+        for i, col in enumerate(row):
+            widths[i] = max(widths[i], len(col))
+
+    last = len(headers) - 1
+    for row in [headers] + list(rows):
+        parts = [col if i == last else col.ljust(widths[i]) for i, col in enumerate(row)]
+        output("  ".join(parts))
+
+
 @gh_class_sak.group()
 def repos():
     """Manage classroom assignment repositories."""
@@ -253,203 +326,110 @@ def repos():
 def repos_list(classroom, assignment, repo, members, show_instructors, show_name, show_email,
                group_category, show_empty):
     """List repos for a classroom assignment."""
-    session = get_session()
-    user_cache = {}
+    gh = get_github()
+    room, found = resolve_assignment_repos(classroom, assignment)
 
-    # resolve Canvas course once if any Canvas feature is needed
-    need_canvas = (group_category or show_instructors or show_email) and os.path.exists(config_ini)
-    canvas_ctx = resolve_canvas_course(classroom) if need_canvas else None
+    # resolve the Canvas course once if any Canvas feature is needed
+    need_canvas = (group_category or show_instructors or show_email) and load_config(False)
+    canvas_ctx = resolve_canvas_course(room) if need_canvas else None
 
     groups_data = None
     if group_category:
-        groups_data = fetch_canvas_groups(classroom, group_category, canvas_ctx)
+        groups_data = fetch_canvas_groups(room, group_category, canvas_ctx)
 
     enrollment_data = None
     if (show_instructors or show_email) and canvas_ctx:
-        enrollment_data = fetch_enrollment_data(classroom, canvas_ctx, gh_session=session)
+        enrollment_data = fetch_enrollment_data(room, canvas_ctx, gh=gh)
 
-    # resolve classroom
-    rooms = list_classrooms(session)
-    room = resolve_name(rooms, classroom, "classroom")
+    # a profile name is needed for group matching, canvas matching, or --name
+    need_names = (groups_data is not None
+                  or enrollment_data is not None
+                  or (members and show_name))
 
-    # resolve assignment
-    assignments = list_assignments(session, room["id"])
-    # assignments use "title" not "name" — normalize for resolve_name
-    for a in assignments:
-        a.setdefault("name", a.get("title", ""))
-    asn = resolve_name(assignments, assignment, "assignment")
-
-    slug = asn.get("slug", "")
-
-    # determine if we need GitHub user profiles (for name matching or annotations)
-    need_profiles = (groups_data is not None
-                     or enrollment_data is not None
-                     or (members and (show_name or show_email)))
-
-    # first pass: collect all rows and compute column widths
     rows = []
-    accepted = list_accepted_assignments(session, asn["id"])
-    for aa in accepted:
-        repo_info = aa.get("repository", {})
-        full_name = repo_info.get("full_name", "")
-        if not full_name:
-            continue
-        owner, repo_name = full_name.split("/", 1)
-
-        # derive team name by stripping assignment slug prefix
-        if slug and repo_name.startswith(slug + "-"):
-            team = repo_name[len(slug) + 1:]
-        else:
-            team = repo_name
-
-        # fetch collaborators
-        collabs = list_collaborators(session, owner, repo_name)
-        member_logins = []
-        for c in collabs:
-            role = c.get("role_name", c.get("permissions", {}).get("admin", False))
-            if role == "admin" or role is True:
-                continue
-            member_logins.append(c["login"])
-
-        # fetch GitHub profiles if needed
-        if need_profiles:
-            for login in member_logins:
-                if login not in user_cache:
-                    user_cache[login] = get_user(session, login)
+    for team, gh_repo in found:
+        member_users, _admins = split_collaborators(gh_repo)
 
         # extract member emails from commit history
         commit_emails = {}
         if show_email:
-            member_set = set(member_logins)
-            try:
-                commits = list_commits(session, owner, repo_name)
-            except Exception:
-                commits = []
-            for commit in commits:
-                author = commit.get("author")
-                if not author:
-                    continue
-                login = author.get("login")
+            member_set = {m.login for m in member_users}
+            for login, _name, email in list_commit_authors(gh_repo):
                 if login not in member_set or login in commit_emails:
                     continue
-                email = commit.get("commit", {}).get("author", {}).get("email", "")
                 if email and "@users.noreply.github.com" not in email:
                     commit_emails[login] = email
 
         # match members to Canvas students once per repo
-        canvas_matches = match_canvas_students(member_logins, user_cache, enrollment_data)
+        canvas_matches = match_canvas_students(member_users, enrollment_data) \
+            if enrollment_data else {}
 
-        # format member labels
         member_labels = []
         if members:
-            for login in member_logins:
-                u = user_cache.get(login, {})
-                gh_name = u.get("name") if need_profiles else None
-                cs = canvas_matches.get(login)
+            for m in member_users:
+                gh_name = m.name if need_names else None
+                cs = canvas_matches.get(m.login)
                 email = None
                 if show_email:
-                    commit_email = commit_emails.get(login)
+                    commit_email = commit_emails.get(m.login)
                     canvas_email = cs.get("email") if cs else None
                     if commit_email and canvas_email and commit_email != canvas_email:
                         email = f"{commit_email},{canvas_email}"
                     else:
-                        email = commit_email or canvas_email or u.get("email")
-                member_labels.append(format_label(login, name=gh_name, email=email,
+                        email = commit_email or canvas_email or m.email
+                member_labels.append(format_label(m.login, name=gh_name, email=email,
                                                   show_name=show_name, show_email=show_email))
 
-        # find instructors for this group using cached matches
         instructor_labels = []
         if show_instructors and enrollment_data:
             matched_sections = set()
             for cs in canvas_matches.values():
                 matched_sections.update(cs["section_ids"])
             for inst in find_instructors_for_sections(matched_sections, enrollment_data):
-                gh = inst.get("github") or "?"
-                instructor_labels.append(format_label(gh, name=inst.get("name"),
+                instructor_labels.append(format_label(inst.get("github") or "?",
+                                                      name=inst.get("name"),
                                                       email=inst.get("email"),
                                                       show_name=show_name,
                                                       show_email=show_email))
 
-        # collect gh profile names for group matching
         gh_names = []
         if groups_data is not None:
-            for login in member_logins:
-                u = user_cache.get(login, {})
-                if u.get("name"):
-                    gh_names.append(u["name"])
+            gh_names = [m.name for m in member_users if m.name]
 
-        row = {
+        rows.append({
             "team": team,
-            "full_name": full_name,
+            "full_name": gh_repo.full_name,
             "members": ",".join(member_labels),
             "instructors": ",".join(instructor_labels),
             "gh_names": gh_names,
-        }
-        rows.append(row)
+        })
 
     # global group matching
     if groups_data is not None:
-        repos_gh_names = [(i, row["gh_names"]) for i, row in enumerate(rows)]
-        group_assignments = match_groups(repos_gh_names, groups_data)
+        assignments = match_groups([(i, r["gh_names"]) for i, r in enumerate(rows)], groups_data)
         for i, row in enumerate(rows):
-            row["group"] = group_assignments.get(i, "?")
-    else:
-        for row in rows:
-            row["group"] = None
+            row["group"] = assignments.get(i, "?")
 
-    # filter empty teams (only when members column is shown)
+    # filter empty teams (only when the members column is shown)
     if members and not show_empty:
         rows = [row for row in rows if row["members"]]
 
-    # build header and columns
     headers = ["TEAM"]
+    keys = ["team"]
     if repo:
         headers.append("REPO")
+        keys.append("full_name")
     if members:
         headers.append("MEMBERS")
+        keys.append("members")
     if show_instructors:
         headers.append("INSTRUCTORS")
+        keys.append("instructors")
     if groups_data is not None:
         headers.append("GROUP")
+        keys.append("group")
 
-    for row in rows:
-        cols = [row["team"]]
-        if repo:
-            cols.append(row["full_name"])
-        if members:
-            cols.append(row["members"])
-        if show_instructors:
-            cols.append(row["instructors"])
-        if groups_data is not None:
-            cols.append(row["group"])
-        row["_cols"] = cols
-
-    if not rows:
-        return
-
-    num_cols = len(headers)
-    widths = [len(h) for h in headers]
-    for row in rows:
-        for i, col in enumerate(row["_cols"]):
-            widths[i] = max(widths[i], len(col))
-
-    # print header
-    parts = []
-    for i, h in enumerate(headers):
-        if i < num_cols - 1:
-            parts.append(h.ljust(widths[i]))
-        else:
-            parts.append(h)
-    output("  ".join(parts))
-
-    for row in rows:
-        parts = []
-        for i, col in enumerate(row["_cols"]):
-            if i < num_cols - 1:
-                parts.append(col.ljust(widths[i]))
-            else:
-                parts.append(col)
-        output("  ".join(parts))
+    print_table(headers, [[row[k] for k in keys] for row in rows])
 
 
 @repos.command("members")
@@ -457,67 +437,21 @@ def repos_list(classroom, assignment, repo, members, show_instructors, show_name
 @click.argument("assignment")
 def repos_members(classroom, assignment):
     """List members and their emails extracted from commit history."""
-    session = get_session()
-
-    # resolve classroom and assignment
-    rooms = list_classrooms(session)
-    room = resolve_name(rooms, classroom, "classroom")
-
-    assignments = list_assignments(session, room["id"])
-    for a in assignments:
-        a.setdefault("name", a.get("title", ""))
-    asn = resolve_name(assignments, assignment, "assignment")
-
-    slug = asn.get("slug", "")
-    accepted = list_accepted_assignments(session, asn["id"])
+    _room, found = resolve_assignment_repos(classroom, assignment)
 
     rows = []
-    for aa in accepted:
-        repo_info = aa.get("repository", {})
-        full_name = repo_info.get("full_name", "")
-        if not full_name:
-            continue
-        owner, repo_name = full_name.split("/", 1)
-
-        if slug and repo_name.startswith(slug + "-"):
-            team = repo_name[len(slug) + 1:]
-        else:
-            team = repo_name
-
-        # scan commits for (login, name, email) triples
+    for team, gh_repo in found:
         seen = set()
-        try:
-            commits = list_commits(session, owner, repo_name)
-        except Exception:
-            continue
-        for commit in commits:
-            author = commit.get("author")
-            login = author.get("login") if author else None
-            commit_author = commit.get("commit", {}).get("author", {})
-            name = commit_author.get("name", "")
-            email = commit_author.get("email", "")
+        for login, name, email in list_commit_authors(gh_repo):
             if not email or "@users.noreply.github.com" in email:
                 continue
             key = (login or "", email)
             if key in seen:
                 continue
             seen.add(key)
-            rows.append((team, login or "?", name, email))
+            rows.append([team, login or "?", name, email])
 
-    if not rows:
-        return
-
-    # compute column widths
-    headers = ("REPO", "GITHUB_ID", "NAME", "EMAIL")
-    widths = [len(h) for h in headers]
-    for row in rows:
-        for i, col in enumerate(row):
-            widths[i] = max(widths[i], len(col))
-
-    fmt = "  ".join(f"{{:{w}}}" for w in widths[:-1]) + "  {}"
-    output(fmt.format(*headers))
-    for row in rows:
-        output(fmt.format(*row))
+    print_table(["REPO", "GITHUB_ID", "NAME", "EMAIL"], rows)
 
 
 @repos.command("missing")
@@ -526,78 +460,76 @@ def repos_members(classroom, assignment):
 @click.option("--group", "group_category", default=None, type=str,
               help="show Canvas groups with no matching repo")
 def repos_missing(classroom, assignment, group_category):
-    """List students or Canvas groups without repos."""
-    session = get_session()
-
-    # resolve classroom and assignment
-    rooms = list_classrooms(session)
-    room = resolve_name(rooms, classroom, "classroom")
-
-    assignments = list_assignments(session, room["id"])
-    for a in assignments:
-        a.setdefault("name", a.get("title", ""))
-    asn = resolve_name(assignments, assignment, "assignment")
-
-    slug = asn.get("slug", "")
-    accepted = list_accepted_assignments(session, asn["id"])
+    """List Canvas students or groups without repos."""
+    gh = get_github()
+    room, found = resolve_assignment_repos(classroom, assignment)
 
     if group_category:
-        groups_data = fetch_canvas_groups(classroom, group_category)
-        user_cache = {}
+        groups_data = fetch_canvas_groups(room, group_category)
 
-        # collect github profile names per repo
         repos_gh_names = []
-        for idx, aa in enumerate(accepted):
-            repo_info = aa.get("repository", {})
-            full_name = repo_info.get("full_name", "")
-            if not full_name:
-                continue
-            owner, repo_name = full_name.split("/", 1)
+        for idx, (_team, gh_repo) in enumerate(found):
+            member_users, _admins = split_collaborators(gh_repo)
+            repos_gh_names.append((idx, [m.name for m in member_users if m.name]))
 
-            collabs = list_collaborators(session, owner, repo_name)
-            gh_names = []
-            for c in collabs:
-                role = c.get("role_name", c.get("permissions", {}).get("admin", False))
-                if role == "admin" or role is True:
-                    continue
-                login = c["login"]
-                if login not in user_cache:
-                    user_cache[login] = get_user(session, login)
-                u = user_cache[login]
-                if u.get("name"):
-                    gh_names.append(u["name"])
-            repos_gh_names.append((idx, gh_names))
+        matched_groups = set(match_groups(repos_gh_names, groups_data).values())
 
-        group_assignments = match_groups(repos_gh_names, groups_data)
-        matched_groups = set(group_assignments.values())
-
-        # output unmatched groups
-        rows = []
-        for g in groups_data:
-            if g["name"] not in matched_groups:
-                rows.append((g["name"], ",".join(g["members"])))
-
+        rows = [[g["name"], ",".join(g["members"])]
+                for g in groups_data if g["name"] not in matched_groups]
         if not rows:
             return
-
         name_width = max(len(r[0]) for r in rows)
-        for name, members in rows:
-            output(f"{name.ljust(name_width)}  {members}")
-    else:
-        # without --group: list accepted assignments with no repo
-        missing = []
-        for aa in accepted:
-            repo_info = aa.get("repository", {})
-            full_name = repo_info.get("full_name", "")
-            if full_name:
-                continue
-            students = aa.get("students", [])
-            group = aa.get("group", {})
-            if group and group.get("name"):
-                missing.append(f"{group['name']}: {','.join(s.get('login', '?') for s in students)}")
-            elif students:
-                for s in students:
-                    missing.append(s.get("login", "?"))
+        for name, group_members in rows:
+            output(f"{name.ljust(name_width)}  {group_members}")
+        return
 
-        for m in missing:
-            output(m)
+    # without --group: Canvas students who are not a collaborator on any repo
+    enrollment_data = fetch_enrollment_data(room, gh=gh, resolve_students=True)
+
+    logins = set()
+    gh_names = []
+    for _team, gh_repo in found:
+        member_users, _admins = split_collaborators(gh_repo)
+        for m in member_users:
+            logins.add(m.login.lower())
+            if m.name:
+                gh_names.append(m.name)
+
+    rows = []
+    for s in enrollment_data["students"]:
+        github = s.get("github")
+        if github and github.lower() in logins:
+            continue
+        if any(names_match(s["name"], gn) for gn in gh_names):
+            continue
+        rows.append([s["name"], s.get("email") or "", github or "?"])
+
+    print_table(["NAME", "EMAIL", "GITHUB_ID"], rows)
+
+
+@repos.command("clone")
+@click.argument("classroom")
+@click.argument("assignment")
+@click.option("--dest", default=".", type=click.Path(file_okay=False),
+              help="directory to clone into (default: current directory)")
+@dryrun_option
+def repos_clone(classroom, assignment, dest, dryrun):
+    """Clone or fast-forward every repo for a classroom assignment."""
+    from gh_class_sak.git_ops import clone_or_update
+
+    _room, found = resolve_assignment_repos(classroom, assignment)
+
+    if dryrun:
+        for team, gh_repo in found:
+            would(f"would clone {gh_repo.full_name} -> {os.path.join(dest, team)}")
+        return
+
+    token = get_token()
+    os.makedirs(dest, exist_ok=True)
+    rows = []
+    for team, gh_repo in found:
+        target = os.path.join(dest, team)
+        status = clone_or_update(gh_repo.clone_url, target, token)
+        rows.append([gh_repo.full_name, target, status])
+
+    print_table(["REPO", "PATH", "STATUS"], rows)

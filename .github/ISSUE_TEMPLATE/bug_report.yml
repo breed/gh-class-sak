@@ -1,0 +1,100 @@
+name: Bug report
+description: Something doesn't work as documented
+title: "[Bug] "
+labels: ["bug", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this.
+
+        The single most useful thing you can give us is **the exact command you ran and
+        its exact output**. With those we can usually diagnose immediately. Without
+        them this turns into a long back-and-forth where we guess at what you're seeing.
+
+        ⚠️ **Redact your tokens.** Never paste a `GH_TOKEN`, a Canvas API token, or the
+        contents of your `gh-class-sak.ini`. Student names and emails are also worth
+        replacing with placeholders — this is a public issue tracker.
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: |
+        The exact command, and the exact output — not a paraphrase. Replace real org,
+        repo, student, and course names with placeholders if you need to.
+      placeholder: |
+        $ gh-class-sak repos list MY-ORG project --members
+        ... what it printed ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: What you expected vs. what happened
+      placeholder: |
+        Expected: ...
+        Actual:   ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `gh-class-sak --version`.
+      placeholder: "gh-class-sak, version 0.3.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, and how you installed it.
+      placeholder: |
+        OS:            Ubuntu 24.04
+        Python:        3.12.3  (python --version)
+        Installed via: pip install gh-class-sak
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part?
+      options:
+        - "repos list"
+        - "repos members"
+        - "repos missing"
+        - "repos clone"
+        - "classrooms"
+        - "Canvas integration (--group / --instructors / --email)"
+        - "Install or packaging"
+        - "Something else / not sure"
+      default: 7
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant config
+      description: |
+        Your `[COURSES]` mapping is often the cause. Paste it with the org names
+        changed if you like — but **never** paste the `[CANVAS] token` line.
+      render: ini
+      placeholder: |
+        [COURSES]
+        MY-COURSE = my-github-org
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Workarounds you found, when it started, related issues.
+    validations:
+      required: false

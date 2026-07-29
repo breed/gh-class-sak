@@ -1,15 +1,36 @@
 # project description
 
-a swiss army knife for managing github classrooms
+a swiss army knife for managing github classrooms now the official github classrooms is gone.
 
 # language
 
 - python to be deployed via pypi
 - click for commandline parsing
 
+# testing
+
+- pytest, run with `pytest`. install the dev extra with `pip install -e ".[dev]"`
+- github and canvas are stubbed in `tests/fakes.py`, so the suite runs offline. never let a test reach the network
+- when fixing a bug, reproduce it first and add a failing test before the fix
+
+# repo hygiene
+
+- this project follows the "repo to product" tips. the `repo-audit` and `repo-upgrade` skills from https://github.com/breed/repo-to-product are the source of truth
+- run `repo-audit` before a release and after any change to packaging, docs layout, or CI
+- keep docs in the Diátaxis layout the skill expects: tutorial, how-to, reference, explanation
+
 # common flags
 
-- for commands that change something `--dryrun` is needed to make the change, otherwise just print what would happen with a ⚠️ in front
+- for commands that change something, use a `--dryrun/--no-dryrun` flag pair defaulting to dryrun. the bare command just prints what would happen with a ⚠️ in front; `--no-dryrun` applies the change
+
+# how classrooms and assignments are identified
+
+github classroom is gone, so nothing may call `gh classroom` or the `/classrooms` and `/assignments` REST endpoints.
+
+- a CLASSROOM is a github org. the argument matches either side of a `[COURSES]` mapping (canvas course partial = github org), or is used verbatim as an org name when there is no config
+- an ASSIGNMENT is the repo name prefix that its repos share. repos are found by listing the org and filtering on that prefix
+- a TEAM is the repo name with the assignment prefix stripped off
+- use PyGithub to talk to github and GitPython to talk to git. do not hand-roll requests sessions or pagination
 
 # getting information about instructors and students
 
@@ -41,13 +62,21 @@ a swiss army knife for managing github classrooms
 
 find the github ids of all the students and instructors using the canvas REST API to get the profile for the given user id and look for the github link
 
-
 # subcommands
 
 - classrooms: list the classrooms and corresponding assignments
     - each assignment will have this format: CLASSROOM: ASSIGNMENT
+    - assignments are inferred from repo names: any `-` delimited prefix shared by two or more repos in the org
 - repos list: takes a CLASSROOM and ASSIGNMENT and lists each repo
-    - line for each repo has this format: TEAM\tREPO\tMEMBER1,MEMBER2,...\tADMIN1,ADMIN2
-    - if the `--alt` flag is give, any alternative repo names (previous names for the repo) will follow the admins with `\t#ALTREPO1,ALTREPO2`
+    - output is space-padded columns with a header row: TEAM always, then REPO, MEMBERS, INSTRUCTORS, GROUP depending on flags; the last column is never padded
+    - members are comma-joined repo collaborators excluding admins; `--name`/`--email` annotate each as LOGIN(NAME,EMAIL)
+    - if the `--alt` flag is given, any alternative repo names (previous names for the repo) will be shown as an extra column
+- repos members: list the members of each repo with names and emails mined from commit history
+- repos missing: list canvas students, or canvas groups with `--group`, that have no repo
+- repos clone: clone or fast-forward every repo for an assignment. pass the token to git through the environment so it never lands in argv, the clone url, or `.git/config`
 - repos update: takes a file with the same format as `repos list` that will update the repo with the give members and admins
     - if any of the ids are emails, first resolve the email to the github id. print a noticeable error if the email does not resolve
+
+# not yet implemented
+
+- `repos update` and the `--alt` flag on `repos list`
