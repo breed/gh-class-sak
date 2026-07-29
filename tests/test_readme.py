@@ -19,6 +19,7 @@ from click.testing import CliRunner
 
 from gh_class_sak import core
 from gh_class_sak.commands import classrooms as classrooms_cmd
+from gh_class_sak.commands import meta as meta_cmd
 from gh_class_sak.commands import repos as repos_cmd
 from gh_class_sak.core import gh_class_sak
 from tests.demo import demo_github
@@ -47,8 +48,9 @@ BLOCKS = _console_blocks()
 @pytest.fixture
 def demo_cli(monkeypatch, tmp_path):
     gh = demo_github()
-    for mod in (core, classrooms_cmd, repos_cmd):
+    for mod in (core, classrooms_cmd, repos_cmd, meta_cmd):
         monkeypatch.setattr(mod, "get_github", lambda: gh, raising=False)
+        monkeypatch.setattr(mod, "get_token", lambda: "ghp_faketoken", raising=False)
     # the demo runs with no config file, as a first-time reader would
     monkeypatch.setattr(core, "config_ini", str(tmp_path / "absent.ini"))
     return CliRunner()

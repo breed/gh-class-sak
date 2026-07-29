@@ -109,13 +109,13 @@ def no_config(tmp_path, monkeypatch):
 @pytest.fixture
 def cli(monkeypatch, fake_github, fake_canvas):
     """A CliRunner with GitHub, Canvas, and token access stubbed out."""
-    monkeypatch.setattr(core, "get_github", lambda: fake_github)
-    monkeypatch.setattr(repos_cmd, "get_github", lambda: fake_github)
-    monkeypatch.setattr(classrooms_cmd, "get_github", lambda: fake_github)
+    from gh_class_sak.commands import meta as meta_cmd
+
+    for mod in (core, repos_cmd, classrooms_cmd, meta_cmd):
+        monkeypatch.setattr(mod, "get_github", lambda: fake_github, raising=False)
+        monkeypatch.setattr(mod, "get_token", lambda: "ghp_faketoken", raising=False)
     monkeypatch.setattr(core, "get_canvas", lambda: fake_canvas)
     monkeypatch.setattr(repos_cmd, "get_canvas", lambda: fake_canvas)
-    monkeypatch.setattr(core, "get_token", lambda: "ghp_faketoken")
-    monkeypatch.setattr(repos_cmd, "get_token", lambda: "ghp_faketoken")
     return CliRunner()
 
 

@@ -33,12 +33,14 @@ from gh_class_sak.core import (
 )
 from gh_class_sak.github_api import (
     find_assignment_repos,
+    get_repo_by_id,
     list_commit_authors,
     list_org_repos,
     resolve_email_to_username,
     resolve_name_to_username,
     split_collaborators,
 )
+from gh_class_sak.meta_store import load_meta_courses
 
 
 def normalize_name(name):
@@ -103,12 +105,39 @@ def resolve_assignment_repos(classroom, assignment):
 
     Returns (Classroom, [(team, repo)]). The classroom argument is a GitHub org
     (or a partial matching one configured in [COURSES]); the assignment is the
-    repo name prefix those repos share.
+    repo name prefix those repos share. When the org has a meta repo, its
+    course prefix anchors the match and recorded repos are included by their
+    numeric id, so renamed repos still appear.
     """
     gh = get_github()
     org, course_partial = resolve_classroom(classroom)
+
+    # the meta repo, when present, knows the real prefix and the recorded repos
+    effective_prefix = assignment
+    recorded_rows = []
+    course_key = normalize_course_name(course_partial) if course_partial else None
+    meta_courses = load_meta_courses(gh, org, get_token())
+    for course, data in sorted(meta_courses.items()):
+        if course_key and course != course_key:
+            continue
+        prefix = data.get("prefix") or ""
+        if assignment.lower() in prefix.lower():
+            effective_prefix = prefix
+            recorded_rows = data["rows"]
+            break
+
     repos = list_org_repos(gh, org)
-    found = find_assignment_repos(repos, assignment)
+    found = find_assignment_repos(repos, effective_prefix)
+    found_ids = {r.id for _, r in found}
+    for row in recorded_rows:
+        if row["repo_id"] is None or row["repo_id"] in found_ids:
+            continue
+        renamed = get_repo_by_id(gh, row["repo_id"])
+        if renamed is None:
+            warn(f"recorded repo for {row['name']} (id {row['repo_id']}) is gone")
+            continue
+        found.append((row["name"], renamed))
+
     if not found:
         error(f'no repos in "{org}" matching assignment "{assignment}". repos are:')
         for r in repos:

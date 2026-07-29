@@ -202,6 +202,83 @@ $ gh-class-sak repos clone cs101-fall project --dest grading
 Your token is handed to git through the environment, so it never appears in `ps` output,
 in the clone URL, or in the checked-out `.git/config`.
 
+## The meta repo
+
+Prefix discovery works with nothing but naming conventions, but it can't survive a team
+renaming their repo, and it knows nothing about who *should* have access. The `meta`
+command group fixes both by keeping course state in a private repo named `meta` inside the
+org — versioned, hand-editable, and invisible to students:
+
+```
+meta/
+  sp26_cmpe_195a/                  one directory per course
+    course.ini                     [COURSE] prefix = ...  /  template = ...
+    tas                            one github login or email per line
+    students.tsv                   NAME  STUDENTS  REPO  REPO_ID
+```
+
+`students.tsv` is the heart of it. You supply the first two columns — `NAME` (the suffix
+appended to the course prefix, so `team-1` becomes `PREFIX-team-1`) and `STUDENTS` (the
+comma-joined emails or GitHub logins who get write access). The tool fills in the last two
+when it creates the repo: the URL, and GitHub's **permanent numeric repo id** — which is
+how a repo stays tracked even after students rename it.
+
+### meta init
+
+Create the meta repo and record a course. With a Canvas config, the `tas` file is seeded
+from the course's TA and teacher enrollments. Like every mutating command, it previews by
+default:
+
+```console
+$ gh-class-sak meta init cs101-fall --prefix project
+no canvas config; seed the tas file by hand
+⚠️  would create private cs101-fall/meta
+⚠️  would record cs101_fall: prefix=project tas=-
+```
+
+### meta assign
+
+Feed it your team table — just the two columns, emails and logins mixed freely:
+
+```
+NAME       STUDENTS
+team-1     jane@sjsu.edu,msmith
+nightowls  rpatel,tk-codes
+```
+
+```
+gh-class-sak meta assign CLASSROOM teams.tsv [--dryrun/--no-dryrun]
+```
+
+Emails are resolved to GitHub logins via the student's Canvas profile link, then the
+GitHub search API; an email nothing can resolve is a loud error. Under `--no-dryrun` it
+creates each missing repo (privately, from the course template when `course.ini` names
+one), records the URL and repo id, and grants the listed students push. Re-importing an
+updated table changes student lists but **never clobbers a recorded repo**.
+
+### meta apply
+
+Reconcile the org to match the meta repo:
+
+```
+gh-class-sak meta apply CLASSROOM [--dryrun/--no-dryrun]
+```
+
+- rows without a repo yet — including ones you hand-added to `students.tsv` — get created
+- the org team `tas` exists, its membership matches the `tas` file, and it has **read**
+  access to every assignment repo (TAs accept one org invite, ever)
+- every listed student has **write** on their repo; non-admin collaborators who aren't
+  listed are revoked — org admins are never touched
+- run it twice: the second pass prints `nothing to do`
+
+### meta show
+
+Print a course's recorded state: prefix, template, TAs, and the full assignment table.
+
+Once repos are recorded, `repos list`, `repos members`, `repos missing`, and `repos clone`
+all include them by id — so a renamed repo shows up under its original team name instead
+of silently vanishing.
+
 ## How group matching works
 
 With `--group`, the tool:
@@ -218,9 +295,10 @@ their real name on their GitHub profile.
 
 ## Known limitations
 
-- **Renamed repos are invisible.** Discovery is by repo-name prefix, so if a team renames
-  `project-widgets` to `widgets`, it drops out of every listing. GitHub Classroom used to
-  track these; recovering them is [tracked separately](https://github.com/breed/gh-class-sak/issues).
+- **Renamed repos are invisible to prefix discovery alone.** If a team renames
+  `project-widgets` to `widgets` it drops out of listings — unless the repo is recorded in
+  the [meta repo](#the-meta-repo), which tracks repos by their permanent id and survives
+  any rename.
 - Students are matched to Canvas by fuzzy name comparison, not by ID. A student whose
   GitHub profile has no real name can't be matched.
 

@@ -32,6 +32,13 @@ github classroom is gone, so nothing may call `gh classroom` or the `/classrooms
 - a TEAM is the repo name with the assignment prefix stripped off
 - use PyGithub to talk to github and GitPython to talk to git. do not hand-roll requests sessions or pagination
 
+# the meta repo
+
+- each org may have a private repo named `meta` recording course state: one directory per course (normalized canvas partial) with `course.ini` ([COURSE] prefix, optional template), `tas` (one login or email per line), and `students.tsv` (NAME STUDENTS REPO REPO_ID)
+- in students.tsv the instructor supplies NAME (suffix appended to the course prefix) and STUDENTS (comma-joined emails/logins that get write access); the tool fills REPO (url) and REPO_ID (github's permanent numeric id) when it creates the repo, and never clobbers them on re-import
+- `meta apply` reconciles reality to the meta: creates missing repos (privately, from the template when set), TAs get read on all assignment repos via the org team `tas`, students get write on their repos, unlisted non-admin collaborators are revoked. admins are never touched
+- discovery honors recorded REPO_IDs, so renamed repos stay tracked
+
 # getting information about instructors and students
 
 ### listing student and instructor names, emails, and relationships

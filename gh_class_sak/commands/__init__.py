@@ -1,8 +1,9 @@
 """Importing a command module registers its commands on the root click group."""
 
-from gh_class_sak.commands import classrooms, repos
+from gh_class_sak.commands import classrooms, meta, repos
 
 __all__ = [
     "classrooms",
+    "meta",
     "repos",
 ]

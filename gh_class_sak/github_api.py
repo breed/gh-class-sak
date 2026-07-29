@@ -154,3 +154,39 @@ def add_collaborator(repo, username, permission="push"):
 
 def remove_collaborator(repo, username):
     return repo.remove_from_collaborators(username)
+
+
+def get_org_repo(gh, org_name, repo_name):
+    """a repo in the org, or None when it doesn't exist."""
+    try:
+        return gh.get_repo(f"{org_name}/{repo_name}")
+    except GithubException:
+        return None
+
+
+def get_repo_by_id(gh, repo_id):
+    """a repo by its permanent numeric id — survives renames. None if gone."""
+    try:
+        return gh.get_repo(int(repo_id))
+    except GithubException:
+        return None
+
+
+def create_org_repo(gh, org_name, repo_name, template=None, auto_init=False):
+    """create a private repo in the org, from a template repo when given."""
+    org = get_org(gh, org_name)
+    if template is not None:
+        return org.create_repo_from_template(repo_name, template, private=True)
+    return org.create_repo(repo_name, private=True, auto_init=auto_init)
+
+
+def get_team(gh, org_name, slug):
+    """a team in the org by slug, or None when it doesn't exist."""
+    try:
+        return get_org(gh, org_name).get_team_by_slug(slug)
+    except GithubException:
+        return None
+
+
+def create_team(gh, org_name, name):
+    return get_org(gh, org_name).create_team(name, privacy="closed")

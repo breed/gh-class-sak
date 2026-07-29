@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.4.0
+
+The meta repo: course state moves into a private repo named `meta` inside the org — one
+directory per course holding `course.ini` (repo prefix, optional template repo), `tas`
+(one login or email per line), and `students.tsv` (`NAME  STUDENTS  REPO  REPO_ID`, where
+the instructor supplies the first two columns and the tool records the repo URL and
+GitHub's permanent numeric id when it creates the repo).
+
+- `meta init` — create the meta repo, record a course, seed TAs from Canvas enrollments
+- `meta assign` — import a NAME + STUDENTS table (emails resolved to logins, loud error
+  when one doesn't resolve), create the repos privately (from the course template when
+  set), record them, grant the students push. Re-imports never clobber a recorded repo.
+- `meta apply` — full reconcile: realize hand-added rows, keep the org team `tas` matching
+  the tas file with read on every assignment repo, keep each repo's non-admin
+  collaborators exactly its listed students. Admins are never touched; a second run
+  prints `nothing to do`. All of it previews under the default dryrun.
+- `meta show` — print a course's recorded state
+- discovery (`repos list/members/missing/clone`, `classrooms`) now consults the meta:
+  the course prefix anchors assignment matching, and recorded repos are found by their
+  permanent id — so repos renamed away from the prefix are no longer invisible
+
 ## v0.3.0
 
 GitHub Classroom has been discontinued, so the `/classrooms`, `/classrooms/{id}/assignments`,
