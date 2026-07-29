@@ -25,8 +25,29 @@ def _user(login, name=None, email=None, admin=False):
 
 
 @pytest.fixture
-def fake_github():
-    """An org with two project repos, one hw repo, an empty repo, and a non-assignment repo."""
+def fake_github(tmp_path, monkeypatch):
+    """An org with two project repos, one hw repo, an empty repo, a
+    non-assignment repo — and a classroom-meta repo recording the classroom
+    (cmpe_195a; assignments hw1, project, and the repo-less quiz)."""
+    from git import Repo as GitRepo
+
+    from gh_class_sak import meta_store as ms
+
+    monkeypatch.setattr(ms, "meta_checkout_dir",
+                        lambda org: str(tmp_path / "checkouts" / org))
+    bare = tmp_path / "origins" / "classroom-meta.git"
+    bare.parent.mkdir(parents=True)
+    GitRepo.init(bare, bare=True)
+    work = tmp_path / "origins" / "seed-work"
+    GitRepo.clone_from(str(bare), str(work))
+    ms.save_classroom(str(work), "cmpe_195a",
+                      assignments={"hw1": [], "project": [], "quiz": []})
+    ms.commit_and_push(str(work), "seed")
+    # warm the checkout now, so tests that stub out clone_or_update (the
+    # repos-clone tests) still find the classroom-meta content on disk
+    ms.checkout_meta(str(bare), ORG)
+    meta = FakeRepo(ORG, "classroom-meta", clone_url=str(bare))
+
     instructor = _user("profbeth", name="Beth Reed", admin=True)
 
     team12 = FakeRepo(ORG, "project-team-12", collaborators=[
@@ -51,7 +72,8 @@ def fake_github():
     hw1b = FakeRepo(ORG, "hw1-bob", collaborators=[_user("bob", name="Bob Baker")])
     sandbox = FakeRepo(ORG, "sandbox")
 
-    return FakeGithub(orgs=[FakeOrg(ORG, [team12, redteam, empty, hw1a, hw1b, sandbox])])
+    return FakeGithub(orgs=[FakeOrg(ORG, [team12, redteam, empty, hw1a, hw1b,
+                                          sandbox, meta])])
 
 
 @pytest.fixture

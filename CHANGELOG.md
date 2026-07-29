@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.7.0
+
+The classroom-meta repo is now required. The prefix-inference workarounds for orgs
+without one are gone — the repo *is* the model, not an optional layer over it.
+
+Breaking changes:
+
+- `classrooms` and every `repos` command error out (exit 2, pointing at `meta init`)
+  when the org has no classroom-meta repo. Previously they fell back to inferring
+  assignments from repo-name prefixes.
+- the `repos` ASSIGNMENT argument only ever selects an assignment tsv now; an argument
+  matching no assignment is an error listing the candidates, instead of being tried as a
+  literal repo prefix.
+- assignment-prefix inference is removed entirely (`classrooms` no longer guesses
+  assignments from `-` delimited repo-name prefixes shared by two or more repos).
+
+To adopt an existing unmanaged org: `meta init` it, then create one `<assignment>.tsv`
+per assignment (rows optional — repos matching `prefix-assignment` are found by name).
+
 ## v0.6.0
 
 The classroom model becomes explicit: an org hosts a set of classrooms; a classroom is a

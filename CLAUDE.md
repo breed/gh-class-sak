@@ -29,7 +29,8 @@ github classroom is gone, so nothing may call `gh classroom` or the `/classrooms
 
 - a github ORG hosts a set of classrooms
 - a CLASSROOM is a directory containing a `classroom.ini` in its org's `classroom-meta` repo, named by the normalized canvas course partial it maps to. the classroom argument matches either side of a `[COURSES]` mapping (canvas course partial = github org), and is used verbatim as an org name when there is no config
-- an ASSIGNMENT is a `.tsv` file in a classroom directory, named by its basename. without a classroom-meta repo, an assignment is instead the repo name prefix its repos share, found by listing the org and filtering on that prefix
+- an ASSIGNMENT is a `.tsv` file in a classroom directory, named by its basename. the classroom-meta repo is required: commands that read a classroom error out (pointing at `meta init`) when the org has none — there is no prefix-inference fallback
+- an assignment's repos are found by their name prefix (the prefix-assignment join) plus the recorded REPO_IDs
 - a TEAM is the repo name with the assignment's repo prefix stripped off
 - the default repo name joins the non-empty parts of the classroom prefix, the assignment, and the row NAME with `-` (the prefix is optional); a recorded REPO/REPO_ID always wins over the default name
 - use PyGithub to talk to github and GitPython to talk to git. do not hand-roll requests sessions or pagination
@@ -79,7 +80,7 @@ find the github ids of all the students and instructors using the canvas REST AP
 - classrooms: list the classrooms and corresponding assignments
     - takes an optional CLASSROOM; without it, lists every org mapped in `[COURSES]`. errors out when neither is given — never enumerate the orgs the token belongs to
     - each assignment will have this format: CLASSROOM: ASSIGNMENT
-    - assignments are inferred from repo names: any `-` delimited prefix shared by two or more repos in the org
+    - classrooms and assignments come from the classroom-meta repo: one line per assignment tsv per classroom directory
 - repos list: takes a CLASSROOM and ASSIGNMENT and lists each repo
     - output is space-padded columns with a header row: TEAM always, then REPO, MEMBERS, INSTRUCTORS, GROUP depending on flags; the last column is never padded
     - members are comma-joined repo collaborators excluding admins; `--name`/`--email` annotate each as LOGIN(NAME,EMAIL)

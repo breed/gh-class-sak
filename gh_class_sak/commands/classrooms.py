@@ -13,7 +13,6 @@ from gh_class_sak.core import (
     output,
     resolve_classroom,
 )
-from gh_class_sak.github_api import infer_assignment_prefixes, list_org_repos
 from gh_class_sak.meta_store import load_meta_classrooms
 
 
@@ -36,24 +35,21 @@ def classrooms(classroom):
                   f"the [COURSES] section of {config_ini}")
             sys.exit(2)
 
+    missing = False
     for org in orgs:
         info(f"scanning {org} ...")
-        # an org can host several classrooms, one directory each in its meta
-        # repo. without a meta repo the org itself is the classroom and its
-        # assignments are inferred from repo names.
+        # an org hosts a set of classrooms, one directory each in its
+        # classroom-meta repo
         meta_classrooms = load_meta_classrooms(gh, org, get_token())
-        if meta_classrooms:
-            for classroom_dir, data in sorted(meta_classrooms.items()):
-                if data["assignments"]:
-                    for assignment in data["assignments"]:
-                        output(f"{classroom_dir}: {assignment}")
-                else:
-                    output(f"{classroom_dir}: (no assignments)")
+        if not meta_classrooms:
+            error(f'no classroom-meta repo in "{org}". create one with: meta init')
+            missing = True
             continue
-        repos = list_org_repos(gh, org)
-        prefixes = infer_assignment_prefixes([r.name for r in repos])
-        if not prefixes:
-            output(f"{org}: (no assignments)")
-        else:
-            for prefix, _count in prefixes:
-                output(f"{org}: {prefix}")
+        for classroom_dir, data in sorted(meta_classrooms.items()):
+            if data["assignments"]:
+                for assignment in data["assignments"]:
+                    output(f"{classroom_dir}: {assignment}")
+            else:
+                output(f"{classroom_dir}: (no assignments)")
+    if missing:
+        sys.exit(2)

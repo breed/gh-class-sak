@@ -19,11 +19,12 @@ from xml.sax.saxutils import escape
 from click.testing import CliRunner
 
 from gh_class_sak import core
+from gh_class_sak import meta_store as ms
 from gh_class_sak.commands import classrooms as classrooms_cmd
 from gh_class_sak.commands import meta as meta_cmd
 from gh_class_sak.commands import repos as repos_cmd
 from gh_class_sak.core import gh_class_sak
-from tests.demo import demo_github
+from tests.demo import demo_github, seed_demo_meta
 
 SVG_PATH = Path(__file__).resolve().parent.parent / "docs" / "demo.svg"
 
@@ -50,8 +51,10 @@ GAP_S = 0.75    # pause before the next prompt
 
 def _outputs():
     """Run every COMMANDS entry against the demo fixture, fully offline."""
-    gh = demo_github()
     with tempfile.TemporaryDirectory() as tmp, contextlib.ExitStack() as stack:
+        stack.enter_context(mock.patch.object(
+            ms, "meta_checkout_dir", lambda org: str(Path(tmp) / "checkouts" / org)))
+        gh = demo_github(seed_demo_meta(Path(tmp) / "origins"))
         # the demo runs with no config file, as a first-time reader would
         stack.enter_context(
             mock.patch.object(core, "config_ini", str(Path(tmp) / "absent.ini")))

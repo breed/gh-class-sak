@@ -104,19 +104,19 @@ def resolve_assignment_repos(classroom, assignment):
     """Resolve a classroom/assignment pair to the repos backing it.
 
     Returns (Classroom, [(team, repo)]). The classroom argument is a GitHub org
-    (or a partial matching one configured in [COURSES]). With a classroom-meta
-    repo, the assignment argument selects an assignment tsv by name; its
-    prefix-assignment join anchors the repo match and recorded repos are
-    included by their numeric id, so renamed repos still appear. Without one,
-    the assignment is the literal repo-name prefix.
+    (or a partial matching one configured in [COURSES]); it must have a
+    classroom-meta repo. The assignment argument selects an assignment tsv by
+    name; its prefix-assignment join anchors the repo match and recorded repos
+    are included by their numeric id, so renamed repos still appear.
     """
     gh = get_github()
     org, course_partial = resolve_classroom(classroom)
 
-    effective_prefix = assignment  # the no-meta fallback: a literal repo prefix
-    recorded_rows = []
     classroom_key = normalize_course_name(course_partial) if course_partial else None
     meta_classrooms = load_meta_classrooms(gh, org, get_token())
+    if not meta_classrooms:
+        error(f'no classroom-meta repo in "{org}". create one with: meta init')
+        sys.exit(2)
     matches = []
     for classroom_dir, data in sorted(meta_classrooms.items()):
         if classroom_key and classroom_dir != classroom_key:
@@ -129,16 +129,21 @@ def resolve_assignment_repos(classroom, assignment):
     # because nothing in the output would reveal the wrong pick
     exact = [m for m in matches if m[1].lower() == assignment.lower()]
     candidates = exact or matches
+    if not candidates:
+        error(f'no assignment matching "{assignment}" in "{org}". assignments are:')
+        for classroom_dir, data in sorted(meta_classrooms.items()):
+            for name in data["assignments"]:
+                error(f"    {classroom_dir}: {name}")
+        sys.exit(2)
     if len(candidates) > 1:
         error(f'assignment "{assignment}" is ambiguous in "{org}". candidates:')
         for classroom_dir, name, _data in candidates:
             error(f"    {classroom_dir}: {name}")
         error("name the classroom, or use a longer assignment name")
         sys.exit(2)
-    if candidates:
-        _dir, name, data = candidates[0]
-        effective_prefix = join_repo_name(data["prefix"], name)
-        recorded_rows = data["assignments"][name]
+    _dir, name, data = candidates[0]
+    effective_prefix = join_repo_name(data["prefix"], name)
+    recorded_rows = data["assignments"][name]
 
     repos = list_org_repos(gh, org)
     found = find_assignment_repos(repos, effective_prefix)

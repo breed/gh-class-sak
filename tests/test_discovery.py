@@ -1,11 +1,7 @@
 import pytest
 
 from gh_class_sak import core
-from gh_class_sak.github_api import (
-    find_assignment_repos,
-    infer_assignment_prefixes,
-    team_name,
-)
+from gh_class_sak.github_api import find_assignment_repos, team_name
 from tests.fakes import FakeRepo
 
 ORG = "SJSU-CMPE-195"
@@ -13,39 +9,6 @@ ORG = "SJSU-CMPE-195"
 
 def repo(name):
     return FakeRepo(ORG, name)
-
-
-class TestInferAssignmentPrefixes:
-    def test_groups_repos_by_shared_prefix(self):
-        names = ["project-team-12", "project-red-team", "hw1-a", "hw1-b", "hw1-c"]
-        assert infer_assignment_prefixes(names) == [("hw1", 3), ("project", 2)]
-
-    def test_ignores_repos_with_no_prefix(self):
-        assert infer_assignment_prefixes(["sandbox", "hw1-a", "hw1-b"]) == [("hw1", 2)]
-
-    def test_ignores_prefixes_used_by_one_repo(self):
-        # project-team appears once, so only the shared "project" survives
-        names = ["project-team-12", "project-red-team"]
-        assert infer_assignment_prefixes(names) == [("project", 2)]
-
-    def test_prefers_the_most_specific_prefix_with_equal_coverage(self):
-        # every repo is hw1-part2-*, so "hw1" and "hw1-part2" cover the same
-        # repos and only the longer one should be reported
-        names = ["hw1-part2-a", "hw1-part2-b"]
-        assert infer_assignment_prefixes(names) == [("hw1-part2", 2)]
-
-    def test_suppresses_sub_patterns_of_an_accepted_prefix(self):
-        # hw1-part2 is how two of the teams are named, not a second assignment
-        names = ["hw1-part2-a", "hw1-part2-b", "hw1-solo"]
-        assert infer_assignment_prefixes(names) == [("hw1", 3)]
-
-    def test_reports_unrelated_assignments_separately(self):
-        names = ["group-project-team-1", "group-project-team-2", "group-project-red",
-                 "sp26-cmpe-195a-template", "sp26-cmpe-195b-template"]
-        assert infer_assignment_prefixes(names) == [("group-project", 3), ("sp26-cmpe", 2)]
-
-    def test_empty_input(self):
-        assert infer_assignment_prefixes([]) == []
 
 
 class TestTeamName:

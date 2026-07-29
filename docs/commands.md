@@ -8,26 +8,21 @@ New here? Start with [Getting started](getting-started.md).
 
 ## classrooms
 
-List the assignments detected in a classroom. Pass the org (or a course name from the
-config) as the argument; with no argument, every org mapped in the `[COURSES]` section
-of the config is listed. Orgs are never discovered from your token — your account may
-belong to orgs with thousands of unrelated repos, and scanning them would take forever.
-
-Assignments are inferred as any `-` delimited repo-name prefix shared by two or more
-repos, with sub-patterns of a broader assignment suppressed — so `project-team-1` and
-`project-nightowls` yield `project`, not also `project-team`. With a
-[classroom-meta repo](#the-classroom-meta-repo), the org's classroom directories are
-listed instead, one line per assignment tsv.
+List each classroom in an org and its assignments, straight from the org's
+[classroom-meta repo](#the-classroom-meta-repo) — one line per assignment tsv. Pass the
+org (or a course name from the config) as the argument; with no argument, every org
+mapped in the `[COURSES]` section of the config is listed. Orgs are never discovered from
+your token — your account may belong to orgs with thousands of unrelated repos, and
+scanning them would take forever.
 
 ```console
 $ gh-class-sak classrooms cs101-fall
 scanning cs101-fall ...
-cs101-fall: hw1
-cs101-fall: project
+cs101_fall: hw1
+cs101_fall: project
 ```
 
-An assignment with only one repo won't be listed. You can still pass its prefix to the
-other commands.
+An org without a classroom-meta repo is an error pointing at `meta init`.
 
 ## repos list
 
@@ -116,13 +111,11 @@ in the clone URL, or in the checked-out `.git/config`.
 
 ## The classroom-meta repo
 
-Prefix discovery works with nothing but naming conventions, but it can't survive a team
-renaming their repo, and it knows nothing about who *should* have access. The `meta`
-command group fixes both by keeping classroom state in a private repo named
-`classroom-meta` inside the org — versioned, hand-editable, and invisible to students. An
-org hosts a set of classrooms (two Canvas sections often share one org). A classroom is a
-directory with a `classroom.ini`, and **every `.tsv` file in it is an assignment**, named
-by its basename:
+All course state lives in a private repo named `classroom-meta` inside the org —
+versioned, hand-editable, and invisible to students. Every command starts from it: an org
+without one gets an error pointing at `meta init`. An org hosts a set of classrooms (two
+Canvas sections often share one org). A classroom is a directory with a `classroom.ini`,
+and **every `.tsv` file in it is an assignment**, named by its basename:
 
 ```
 classroom-meta/
@@ -143,15 +136,16 @@ which is how a repo stays tracked even after students rename it.
 
 ### meta init
 
-Create the classroom-meta repo and record a classroom. With a Canvas config, the `tas`
-file is seeded from the course's TA and teacher enrollments. `--prefix` is optional — set
-one when several classrooms share an org, so their repo names can't collide. Like every
-mutating command, it previews by default:
+Create the classroom-meta repo (when the org doesn't have one yet) and record a
+classroom. With a Canvas config, the `tas` file is seeded from the course's TA and
+teacher enrollments. `--prefix` is optional — set one when several classrooms share an
+org, so their repo names can't collide. Like every mutating command, it previews by
+default; in an org with no classroom-meta repo yet, a
+`would create private ORG/classroom-meta` line comes first:
 
 ```console
 $ gh-class-sak meta init cs101-fall
 no canvas config; seed the tas file by hand
-⚠️  would create private cs101-fall/classroom-meta
 ⚠️  would record cs101_fall: prefix=- tas=-
 ```
 
@@ -247,9 +241,9 @@ their real name on their GitHub profile.
 
 ## Known limitations
 
-- **Renamed repos are invisible to prefix discovery alone.** If a team renames
-  `project-widgets` to `widgets` it drops out of listings — unless the repo is recorded in
-  the [classroom-meta repo](#the-classroom-meta-repo), which tracks repos by their
-  permanent id and survives any rename.
+- **Renamed repos are invisible unless recorded.** An assignment's unrecorded repos are
+  found by name prefix, so if a team renames `project-widgets` to `widgets` it drops out
+  of listings — until the repo is recorded in its assignment's tsv (`REPO_ID`), which
+  tracks it by permanent id and survives any rename.
 - Students are matched to Canvas by fuzzy name comparison, not by ID. A student whose
   GitHub profile has no real name can't be matched.

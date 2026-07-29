@@ -20,9 +20,11 @@ def columns(line):
 
 
 class TestClassrooms:
-    def test_lists_org_and_inferred_assignments(self, cli, config_file):
+    EXPECTED = ["cmpe_195a: hw1", "cmpe_195a: project", "cmpe_195a: quiz"]
+
+    def test_lists_classroom_dirs_and_assignments(self, cli, config_file):
         out = lines(run(cli, "classrooms"))
-        assert out == [f"{ORG}: hw1", f"{ORG}: project"]
+        assert out == self.EXPECTED
 
     def test_errors_when_no_config_and_no_argument(self, cli, no_config):
         result = run(cli, "classrooms")
@@ -31,11 +33,19 @@ class TestClassrooms:
 
     def test_takes_org_argument_verbatim_with_no_config(self, cli, no_config):
         out = lines(run(cli, "classrooms", ORG))
-        assert out == [f"{ORG}: hw1", f"{ORG}: project"]
+        assert out == self.EXPECTED
 
     def test_resolves_classroom_argument_through_config(self, cli, config_file):
         out = lines(run(cli, "classrooms", "195A"))
-        assert out == [f"{ORG}: hw1", f"{ORG}: project"]
+        assert out == self.EXPECTED
+
+    def test_errors_without_a_classroom_meta_repo(self, cli, no_config, fake_github):
+        org = fake_github.get_organization(ORG)
+        org._repos[:] = [r for r in org._repos if r.name != "classroom-meta"]
+        result = run(cli, "classrooms", ORG)
+        assert result.exit_code == 2
+        assert "no classroom-meta repo" in result.output
+        assert "meta init" in result.output
 
 
 class TestReposList:
@@ -92,10 +102,24 @@ class TestReposList:
         # alice's commit email is real; bob's is noreply so canvas wins
         assert columns(out[1])[1] == "alice(alice@sjsu.edu),bob(bob@sjsu.edu)"
 
-    def test_errors_when_no_repo_matches_the_assignment(self, cli, no_config):
+    def test_errors_when_no_assignment_matches(self, cli, no_config):
         result = run(cli, "repos", "list", ORG, "final")
         assert result.exit_code == 2
+        assert 'no assignment matching "final"' in result.output
+        assert "cmpe_195a: project" in result.output
+
+    def test_errors_when_the_assignment_has_no_repos(self, cli, no_config):
+        # quiz is recorded in the classroom-meta but no repo carries its prefix
+        result = run(cli, "repos", "list", ORG, "quiz")
+        assert result.exit_code == 2
         assert "no repos" in result.output
+
+    def test_errors_without_a_classroom_meta_repo(self, cli, no_config, fake_github):
+        org = fake_github.get_organization(ORG)
+        org._repos[:] = [r for r in org._repos if r.name != "classroom-meta"]
+        result = run(cli, "repos", "list", ORG, "project")
+        assert result.exit_code == 2
+        assert "no classroom-meta repo" in result.output
 
 
 class TestReposMembers:
@@ -150,7 +174,8 @@ class TestReposClone:
         dest = tmp_path / "work"
         out = lines(run(cli, "repos", "clone", ORG, "project", "--dest", str(dest)))
 
-        assert calls == []
+        # the only clone traffic is the classroom-meta checkout itself
+        assert [c for c in calls if "classroom-meta" not in str(c[0])] == []
         assert not dest.exists()
         assert len(out) == 3
         assert all(ln.startswith("\N{WARNING SIGN}") for ln in out)
@@ -169,12 +194,13 @@ class TestReposClone:
         out = lines(run(cli, "repos", "clone", ORG, "project",
                         "--dest", str(dest), "--no-dryrun"))
 
-        assert [c[0] for c in calls] == [
+        cloned = [c for c in calls if "classroom-meta" not in str(c[0])]
+        assert [c[0] for c in cloned] == [
             f"https://github.com/{ORG}/project-team-12.git",
             f"https://github.com/{ORG}/project-red-team.git",
             f"https://github.com/{ORG}/project-empty.git",
         ]
-        assert calls[0][1] == str(dest / "team-12")
+        assert cloned[0][1] == str(dest / "team-12")
         assert columns(out[0]) == ["REPO", "PATH", "STATUS"]
         assert columns(out[1])[2] == "cloned"
 
