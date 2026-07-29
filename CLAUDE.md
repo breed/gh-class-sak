@@ -74,6 +74,7 @@ find the github ids of all the students and instructors using the canvas REST AP
 # subcommands
 
 - classrooms: list the classrooms and corresponding assignments
+    - takes an optional CLASSROOM; without it, lists every org mapped in `[COURSES]`. errors out when neither is given — never enumerate the orgs the token belongs to
     - each assignment will have this format: CLASSROOM: ASSIGNMENT
     - assignments are inferred from repo names: any `-` delimited prefix shared by two or more repos in the org
 - repos list: takes a CLASSROOM and ASSIGNMENT and lists each repo

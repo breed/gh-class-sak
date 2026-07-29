@@ -219,11 +219,10 @@ class FakeSearchResult:
 
 
 class FakeAuthenticatedUser:
+    # deliberately no get_orgs(): classrooms come from the config or an
+    # explicit argument, never from enumerating the token's orgs
     def __init__(self, orgs):
         self._orgs = orgs
-
-    def get_orgs(self):
-        return list(self._orgs)
 
 
 class FakeGithub:

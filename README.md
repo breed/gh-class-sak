@@ -16,7 +16,8 @@ API, no per-assignment bookkeeping, no state file. Point it at an org and it wor
 rest from the repo names:
 
 ```console
-$ gh-class-sak classrooms
+$ gh-class-sak classrooms cs101-fall
+scanning cs101-fall ...
 cs101-fall: hw1
 cs101-fall: project
 ```
@@ -105,13 +106,18 @@ mean.
 
 ### classrooms
 
-List orgs and the assignments detected in each. Assignments are inferred as any `-`
-delimited repo-name prefix shared by two or more repos, with sub-patterns of a broader
-assignment suppressed — so `project-team-1` and `project-nightowls` yield `project`, not
-also `project-team`.
+List the assignments detected in a classroom. Pass the org (or a course name from the
+config) as the argument; with no argument, every org mapped in the `[COURSES]` section
+of the config is listed. Orgs are never discovered from your token — your account may
+belong to orgs with thousands of unrelated repos, and scanning them would take forever.
+
+Assignments are inferred as any `-` delimited repo-name prefix shared by two or more
+repos, with sub-patterns of a broader assignment suppressed — so `project-team-1` and
+`project-nightowls` yield `project`, not also `project-team`.
 
 ```console
-$ gh-class-sak classrooms
+$ gh-class-sak classrooms cs101-fall
+scanning cs101-fall ...
 cs101-fall: hw1
 cs101-fall: project
 ```

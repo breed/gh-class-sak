@@ -10,20 +10,30 @@ import click
 config_ini = click.get_app_dir("gh-class-sak.ini")
 
 
+_token = None
+
+
 def get_token():
+    global _token
+    if _token:
+        return _token
+
     token = os.environ.get("GH_TOKEN")
     if token:
+        _token = token
         return token
 
     try:
         result = subprocess.run(
             ["gh", "auth", "token"],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, check=True, timeout=10,
         )
         token = result.stdout.strip()
         if token:
+            _token = token
             return token
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            FileNotFoundError):
         pass
 
     error("no github token found. either:")
@@ -40,7 +50,7 @@ def get_github():
     global _github
     if _github is None:
         from github import Auth, Github
-        _github = Github(auth=Auth.Token(get_token()))
+        _github = Github(auth=Auth.Token(get_token()), per_page=100)
     return _github
 
 
