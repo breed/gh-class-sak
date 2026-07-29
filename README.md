@@ -213,7 +213,7 @@ classrooms (two Canvas sections often share one org); each is a directory:
 ```
 meta/
   sp26_cmpe_195a/                  one directory per classroom
-    classroom.ini                  [CLASSROOM] prefix = ...  /  template = ...
+    classroom.ini                  [CLASSROOM] prefix, template, repo settings
     tas                            one github login or email per line
     students.tsv                   NAME  STUDENTS  REPO  REPO_ID
 ```
@@ -274,11 +274,37 @@ Every classroom directory in the meta repo is reconciled:
   never gain access to another classroom's repos
 - every listed student has **write** on their repo; non-admin collaborators who aren't
   listed are revoked — org admins are never touched
+- every recorded repo's default branch carries the classroom's protection settings
 - run it twice: the second pass prints `nothing to do`
+
+### Repo settings
+
+`classroom.ini` can also carry branch-protection settings for the classroom's repos:
+
+```
+[CLASSROOM]
+prefix = project
+protection = pr-review     # none (default) or pr-review: require one approving review
+linear_history = true      # default true: require a linear history
+force_push = false         # default false: block force pushes
+```
+
+`meta assign` and `meta apply` put the effective settings on each repo's default branch —
+at creation for repos made from a template, and on the next `meta apply` after the first
+push for repos created empty (GitHub can't protect a branch that doesn't exist yet).
+`meta apply` also repairs drift on every recorded repo, checking first so an untouched org
+still reconciles to `nothing to do`.
+
+Two caveats: GitHub can't protect private repos on a free org plan — the tool warns and
+moves on — and a protection write replaces the whole protection object, so hand-set extras
+like required status checks don't survive it. The all-off trio (`protection = none`,
+`linear_history = false`, `force_push = true`) asks for nothing and skips the protection
+API entirely; existing protection is never removed.
 
 ### meta show
 
-Print a classroom's recorded state: prefix, template, TAs, and the full assignment table.
+Print a classroom's recorded state: prefix, template, TAs, effective repo settings, and
+the full assignment table.
 
 Once repos are recorded, `repos list`, `repos members`, `repos missing`, and `repos clone`
 all include them by id — so a renamed repo shows up under its original team name instead

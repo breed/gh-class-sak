@@ -10,7 +10,7 @@ from gh_class_sak.commands import classrooms as classrooms_cmd
 from gh_class_sak.commands import meta as meta_cmd
 from gh_class_sak.commands import repos as repos_cmd
 from tests.conftest import ORG, run
-from tests.fakes import FakeGithub, FakeNamedUser, FakeOrg, FakeRepo
+from tests.fakes import FakeBranchProtection, FakeGithub, FakeNamedUser, FakeOrg, FakeRepo
 
 PREFIX = "sp26-cmpe-195a-project"
 COURSE = "cmpe_195a"
@@ -37,7 +37,8 @@ def env(tmp_path, monkeypatch):
                            template=template, runner=CliRunner())
 
 
-def seed_meta(env, course=COURSE, prefix=PREFIX, template=None, tas=(), rows=()):
+def seed_meta(env, course=COURSE, prefix=PREFIX, template=None, tas=(), rows=(),
+              **settings):
     """put a meta repo with recorded state into the fake org.
 
     call it again with another course to seed a second classroom directory.
@@ -45,7 +46,8 @@ def seed_meta(env, course=COURSE, prefix=PREFIX, template=None, tas=(), rows=())
     bare = env.root / "meta.git"
     GitRepo.init(bare, bare=True)
     work = ms.checkout_meta(str(bare), "seed-work")
-    ms.save_classroom(work, course, prefix, template, tas=list(tas), rows=list(rows))
+    ms.save_classroom(work, course, prefix, template, tas=list(tas), rows=list(rows),
+                      **settings)
     ms.commit_and_push(work, "seed")
     if not any(r.name == "meta" for r in env.org.get_repos()):
         env.org._repos.append(FakeRepo(ORG, "meta", clone_url=str(bare)))
@@ -89,6 +91,12 @@ class TestMetaInit:
         assert result.exit_code == 0, result.output
         assert meta_state(env)["tas"] == ["profbeth"]
 
+    def test_rerun_preserves_repo_settings(self, env):
+        seed_meta(env, course=core.normalize_course_name(ORG), protection="pr-review")
+        result = run(env.runner, "meta", "init", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert normalize_org_course(env)["protection"] == "pr-review"
+
 
 def normalize_org_course(env):
     """course state for the no-config case, where the org names the course dir."""
@@ -106,6 +114,13 @@ class TestMetaShow:
         assert f"PREFIX    {PREFIX}" in result.output
         assert "TAS       ta-one" in result.output
         assert "team-1" in result.output
+
+    def test_shows_effective_settings(self, env):
+        seed_meta(env, protection="pr-review")
+        result = run(env.runner, "meta", "show", ORG)
+        assert result.exit_code == 0, result.output
+        assert ("SETTINGS  protection=pr-review linear_history=true force_push=false"
+                in result.output)
 
     def test_errors_without_a_meta_repo(self, env):
         result = run(env.runner, "meta", "show", ORG)
@@ -177,6 +192,58 @@ class TestMetaAssign:
         result = run(env.runner, "meta", "assign", ORG, table, "--no-dryrun")
         assert result.exit_code == 0, result.output
         assert "nothing to do" in result.output
+
+    def test_created_template_repo_gets_default_protection(self, env, tmp_path):
+        seed_meta(env, template=f"{ORG}/Template")
+        table = self.table(tmp_path, "team-1 msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, table, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        created = env.gh.get_repo(f"{ORG}/{PREFIX}-team-1")
+        assert created.protection_log == [
+            ("main", {"required_linear_history": True, "allow_force_pushes": False})]
+
+    def test_pr_review_setting_requires_one_approval(self, env, tmp_path):
+        seed_meta(env, template=f"{ORG}/Template", protection="pr-review")
+        table = self.table(tmp_path, "team-1 msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, table, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        created = env.gh.get_repo(f"{ORG}/{PREFIX}-team-1")
+        _branch, kwargs = created.protection_log[0]
+        assert kwargs["required_approving_review_count"] == 1
+
+    def test_noop_settings_skip_protection_entirely(self, env, tmp_path):
+        seed_meta(env, template=f"{ORG}/Template", protection="none",
+                  linear_history=False, force_push=True)
+        table = self.table(tmp_path, "team-1 msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, table, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        created = env.gh.get_repo(f"{ORG}/{PREFIX}-team-1")
+        assert created.protection_log == []
+        assert "protect" not in result.output
+
+    def test_bare_created_repo_warns_protection_pending(self, env, tmp_path):
+        seed_meta(env)
+        table = self.table(tmp_path, "team-1 msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, table, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert "starts with no branch" in result.output
+        created = env.gh.get_repo(f"{ORG}/{PREFIX}-team-1")
+        assert created.protection_log == []
+
+    def test_dryrun_previews_protection(self, env, tmp_path):
+        seed_meta(env, template=f"{ORG}/Template")
+        table = self.table(tmp_path, "team-1 msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, table)
+        assert result.exit_code == 0, result.output
+        assert "would protect default branch on" in result.output
+        assert env.org.created_repos == []
+
+    def test_settings_survive_a_rewrite(self, env, tmp_path):
+        seed_meta(env, template=f"{ORG}/Template", protection="pr-review")
+        table = self.table(tmp_path, "team-1 msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, table, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert meta_state(env)["protection"] == "pr-review"
 
 
 class TestMetaApply:
@@ -266,6 +333,69 @@ class TestMetaApply:
         run(env.runner, "meta", "apply", ORG, "--no-dryrun")
         team = env.org.get_team_by_slug("cmpe_195a-tas")
         assert ("grant", renamed.full_name, "pull") in team.log
+
+    def test_apply_protects_recorded_repos(self, env):
+        repo = self.setup_realized(env)
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert f"protect main on {repo.full_name}" in result.output
+        assert repo.protection_log == [
+            ("main", {"required_linear_history": True, "allow_force_pushes": False})]
+
+    def test_apply_reconciles_drifted_protection(self, env):
+        repo = self.setup_realized(env)
+        run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        repo.protection_log.clear()
+        # someone hand-tightened the branch to require reviews
+        repo._protection = FakeBranchProtection(
+            {"required_approving_review_count": 1}, True, False)
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert repo.protection_log == [
+            ("main", {"required_linear_history": True, "allow_force_pushes": False})]
+
+    def test_apply_heals_protection_after_first_push(self, env):
+        repo = FakeRepo(ORG, f"{PREFIX}-team-1", has_branch=False)
+        env.org._repos.append(repo)
+        seed_meta(env, rows=[{"name": "team-1", "students": [],
+                              "repo": repo.html_url, "repo_id": repo.id}])
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert "no main branch to protect yet" in result.output
+        assert repo.protection_log == []
+
+        repo._has_branch = True  # a student pushed
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert repo.protection_log == [
+            ("main", {"required_linear_history": True, "allow_force_pushes": False})]
+
+    def test_plan_403_warns_and_stays_idempotent(self, env):
+        repo = FakeRepo(ORG, f"{PREFIX}-team-1", protection_403=True)
+        env.org._repos.append(repo)
+        seed_meta(env, rows=[{"name": "team-1", "students": [],
+                              "repo": repo.html_url, "repo_id": repo.id}])
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert "paid plan" in result.output
+        assert repo.protection_log == []
+
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert "nothing to do" in result.output
+
+    def test_noop_settings_never_delete_hand_protection(self, env):
+        repo = FakeRepo(ORG, f"{PREFIX}-team-1")
+        repo._protection = FakeBranchProtection(
+            {"required_approving_review_count": 1}, True, False)
+        env.org._repos.append(repo)
+        seed_meta(env, protection="none", linear_history=False, force_push=True,
+                  rows=[{"name": "team-1", "students": [],
+                         "repo": repo.html_url, "repo_id": repo.id}])
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert repo.protection_log == []
+        assert repo._protection is not None
 
 
 class TestMetaDiscovery:

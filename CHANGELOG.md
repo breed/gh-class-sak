@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.5.0
+
+Branch protection for assignment repos, configured per classroom in `classroom.ini`:
+
+- `protection` — `none` (default) or `pr-review` (require one approving review to merge)
+- `linear_history` — require a linear history on the default branch (default `true`)
+- `force_push` — allow force pushes (default `false`)
+
+`meta assign` and `meta apply` put the effective settings on each repo's default branch:
+at creation for repos made from a template, and — since GitHub can't protect a branch
+that doesn't exist yet — on the next `meta apply` after the first push for repos created
+empty. `meta apply` also repairs drift on every recorded repo, diffing first so a second
+run still prints `nothing to do`. Free org plans can't protect private repos; that's a
+warning, not a failure. The all-off trio (`none`/`false`/`true`) asks for nothing, skips
+the protection API entirely, and never removes existing protection. A protection write
+replaces the whole protection object, so hand-set extras (status checks, push
+restrictions) don't survive it. `meta show` prints the effective settings.
+
 ## v0.4.0
 
 The meta repo: classroom state moves into a private repo named `meta` inside the org. An

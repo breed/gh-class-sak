@@ -34,9 +34,11 @@ github classroom is gone, so nothing may call `gh classroom` or the `/classrooms
 
 # the meta repo
 
-- each org may have a private repo named `meta` recording classroom state: one directory per classroom (normalized canvas partial) with `classroom.ini` ([CLASSROOM] prefix, optional template), `tas` (one login or email per line), and `students.tsv` (NAME STUDENTS REPO REPO_ID)
+- each org may have a private repo named `meta` recording classroom state: one directory per classroom (normalized canvas partial) with `classroom.ini` ([CLASSROOM] prefix, optional template, optional repo settings), `tas` (one login or email per line), and `students.tsv` (NAME STUDENTS REPO REPO_ID)
+- classroom.ini repo settings, all optional: `protection` (none or pr-review — default none, pr-review requires one approving review), `linear_history` (default true), `force_push` (default false)
 - in students.tsv the instructor supplies NAME (suffix appended to the classroom prefix) and STUDENTS (comma-joined emails/logins that get write access); the tool fills REPO (url) and REPO_ID (github's permanent numeric id) when it creates the repo, and never clobbers them on re-import
 - `meta apply` reconciles reality to the meta for every classroom: creates missing repos (privately, from the template when set), each classroom's TAs go into a `COURSENAME-tas` team added as a read collaborator on that classroom's student repos, students get write on their repos, unlisted non-admin collaborators are revoked. admins are never touched
+- `meta apply`/`meta assign` put the effective repo settings on each repo's default branch. a repo created without a template has no branch yet, so its protection lands on the next `meta apply` after the first push. the all-off trio (none/false/true) skips the protection API entirely and existing protection is never removed; free org plans can't protect private repos (warn, don't fail); a protection write replaces hand-set extras like status checks
 - discovery honors recorded REPO_IDs, so renamed repos stay tracked
 
 # getting information about instructors and students
