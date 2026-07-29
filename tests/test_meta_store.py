@@ -9,12 +9,12 @@ ORG = "SJSU-CMPE-195"
 
 class TestCourseIni:
     def test_round_trip_with_template(self):
-        text = ms.serialize_course_ini("sp26-project", "ORG/Template")
-        assert ms.parse_course_ini(text) == ("sp26-project", "ORG/Template")
+        text = ms.serialize_classroom_ini("sp26-project", "ORG/Template")
+        assert ms.parse_classroom_ini(text) == ("sp26-project", "ORG/Template")
 
     def test_round_trip_without_template(self):
-        text = ms.serialize_course_ini("sp26-project")
-        assert ms.parse_course_ini(text) == ("sp26-project", None)
+        text = ms.serialize_classroom_ini("sp26-project")
+        assert ms.parse_classroom_ini(text) == ("sp26-project", None)
 
 
 class TestTas:
@@ -97,14 +97,14 @@ def checkout_root(tmp_path, monkeypatch):
 class TestGitPlumbing:
     def test_full_cycle_against_a_local_origin(self, bare_origin, checkout_root):
         checkout = ms.checkout_meta(str(bare_origin), ORG)
-        ms.save_course(checkout, "cs101", "prefix-a", "ORG/Tpl",
+        ms.save_classroom(checkout, "cs101", "prefix-a", "ORG/Tpl",
                        tas=["ta-one"], rows=[{"name": "t1", "students": ["a"],
                                               "repo": None, "repo_id": None}])
         assert ms.commit_and_push(checkout, "seed") is True
 
         # a "second machine" sees the pushed state
         other = ms.checkout_meta(str(bare_origin), "other-checkout")
-        course = ms.load_course(other, "cs101")
+        course = ms.load_classroom(other, "cs101")
         assert course["prefix"] == "prefix-a"
         assert course["template"] == "ORG/Tpl"
         assert course["tas"] == ["ta-one"]
@@ -112,35 +112,35 @@ class TestGitPlumbing:
 
     def test_push_is_a_no_op_when_clean(self, bare_origin, checkout_root):
         checkout = ms.checkout_meta(str(bare_origin), ORG)
-        ms.save_course(checkout, "cs101", "p")
+        ms.save_classroom(checkout, "cs101", "p")
         assert ms.commit_and_push(checkout, "seed") is True
         assert ms.commit_and_push(checkout, "again") is False
 
     def test_checkout_twice_fast_forwards(self, bare_origin, checkout_root):
         checkout = ms.checkout_meta(str(bare_origin), ORG)
-        ms.save_course(checkout, "cs101", "p")
+        ms.save_classroom(checkout, "cs101", "p")
         ms.commit_and_push(checkout, "seed")
         assert ms.checkout_meta(str(bare_origin), ORG) == checkout
 
-    def test_load_courses_lists_only_course_dirs(self, bare_origin, checkout_root):
+    def test_list_classrooms_lists_only_classroom_dirs(self, bare_origin, checkout_root):
         checkout = ms.checkout_meta(str(bare_origin), ORG)
-        ms.save_course(checkout, "cs101", "p1")
-        ms.save_course(checkout, "cs210", "p2")
-        assert ms.list_courses(checkout) == ["cs101", "cs210"]
+        ms.save_classroom(checkout, "cs101", "p1")
+        ms.save_classroom(checkout, "cs210", "p2")
+        assert ms.list_classrooms(checkout) == ["cs101", "cs210"]
 
 
 class TestLoadMetaCourses:
     def test_returns_empty_without_a_meta_repo(self, checkout_root):
         gh = FakeGithub(orgs=[FakeOrg(ORG)])
-        assert ms.load_meta_courses(gh, ORG) == {}
+        assert ms.load_meta_classrooms(gh, ORG) == {}
 
     def test_loads_courses_through_a_real_clone(self, bare_origin, checkout_root):
         seed = ms.checkout_meta(str(bare_origin), "seeding")
-        ms.save_course(seed, "cs101", "prefix-a", tas=["ta-one"])
+        ms.save_classroom(seed, "cs101", "prefix-a", tas=["ta-one"])
         ms.commit_and_push(seed, "seed")
 
         meta_repo = FakeRepo(ORG, "meta", clone_url=str(bare_origin))
         gh = FakeGithub(orgs=[FakeOrg(ORG, [meta_repo])])
-        courses = ms.load_meta_courses(gh, ORG)
+        courses = ms.load_meta_classrooms(gh, ORG)
         assert list(courses) == ["cs101"]
         assert courses["cs101"]["prefix"] == "prefix-a"

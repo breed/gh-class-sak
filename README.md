@@ -212,13 +212,14 @@ in the clone URL, or in the checked-out `.git/config`.
 
 Prefix discovery works with nothing but naming conventions, but it can't survive a team
 renaming their repo, and it knows nothing about who *should* have access. The `meta`
-command group fixes both by keeping course state in a private repo named `meta` inside the
-org — versioned, hand-editable, and invisible to students:
+command group fixes both by keeping classroom state in a private repo named `meta` inside
+the org — versioned, hand-editable, and invisible to students. An org can host several
+classrooms (two Canvas sections often share one org); each is a directory:
 
 ```
 meta/
-  sp26_cmpe_195a/                  one directory per course
-    course.ini                     [COURSE] prefix = ...  /  template = ...
+  sp26_cmpe_195a/                  one directory per classroom
+    classroom.ini                  [CLASSROOM] prefix = ...  /  template = ...
     tas                            one github login or email per line
     students.tsv                   NAME  STUDENTS  REPO  REPO_ID
 ```
@@ -231,9 +232,9 @@ how a repo stays tracked even after students rename it.
 
 ### meta init
 
-Create the meta repo and record a course. With a Canvas config, the `tas` file is seeded
-from the course's TA and teacher enrollments. Like every mutating command, it previews by
-default:
+Create the meta repo and record a classroom. With a Canvas config, the `tas` file is
+seeded from the course's TA and teacher enrollments. Like every mutating command, it
+previews by default:
 
 ```console
 $ gh-class-sak meta init cs101-fall --prefix project
@@ -258,9 +259,9 @@ gh-class-sak meta assign CLASSROOM teams.tsv [--dryrun/--no-dryrun]
 
 Emails are resolved to GitHub logins via the student's Canvas profile link, then the
 GitHub search API; an email nothing can resolve is a loud error. Under `--no-dryrun` it
-creates each missing repo (privately, from the course template when `course.ini` names
-one), records the URL and repo id, and grants the listed students push. Re-importing an
-updated table changes student lists but **never clobbers a recorded repo**.
+creates each missing repo (privately, from the template when `classroom.ini` names one),
+records the URL and repo id, and grants the listed students push. Re-importing an updated
+table changes student lists but **never clobbers a recorded repo**.
 
 ### meta apply
 
@@ -270,16 +271,20 @@ Reconcile the org to match the meta repo:
 gh-class-sak meta apply CLASSROOM [--dryrun/--no-dryrun]
 ```
 
+Every classroom directory in the meta repo is reconciled:
+
 - rows without a repo yet — including ones you hand-added to `students.tsv` — get created
-- the org team `tas` exists, its membership matches the `tas` file, and it has **read**
-  access to every assignment repo (TAs accept one org invite, ever)
+- each classroom has its own **`<classroom>-tas` team** (e.g. `sp26_cmpe_195a-tas`) whose
+  membership matches its `tas` file, added as a **read** collaborator on each of that
+  classroom's student repos — so TAs accept one org invite ever, and TAs of one classroom
+  never gain access to another classroom's repos
 - every listed student has **write** on their repo; non-admin collaborators who aren't
   listed are revoked — org admins are never touched
 - run it twice: the second pass prints `nothing to do`
 
 ### meta show
 
-Print a course's recorded state: prefix, template, TAs, and the full assignment table.
+Print a classroom's recorded state: prefix, template, TAs, and the full assignment table.
 
 Once repos are recorded, `repos list`, `repos members`, `repos missing`, and `repos clone`
 all include them by id — so a renamed repo shows up under its original team name instead

@@ -14,7 +14,7 @@ from gh_class_sak.core import (
     resolve_classroom,
 )
 from gh_class_sak.github_api import infer_assignment_prefixes, list_org_repos
-from gh_class_sak.meta_store import load_meta_courses
+from gh_class_sak.meta_store import load_meta_classrooms
 
 
 @gh_class_sak.command()
@@ -38,16 +38,21 @@ def classrooms(classroom):
 
     for org in orgs:
         info(f"scanning {org} ...")
-        # the meta repo records the real prefixes; fall back to inference
-        meta_courses = load_meta_courses(gh, org, get_token())
-        prefixes = [data["prefix"] for _course, data in sorted(meta_courses.items())
-                    if data.get("prefix")]
-        if not prefixes:
-            repos = list_org_repos(gh, org)
-            prefixes = [p for p, _count in
-                        infer_assignment_prefixes([r.name for r in repos])]
+        # an org can host several classrooms, one directory each in its meta
+        # repo. without a meta repo the org itself is the classroom and its
+        # assignments are inferred from repo names.
+        meta_classrooms = load_meta_classrooms(gh, org, get_token())
+        if meta_classrooms:
+            for classroom_dir, data in sorted(meta_classrooms.items()):
+                if data.get("prefix"):
+                    output(f"{classroom_dir}: {data['prefix']}")
+                else:
+                    output(f"{classroom_dir}: (no assignments)")
+            continue
+        repos = list_org_repos(gh, org)
+        prefixes = infer_assignment_prefixes([r.name for r in repos])
         if not prefixes:
             output(f"{org}: (no assignments)")
         else:
-            for prefix in prefixes:
+            for prefix, _count in prefixes:
                 output(f"{org}: {prefix}")

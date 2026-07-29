@@ -9,9 +9,9 @@ from tests.conftest import ORG, run
 
 def lines(result):
     assert result.exit_code == 0, result.output
-    # stdout only: progress messages go to stderr and are not part of the
-    # output contract
-    return [ln for ln in result.stdout.splitlines() if ln.strip()]
+    # CliRunner mixes stderr into output by default; strip progress lines.
+    return [ln for ln in result.output.splitlines()
+            if ln.strip() and not ln.startswith("scanning ")]
 
 
 def columns(line):
@@ -27,7 +27,7 @@ class TestClassrooms:
     def test_errors_when_no_config_and_no_argument(self, cli, no_config):
         result = run(cli, "classrooms")
         assert result.exit_code == 2
-        assert "no classroom" in result.stderr
+        assert "no classroom" in result.output
 
     def test_takes_org_argument_verbatim_with_no_config(self, cli, no_config):
         out = lines(run(cli, "classrooms", ORG))

@@ -27,16 +27,16 @@ a swiss army knife for managing github classrooms now the official github classr
 
 github classroom is gone, so nothing may call `gh classroom` or the `/classrooms` and `/assignments` REST endpoints.
 
-- a CLASSROOM is a github org. the argument matches either side of a `[COURSES]` mapping (canvas course partial = github org), or is used verbatim as an org name when there is no config
+- a CLASSROOM maps to a canvas course and is a directory in its org's meta repository; an org can host several classrooms. the classroom argument matches either side of a `[COURSES]` mapping (canvas course partial = github org), and is used verbatim as an org name when there is no config
 - an ASSIGNMENT is the repo name prefix that its repos share. repos are found by listing the org and filtering on that prefix
 - a TEAM is the repo name with the assignment prefix stripped off
 - use PyGithub to talk to github and GitPython to talk to git. do not hand-roll requests sessions or pagination
 
 # the meta repo
 
-- each org may have a private repo named `meta` recording course state: one directory per course (normalized canvas partial) with `course.ini` ([COURSE] prefix, optional template), `tas` (one login or email per line), and `students.tsv` (NAME STUDENTS REPO REPO_ID)
-- in students.tsv the instructor supplies NAME (suffix appended to the course prefix) and STUDENTS (comma-joined emails/logins that get write access); the tool fills REPO (url) and REPO_ID (github's permanent numeric id) when it creates the repo, and never clobbers them on re-import
-- `meta apply` reconciles reality to the meta: creates missing repos (privately, from the template when set), TAs get read on all assignment repos via the org team `tas`, students get write on their repos, unlisted non-admin collaborators are revoked. admins are never touched
+- each org may have a private repo named `meta` recording classroom state: one directory per classroom (normalized canvas partial) with `classroom.ini` ([CLASSROOM] prefix, optional template), `tas` (one login or email per line), and `students.tsv` (NAME STUDENTS REPO REPO_ID)
+- in students.tsv the instructor supplies NAME (suffix appended to the classroom prefix) and STUDENTS (comma-joined emails/logins that get write access); the tool fills REPO (url) and REPO_ID (github's permanent numeric id) when it creates the repo, and never clobbers them on re-import
+- `meta apply` reconciles reality to the meta for every classroom: creates missing repos (privately, from the template when set), each classroom's TAs go into a `COURSENAME-tas` team added as a read collaborator on that classroom's student repos, students get write on their repos, unlisted non-admin collaborators are revoked. admins are never touched
 - discovery honors recorded REPO_IDs, so renamed repos stay tracked
 
 # getting information about instructors and students

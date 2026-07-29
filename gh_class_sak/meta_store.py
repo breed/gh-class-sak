@@ -1,8 +1,9 @@
-"""the meta repo: versioned course state kept in a private repo in the org.
+"""the meta repo: versioned classroom state kept in a private repo in the org.
 
-layout, one directory per course (normalize_course_name of the canvas partial):
+an org can host several classrooms; each is a directory (named by the
+normalized canvas course partial):
 
-    sp26_cmpe_195a/course.ini      [COURSE] prefix = ... / template = ...
+    sp26_cmpe_195a/classroom.ini   [CLASSROOM] prefix = ... / template = ...
     sp26_cmpe_195a/tas             one github login or email per line
     sp26_cmpe_195a/students.tsv    NAME  STUDENTS  REPO  REPO_ID
 
@@ -23,20 +24,20 @@ STUDENTS_HEADERS = ("NAME", "STUDENTS", "REPO", "REPO_ID")
 EMPTY = "-"
 
 
-# --- course.ini -----------------------------------------------------------
+# --- classroom.ini ---------------------------------------------------
 
-def parse_course_ini(text):
-    """(prefix, template) from a course.ini; template may be None."""
+def parse_classroom_ini(text):
+    """(prefix, template) from a classroom.ini; template may be None."""
     config = ConfigParser()
     config.optionxform = str
     config.read_string(text)
-    prefix = config.get("COURSE", "prefix", fallback=None)
-    template = config.get("COURSE", "template", fallback=None)
+    prefix = config.get("CLASSROOM", "prefix", fallback=None)
+    template = config.get("CLASSROOM", "template", fallback=None)
     return prefix, template
 
 
-def serialize_course_ini(prefix, template=None):
-    lines = ["[COURSE]", f"prefix = {prefix}"]
+def serialize_classroom_ini(prefix, template=None):
+    lines = ["[CLASSROOM]", f"prefix = {prefix}"]
     if template:
         lines.append(f"template = {template}")
     return "\n".join(lines) + "\n"
@@ -125,20 +126,20 @@ def merge_rows(existing, incoming):
     return [by_name[name] for name in order], changed
 
 
-# --- course state on disk -------------------------------------------------
+# --- classroom state on disk ------------------------------------------
 
-def course_dir(checkout, course):
-    return os.path.join(checkout, course)
+def classroom_dir(checkout, classroom):
+    return os.path.join(checkout, classroom)
 
 
-def load_course(checkout, course):
-    """{prefix, template, tas, rows} for a course dir, or None if absent."""
-    path = course_dir(checkout, course)
-    ini = os.path.join(path, "course.ini")
+def load_classroom(checkout, classroom):
+    """{prefix, template, tas, rows} for a classroom dir, or None if absent."""
+    path = classroom_dir(checkout, classroom)
+    ini = os.path.join(path, "classroom.ini")
     if not os.path.exists(ini):
         return None
     with open(ini) as f:
-        prefix, template = parse_course_ini(f.read())
+        prefix, template = parse_classroom_ini(f.read())
     tas = []
     tas_path = os.path.join(path, "tas")
     if os.path.exists(tas_path):
@@ -152,22 +153,22 @@ def load_course(checkout, course):
     return {"prefix": prefix, "template": template, "tas": tas, "rows": rows}
 
 
-def list_courses(checkout):
-    """course dir names present in the meta checkout."""
+def list_classrooms(checkout):
+    """classroom dir names present in the meta checkout."""
     if not os.path.isdir(checkout):
         return []
     return sorted(
         entry for entry in os.listdir(checkout)
-        if os.path.exists(os.path.join(checkout, entry, "course.ini"))
+        if os.path.exists(os.path.join(checkout, entry, "classroom.ini"))
     )
 
 
-def save_course(checkout, course, prefix, template=None, tas=None, rows=None):
-    """write the course files; only the pieces passed are (re)written."""
-    path = course_dir(checkout, course)
+def save_classroom(checkout, classroom, prefix, template=None, tas=None, rows=None):
+    """write the classroom files; only the pieces passed are (re)written."""
+    path = classroom_dir(checkout, classroom)
     os.makedirs(path, exist_ok=True)
-    with open(os.path.join(path, "course.ini"), "w") as f:
-        f.write(serialize_course_ini(prefix, template))
+    with open(os.path.join(path, "classroom.ini"), "w") as f:
+        f.write(serialize_classroom_ini(prefix, template))
     if tas is not None:
         with open(os.path.join(path, "tas"), "w") as f:
             f.write(serialize_tas(tas))
@@ -198,8 +199,8 @@ def checkout_meta(clone_url, org, token=None):
     return dest
 
 
-def load_meta_courses(gh, org, token=None):
-    """{course: data} from the org's meta repo; {} when none or unusable.
+def load_meta_classrooms(gh, org, token=None):
+    """{classroom: data} from the org's meta repo; {} when none or unusable.
 
     a broken checkout degrades to a warning rather than an error, because
     read-only commands must keep working from prefixes alone.
@@ -212,7 +213,7 @@ def load_meta_courses(gh, org, token=None):
     except RuntimeError as exc:
         warn(f"ignoring meta repo: {exc}")
         return {}
-    return {course: load_course(checkout, course) for course in list_courses(checkout)}
+    return {c: load_classroom(checkout, c) for c in list_classrooms(checkout)}
 
 
 def commit_and_push(checkout, message, token=None):

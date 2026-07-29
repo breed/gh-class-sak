@@ -31,7 +31,11 @@ from gh_class_sak.github_api import (
     split_collaborators,
 )
 
-TAS_TEAM = "tas"
+
+def tas_team_name(classroom_dir):
+    """each classroom gets its own COURSENAME-tas team, so TAs of one
+    classroom in an org don't gain access to another classroom's repos."""
+    return f"{classroom_dir}-tas"
 
 
 def _perform(dryrun, message, fn, actions):
@@ -59,14 +63,14 @@ def _open_meta(gh, org, required=True):
         sys.exit(2)
 
 
-def _resolve_course(checkout, partial, classroom):
-    """pick the course directory the classroom argument means."""
-    candidates = ms.list_courses(checkout)
+def _resolve_classroom_dir(checkout, partial, classroom):
+    """pick the classroom directory the classroom argument means."""
+    candidates = ms.list_classrooms(checkout)
     key = normalize_course_name(partial) if partial else None
     if key:
         if key in candidates:
             return key
-        error(f'course "{key}" is not in the meta repo. courses there:')
+        error(f'classroom "{key}" is not in the meta repo. classrooms there:')
         for c in candidates:
             error(f"    {c}")
         error("run: meta init")
@@ -76,7 +80,7 @@ def _resolve_course(checkout, partial, classroom):
     key = normalize_course_name(classroom)
     if key in candidates:
         return key
-    error(f'cannot tell which course "{classroom}" means. courses in the meta repo:')
+    error(f'cannot tell which classroom "{classroom}" means. classrooms in the meta repo:')
     for c in candidates:
         error(f"    {c}")
     sys.exit(2)
@@ -136,7 +140,7 @@ def _template_repo(gh, data):
     return repo
 
 
-def _realize_course(gh, org, data, resolve, dryrun, actions):
+def _realize_classroom(gh, org, data, resolve, dryrun, actions):
     """create/adopt the repo for every row that has none, and grant push.
 
     mutates rows in place under --no-dryrun. returns (changed, unresolved).
@@ -198,25 +202,25 @@ def _reconcile_row_collaborators(gh, repo, logins, dryrun, actions):
 
 @gh_class_sak.group()
 def meta():
-    """Manage the org's meta repo: the course's source of truth."""
+    """Manage the org's meta repo: one directory per classroom."""
     pass
 
 
 @meta.command("init")
 @click.argument("classroom")
 @click.option("--prefix", default=None,
-              help="the course repo prefix (default: inferred when unambiguous)")
+              help="the classroom repo prefix (default: inferred when unambiguous)")
 @click.option("--template", default=None,
               help="OWNER/NAME template repo for created assignment repos")
 @dryrun_option
 def meta_init(classroom, prefix, template, dryrun):
-    """Create the meta repo and scaffold a course in it."""
+    """Create the meta repo and scaffold a classroom in it."""
     gh = get_github()
     org, partial = resolve_classroom(classroom)
-    course = normalize_course_name(partial or classroom)
+    classroom_dir = normalize_course_name(partial or classroom)
 
     meta_repo, checkout = _open_meta(gh, org, required=False)
-    existing = ms.load_course(checkout, course) if checkout else None
+    existing = ms.load_classroom(checkout, classroom_dir) if checkout else None
 
     if prefix is None:
         prefix = existing["prefix"] if existing else None
@@ -234,7 +238,7 @@ def meta_init(classroom, prefix, template, dryrun):
 
     tas = list(existing["tas"]) if existing else []
     if load_config(required=False):
-        data = fetch_enrollment_data(Classroom(org, partial or course))
+        data = fetch_enrollment_data(Classroom(org, partial or classroom_dir))
         for inst in data["instructors"]:
             entry = inst.get("github") or inst.get("email")
             if entry and entry not in tas:
@@ -252,10 +256,10 @@ def meta_init(classroom, prefix, template, dryrun):
     def _write():
         checkout_now = ms.meta_checkout_dir(org)
         rows = existing["rows"] if existing else []
-        ms.save_course(checkout_now, course, prefix, template, tas=tas, rows=rows)
-        ms.commit_and_push(checkout_now, f"init {course}", get_token())
+        ms.save_classroom(checkout_now, classroom_dir, prefix, template, tas=tas, rows=rows)
+        ms.commit_and_push(checkout_now, f"init {classroom_dir}", get_token())
     _perform(dryrun,
-             f"record {course}: prefix={prefix}"
+             f"record {classroom_dir}: prefix={prefix}"
              + (f" template={template}" if template else "")
              + f" tas={','.join(tas) or '-'}",
              _write, actions)
@@ -264,14 +268,14 @@ def meta_init(classroom, prefix, template, dryrun):
 @meta.command("show")
 @click.argument("classroom")
 def meta_show(classroom):
-    """Show a course's recorded state."""
+    """Show a classroom's recorded state."""
     gh = get_github()
     org, partial = resolve_classroom(classroom)
     _repo, checkout = _open_meta(gh, org)
-    course = _resolve_course(checkout, partial, classroom)
-    data = ms.load_course(checkout, course)
+    classroom_dir = _resolve_classroom_dir(checkout, partial, classroom)
+    data = ms.load_classroom(checkout, classroom_dir)
 
-    output(f"COURSE    {course}")
+    output(f"CLASSROOM {classroom_dir}")
     output(f"PREFIX    {data['prefix']}")
     if data["template"]:
         output(f"TEMPLATE  {data['template']}")
@@ -294,8 +298,8 @@ def meta_assign(classroom, table_file, dryrun):
     gh = get_github()
     org, partial = resolve_classroom(classroom)
     _repo, checkout = _open_meta(gh, org)
-    course = _resolve_course(checkout, partial, classroom)
-    data = ms.load_course(checkout, course)
+    classroom_dir = _resolve_classroom_dir(checkout, partial, classroom)
+    data = ms.load_classroom(checkout, classroom_dir)
 
     incoming = ms.parse_students_tsv(table_file.read())
     merged, changed_names = ms.merge_rows(data["rows"], incoming)
@@ -306,13 +310,13 @@ def meta_assign(classroom, table_file, dryrun):
         _perform(dryrun, f"record rows: {', '.join(changed_names)}",
                  lambda: None, actions)
 
-    resolve = _make_resolver(gh, org, partial or course)
-    changed, unresolved = _realize_course(gh, org, data, resolve, dryrun, actions)
+    resolve = _make_resolver(gh, org, partial or classroom_dir)
+    changed, unresolved = _realize_classroom(gh, org, data, resolve, dryrun, actions)
 
     if not dryrun and (changed or changed_names):
-        ms.save_course(checkout, course, data["prefix"], data["template"],
-                       tas=data["tas"], rows=data["rows"])
-        ms.commit_and_push(checkout, f"assign {course}", get_token())
+        ms.save_classroom(checkout, classroom_dir, data["prefix"], data["template"],
+                          tas=data["tas"], rows=data["rows"])
+        ms.commit_and_push(checkout, f"assign {classroom_dir}", get_token())
 
     if not actions:
         output("nothing to do")
@@ -320,38 +324,83 @@ def meta_assign(classroom, table_file, dryrun):
         sys.exit(1)
 
 
+def _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe, dryrun, actions):
+    """the classroom's team exists, has exactly the tas, and reads exactly
+    the classroom's repos. unrelated team-repo grants are left alone only
+    for the meta repo itself."""
+    name = tas_team_name(classroom_dir)
+    team = get_team(gh, org, name)
+    made_team = {}
+    if team is None:
+        def _create_team():
+            made_team["team"] = create_team(gh, org, name)
+        _perform(dryrun, f'create team "{name}" in {org}', _create_team, actions)
+        team = made_team.get("team")
+
+    current_members = {m.login.lower(): m for m in team.get_members()} if team else {}
+    desired_members = {login.lower(): login for login in ta_logins}
+    for lowered, login in desired_members.items():
+        if lowered not in current_members:
+            def _add(login=login):
+                (team or made_team["team"]).add_membership(gh.get_user(login))
+            _perform(dryrun, f'add {login} to team "{name}"', _add, actions)
+    for lowered, member in current_members.items():
+        if lowered not in desired_members:
+            def _remove(member=member):
+                team.remove_membership(member)
+            _perform(dryrun, f'remove {member.login} from team "{name}"',
+                     _remove, actions)
+
+    team_repos = {r.full_name: r for r in team.get_repos()} if team else {}
+    for full_name, repo in universe.items():
+        if full_name not in team_repos:
+            def _grant(repo=repo):
+                (team or made_team["team"]).update_team_repository(repo, "pull")
+            _perform(dryrun, f'grant team "{name}" pull on {full_name}',
+                     _grant, actions)
+    for full_name, repo in team_repos.items():
+        if full_name not in universe and repo.name != ms.META_REPO_NAME:
+            def _revoke(repo=repo):
+                team.remove_from_repos(repo)
+            _perform(dryrun, f'revoke team "{name}" from {full_name}',
+                     _revoke, actions)
+
+
 @meta.command("apply")
 @click.argument("classroom")
 @dryrun_option
 def meta_apply(classroom, dryrun):
-    """Reconcile the org with the meta repo: repos, TA team, student access."""
+    """Reconcile the org with the meta repo: repos, TA teams, student access.
+
+    Every classroom directory in the meta repo is reconciled, each with its
+    own tas-CLASSROOM team.
+    """
     gh = get_github()
     org, _partial = resolve_classroom(classroom)
     _repo, checkout = _open_meta(gh, org)
-    courses = ms.list_courses(checkout)
-    if not courses:
-        error("the meta repo has no courses. run: meta init")
+    classroom_dirs = ms.list_classrooms(checkout)
+    if not classroom_dirs:
+        error("the meta repo has no classrooms. run: meta init")
         sys.exit(2)
 
     actions = []
     any_unresolved = []
     all_repos = list_org_repos(gh, org)
     by_id = {r.id: r for r in all_repos}
-    universe = {}
-    tas_entries = []
 
-    for course in courses:
-        data = ms.load_course(checkout, course)
-        resolve = _make_resolver(gh, org, course)
+    for classroom_dir in classroom_dirs:
+        data = ms.load_classroom(checkout, classroom_dir)
+        resolve = _make_resolver(gh, org, classroom_dir)
 
         # 1. realize rows that don't have a repo yet (hand-added ones included)
-        changed, unresolved = _realize_course(gh, org, data, resolve, dryrun, actions)
+        changed, unresolved = _realize_classroom(gh, org, data, resolve, dryrun, actions)
         any_unresolved.extend(unresolved)
         if changed:
-            ms.save_course(checkout, course, data["prefix"], data["template"],
-                           tas=data["tas"], rows=data["rows"])
+            ms.save_classroom(checkout, classroom_dir, data["prefix"], data["template"],
+                              tas=data["tas"], rows=data["rows"])
 
-        # the course's repos: prefix matches ∪ recorded ids
+        # the classroom's repos: prefix matches ∪ recorded ids
+        universe = {}
         prefix = (data["prefix"] or "").lower()
         for r in all_repos:
             if prefix and r.name.lower().startswith(prefix):
@@ -364,57 +413,23 @@ def meta_apply(classroom, dryrun):
                 warn(f"recorded repo for {row['name']} (id {row['repo_id']}) is gone")
                 continue
             universe[repo.full_name] = repo
-            # 4. students on a realized row are exactly its push collaborators
+            # 2. students on a realized row are exactly its push collaborators
             logins, unresolved = _resolve_row_students(row, resolve)
             any_unresolved.extend(unresolved)
             _reconcile_row_collaborators(gh, repo, logins, dryrun, actions)
 
+        # 3. the classroom's TA team reads exactly the classroom's repos
+        ta_logins = []
         for entry in data["tas"]:
             login = resolve(entry)
             if login:
-                if login not in tas_entries:
-                    tas_entries.append(login)
+                if login not in ta_logins:
+                    ta_logins.append(login)
             else:
                 error(f'cannot resolve TA "{entry}" to a github id')
                 any_unresolved.append(entry)
-
-    # 2. the tas team exists and its membership matches the meta
-    team = get_team(gh, org, TAS_TEAM)
-    made_team = {}
-    if team is None:
-        def _create_team():
-            made_team["team"] = create_team(gh, org, TAS_TEAM)
-        _perform(dryrun, f'create team "{TAS_TEAM}" in {org}', _create_team, actions)
-        team = made_team.get("team")
-
-    current_members = {m.login.lower(): m for m in team.get_members()} if team else {}
-    desired_members = {login.lower(): login for login in tas_entries}
-    for lowered, login in desired_members.items():
-        if lowered not in current_members:
-            def _add(login=login):
-                (team or made_team["team"]).add_membership(gh.get_user(login))
-            _perform(dryrun, f'add {login} to team "{TAS_TEAM}"', _add, actions)
-    for lowered, member in current_members.items():
-        if lowered not in desired_members:
-            def _remove(member=member):
-                team.remove_membership(member)
-            _perform(dryrun, f'remove {member.login} from team "{TAS_TEAM}"',
-                     _remove, actions)
-
-    # 3. the team reads every assignment repo; 5. and nothing else of ours
-    team_repos = {r.full_name: r for r in team.get_repos()} if team else {}
-    for full_name, repo in universe.items():
-        if full_name not in team_repos:
-            def _grant(repo=repo):
-                (team or made_team["team"]).update_team_repository(repo, "pull")
-            _perform(dryrun, f'grant team "{TAS_TEAM}" pull on {full_name}',
-                     _grant, actions)
-    for full_name, repo in team_repos.items():
-        if full_name not in universe and repo.name != ms.META_REPO_NAME:
-            def _revoke(repo=repo):
-                team.remove_from_repos(repo)
-            _perform(dryrun, f'revoke team "{TAS_TEAM}" from {full_name}',
-                     _revoke, actions)
+        _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe,
+                            dryrun, actions)
 
     if not dryrun:
         ms.commit_and_push(checkout, "apply", get_token())
