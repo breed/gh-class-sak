@@ -30,7 +30,7 @@ SVG_PATH = Path(__file__).resolve().parent.parent / "docs" / "demo.svg"
 # the story the cast tells: discover the org, inspect a roster, pull it all
 # down for grading
 COMMANDS = [
-    "gh-class-sak classrooms",
+    "gh-class-sak classrooms cs101-fall",
     "gh-class-sak repos list cs101-fall project --members --name",
     "gh-class-sak repos clone cs101-fall project --dest grading",
 ]
