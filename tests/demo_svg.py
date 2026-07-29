@@ -47,6 +47,8 @@ TYPE_S = 0.032  # per typed character
 ENTER_S = 0.45  # pause between a command and its output
 OUT_S = 0.085   # per output line
 GAP_S = 0.75    # pause before the next prompt
+HOLD_S = 4.0    # hold the full transcript before the loop restarts
+BLINK_S = 0.55  # cursor half-period
 
 
 def _outputs():
@@ -76,42 +78,73 @@ def _outputs():
         return cast
 
 
-def _cmd_row(y, line, t):
-    """A prompt line typed one character at a time."""
-    spans = [f'<tspan class="p a" style="animation-delay:{t:.3f}s">$ </tspan>']
-    t += TYPE_S
-    for ch in line:
-        spans.append(f'<tspan class="a" style="animation-delay:{t:.3f}s">{escape(ch)}</tspan>')
-        t += TYPE_S
-    return f'<text x="{PAD}" y="{y}" xml:space="preserve">{"".join(spans)}</text>', t
-
-
-def _out_row(y, line, t):
-    return (f'<text class="o a" x="{PAD}" y="{y}" xml:space="preserve" '
-            f'style="animation-delay:{t:.3f}s">{escape(line)}</text>')
-
-
 def render_svg():
+    """One shared, infinitely looping timeline; each element gets a keyframe
+    window on it.
+
+    Browsers render an SVG referenced from <img> (the GitHub README case) with
+    a quirk: animation-delay plus a millisecond animation held by
+    fill:forwards is unreliable — fills from before the image rasterizes can
+    be dropped, freezing the cast. Continuous animations are not affected, so
+    every element runs one infinite animation from t=0 and reveals itself at a
+    percentage of the shared cycle instead of after a delay. The cast loops,
+    holding the finished transcript HOLD_S before it restarts.
+    """
     cast = _outputs()
+    reveals = []  # per-element reveal time; the index names its keyframes
+
+    def _a(t):
+        reveals.append(t)
+        return f'class="a" style="animation-name:k{len(reveals) - 1}"'
+
     body = []
     t = 0.6
     y = TITLE_H + PAD + FONT_S
     for cmd, out_lines in cast:
-        row, t = _cmd_row(y, cmd, t)
-        body.append(row)
+        spans = [f'<tspan {_a(t)} fill="#7ee787" font-weight="600">$ </tspan>']
+        t += TYPE_S
+        for ch in cmd:
+            spans.append(f'<tspan {_a(t)}>{escape(ch)}</tspan>')
+            t += TYPE_S
+        body.append(f'<text x="{PAD}" y="{y}" xml:space="preserve">{"".join(spans)}</text>')
         y += LINE_H
         t += ENTER_S
         for line in out_lines:
-            body.append(_out_row(y, line, t))
+            body.append(f'<text {_a(t)} fill="#b6c2cf" x="{PAD}" y="{y}" '
+                        f'xml:space="preserve">{escape(line)}</text>')
             y += LINE_H
             t += OUT_S
         y += LINE_H  # blank line between blocks
         t += GAP_S
+    cursor_t = t
     body.append(
         f'<text x="{PAD}" y="{y}" xml:space="preserve">'
-        f'<tspan class="p a" style="animation-delay:{t:.3f}s">$ </tspan>'
-        f'<tspan class="cursor" style="animation-delay:{t:.3f}s">█</tspan></text>')
+        f'<tspan {_a(t)} fill="#7ee787" font-weight="600">$ </tspan>'
+        f'<tspan class="cursor">█</tspan></text>')
     height = y + PAD
+
+    total = cursor_t + HOLD_S
+
+    def pct(seconds):
+        return round(seconds / total * 100, 3)
+
+    frames = []
+    for i, reveal in enumerate(reveals):
+        on = pct(reveal)
+        frames.append(f'@keyframes k{i} {{ 0%, {on}% {{ opacity: 0; }} '
+                      f'{min(on + 0.05, 100.0)}%, 100% {{ opacity: 1; }} }}')
+    # the cursor blinks through the tail of the cycle
+    marks = []
+    mark = cursor_t
+    while mark < total:
+        marks.append(mark)
+        mark += BLINK_S
+    blink = [f'0%, {pct(marks[0])}% {{ opacity: 0; }}']
+    for i, mark in enumerate(marks):
+        end = pct(marks[i + 1]) if i + 1 < len(marks) else 100.0
+        state = 1 - i % 2
+        blink.append(f'{min(pct(mark) + 0.05, 100.0)}%, {end}% {{ opacity: {state}; }}')
+    frames.append('@keyframes blink { ' + ' '.join(blink) + ' }')
 
     head = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{WIDTH}" height="{height}" '
@@ -120,13 +153,12 @@ def render_svg():
         '<style>',
         f'text {{ font: {FONT_S}px ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, '
         'Consolas, "Liberation Mono", monospace; fill: #e6edf3; }',
-        '.p { fill: #7ee787; font-weight: 600; }',
-        '.o { fill: #b6c2cf; }',
         '.dim { fill: #8b949e; }',
-        '.a { opacity: 0; animation: on 0.01s steps(1, end) forwards; }',
-        '.cursor { opacity: 0; animation: blink 1.1s steps(1, end) infinite; }',
-        '@keyframes on { to { opacity: 1; } }',
-        '@keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }',
+        f'.a, .cursor {{ opacity: 0; animation-duration: {total:.2f}s; '
+        'animation-timing-function: steps(1, end); '
+        'animation-iteration-count: infinite; }',
+        '.cursor { animation-name: blink; }',
+        *frames,
         '</style>',
         f'<rect width="{WIDTH}" height="{height}" rx="9" fill="#0d1117"/>',
         f'<rect width="{WIDTH}" height="{TITLE_H}" rx="9" fill="#161b22"/>',

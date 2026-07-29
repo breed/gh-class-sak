@@ -27,6 +27,45 @@ Your GitHub token is resolved in this order:
 
 If you already use the `gh` CLI, there is nothing to set up.
 
+## Naming your classroom: the org and the config file
+
+Every command takes a `CLASSROOM` argument, and it names a **GitHub org**. With no
+config file, the argument *is* the org name, verbatim — `gh-class-sak classrooms
+cs101-fall` works the moment your token can see the `cs101-fall` org.
+
+A config file makes that argument friendlier and unlocks the Canvas features. Its
+location follows the platform convention: `~/.config/gh-class-sak.ini` on Linux,
+`~/Library/Application Support/gh-class-sak.ini` on macOS, and
+`%APPDATA%\gh-class-sak.ini` on Windows. When a command that needs the config can't find
+it, the error prints the exact path.
+
+```ini
+[CANVAS]
+url = https://your-canvas-instance.instructure.com
+token = YOUR_CANVAS_API_TOKEN
+
+[COURSES]
+CS-101 = cs101-fall
+CS-210A = cs210-org
+```
+
+`[COURSES]` maps a Canvas course name partial (key) to a **GitHub org** (value). The
+classroom argument matches either side, so with the config above all of `101`, `CS-101`,
+and `cs101-fall` resolve to the same org — you type the course name you know, not the
+org GitHub knows. Matching is case-insensitive and treats hyphens, underscores, and
+spaces as equivalent. With no argument at all, `classrooms` lists every org mapped here.
+
+Several Canvas courses may map to one org — two sections sharing a repo home is normal.
+In that case name the course (`195A`), not the org, so the Canvas lookups know which one
+you mean.
+
+The `[CANVAS]` section unlocks the roster features — `--group`, `--instructors`,
+`--email`, and `repos missing` — and lets `meta init` seed the TA list and `meta assign`
+resolve student emails from the course roster.
+
+> ⚠️ The config file holds your Canvas API token in plain text. Keep it readable only by
+> you.
+
 ## Record your classroom
 
 A GitHub org hosts your **classrooms**. Each one is a directory in the org's private
@@ -65,8 +104,8 @@ the classroom's TA team, and branch protection. Run it twice — the second pass
 
 ## Browse the course
 
-With the classroom recorded, point any command at the org (or at a course name from the
-config, below):
+With the classroom recorded, point any command at the org — or at a course name from
+your `[COURSES]` mapping:
 
 ```console
 $ gh-class-sak classrooms cs101-fall
@@ -96,36 +135,6 @@ $ gh-class-sak repos clone cs101-fall project --dest grading
 ```
 
 Add `--no-dryrun` and it actually clones, fast-forwarding any repo you already have.
-
-## Wire in Canvas (optional)
-
-A config file unlocks the roster features: `--group`, `--instructors`, `--email`, and
-`repos missing`. Its location follows the platform convention:
-`~/.config/gh-class-sak.ini` on Linux, `~/Library/Application Support/gh-class-sak.ini`
-on macOS, and `%APPDATA%\gh-class-sak.ini` on Windows. When a command that needs the
-config can't find it, the error prints the exact path.
-
-```ini
-[CANVAS]
-url = https://your-canvas-instance.instructure.com
-token = YOUR_CANVAS_API_TOKEN
-
-[COURSES]
-CS-101 = cs101-fall
-CS-210A = cs210-org
-```
-
-`[COURSES]` maps a Canvas course name partial (key) to a **GitHub org** (value). The
-classroom argument matches either side, so with the config above all of `101`, `CS-101`,
-and `cs101-fall` resolve to the same org. Matching is case-insensitive and treats hyphens,
-underscores, and spaces as equivalent.
-
-Several Canvas courses may map to one org — two sections sharing a repo home is normal. In
-that case name the course (`195A`), not the org, so the Canvas lookups know which one you
-mean.
-
-> ⚠️ The config file holds your Canvas API token in plain text. Keep it readable only by
-> you.
 
 ## Where to next
 

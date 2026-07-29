@@ -1,13 +1,175 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="740" height="421" viewBox="0 0 740 421" role="img" aria-label="gh-class-sak terminal demo">
 <style>
 text { font: 13px ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace; fill: #e6edf3; }
-.p { fill: #7ee787; font-weight: 600; }
-.o { fill: #b6c2cf; }
 .dim { fill: #8b949e; }
-.a { opacity: 0; animation: on 0.01s steps(1, end) forwards; }
-.cursor { opacity: 0; animation: blink 1.1s steps(1, end) infinite; }
-@keyframes on { to { opacity: 1; } }
-@keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+.a, .cursor { opacity: 0; animation-duration: 13.98s; animation-timing-function: steps(1, end); animation-iteration-count: infinite; }
+.cursor { animation-name: blink; }
+@keyframes k0 { 0%, 4.292% { opacity: 0; } 4.342%, 100% { opacity: 1; } }
+@keyframes k1 { 0%, 4.521% { opacity: 0; } 4.571%, 100% { opacity: 1; } }
+@keyframes k2 { 0%, 4.75% { opacity: 0; } 4.8%, 100% { opacity: 1; } }
+@keyframes k3 { 0%, 4.979% { opacity: 0; } 5.029%, 100% { opacity: 1; } }
+@keyframes k4 { 0%, 5.208% { opacity: 0; } 5.258%, 100% { opacity: 1; } }
+@keyframes k5 { 0%, 5.437% { opacity: 0; } 5.487%, 100% { opacity: 1; } }
+@keyframes k6 { 0%, 5.666% { opacity: 0; } 5.716%, 100% { opacity: 1; } }
+@keyframes k7 { 0%, 5.895% { opacity: 0; } 5.944999999999999%, 100% { opacity: 1; } }
+@keyframes k8 { 0%, 6.124% { opacity: 0; } 6.1739999999999995%, 100% { opacity: 1; } }
+@keyframes k9 { 0%, 6.353% { opacity: 0; } 6.403%, 100% { opacity: 1; } }
+@keyframes k10 { 0%, 6.582% { opacity: 0; } 6.632%, 100% { opacity: 1; } }
+@keyframes k11 { 0%, 6.811% { opacity: 0; } 6.861%, 100% { opacity: 1; } }
+@keyframes k12 { 0%, 7.04% { opacity: 0; } 7.09%, 100% { opacity: 1; } }
+@keyframes k13 { 0%, 7.269% { opacity: 0; } 7.319%, 100% { opacity: 1; } }
+@keyframes k14 { 0%, 7.497% { opacity: 0; } 7.547%, 100% { opacity: 1; } }
+@keyframes k15 { 0%, 7.726% { opacity: 0; } 7.776%, 100% { opacity: 1; } }
+@keyframes k16 { 0%, 7.955% { opacity: 0; } 8.005%, 100% { opacity: 1; } }
+@keyframes k17 { 0%, 8.184% { opacity: 0; } 8.234%, 100% { opacity: 1; } }
+@keyframes k18 { 0%, 8.413% { opacity: 0; } 8.463000000000001%, 100% { opacity: 1; } }
+@keyframes k19 { 0%, 8.642% { opacity: 0; } 8.692%, 100% { opacity: 1; } }
+@keyframes k20 { 0%, 8.871% { opacity: 0; } 8.921000000000001%, 100% { opacity: 1; } }
+@keyframes k21 { 0%, 9.1% { opacity: 0; } 9.15%, 100% { opacity: 1; } }
+@keyframes k22 { 0%, 9.329% { opacity: 0; } 9.379000000000001%, 100% { opacity: 1; } }
+@keyframes k23 { 0%, 9.558% { opacity: 0; } 9.608%, 100% { opacity: 1; } }
+@keyframes k24 { 0%, 9.787% { opacity: 0; } 9.837000000000002%, 100% { opacity: 1; } }
+@keyframes k25 { 0%, 10.016% { opacity: 0; } 10.066%, 100% { opacity: 1; } }
+@keyframes k26 { 0%, 10.245% { opacity: 0; } 10.295%, 100% { opacity: 1; } }
+@keyframes k27 { 0%, 10.474% { opacity: 0; } 10.524000000000001%, 100% { opacity: 1; } }
+@keyframes k28 { 0%, 10.703% { opacity: 0; } 10.753%, 100% { opacity: 1; } }
+@keyframes k29 { 0%, 10.931% { opacity: 0; } 10.981%, 100% { opacity: 1; } }
+@keyframes k30 { 0%, 11.16% { opacity: 0; } 11.21%, 100% { opacity: 1; } }
+@keyframes k31 { 0%, 11.389% { opacity: 0; } 11.439%, 100% { opacity: 1; } }
+@keyframes k32 { 0%, 11.618% { opacity: 0; } 11.668000000000001%, 100% { opacity: 1; } }
+@keyframes k33 { 0%, 11.847% { opacity: 0; } 11.897%, 100% { opacity: 1; } }
+@keyframes k34 { 0%, 12.076% { opacity: 0; } 12.126000000000001%, 100% { opacity: 1; } }
+@keyframes k35 { 0%, 15.524% { opacity: 0; } 15.574%, 100% { opacity: 1; } }
+@keyframes k36 { 0%, 16.132% { opacity: 0; } 16.182000000000002%, 100% { opacity: 1; } }
+@keyframes k37 { 0%, 16.741% { opacity: 0; } 16.791%, 100% { opacity: 1; } }
+@keyframes k38 { 0%, 22.714% { opacity: 0; } 22.764%, 100% { opacity: 1; } }
+@keyframes k39 { 0%, 22.943% { opacity: 0; } 22.993000000000002%, 100% { opacity: 1; } }
+@keyframes k40 { 0%, 23.172% { opacity: 0; } 23.222%, 100% { opacity: 1; } }
+@keyframes k41 { 0%, 23.401% { opacity: 0; } 23.451%, 100% { opacity: 1; } }
+@keyframes k42 { 0%, 23.63% { opacity: 0; } 23.68%, 100% { opacity: 1; } }
+@keyframes k43 { 0%, 23.859% { opacity: 0; } 23.909000000000002%, 100% { opacity: 1; } }
+@keyframes k44 { 0%, 24.088% { opacity: 0; } 24.138%, 100% { opacity: 1; } }
+@keyframes k45 { 0%, 24.317% { opacity: 0; } 24.367%, 100% { opacity: 1; } }
+@keyframes k46 { 0%, 24.546% { opacity: 0; } 24.596%, 100% { opacity: 1; } }
+@keyframes k47 { 0%, 24.775% { opacity: 0; } 24.825%, 100% { opacity: 1; } }
+@keyframes k48 { 0%, 25.004% { opacity: 0; } 25.054000000000002%, 100% { opacity: 1; } }
+@keyframes k49 { 0%, 25.233% { opacity: 0; } 25.283%, 100% { opacity: 1; } }
+@keyframes k50 { 0%, 25.461% { opacity: 0; } 25.511%, 100% { opacity: 1; } }
+@keyframes k51 { 0%, 25.69% { opacity: 0; } 25.740000000000002%, 100% { opacity: 1; } }
+@keyframes k52 { 0%, 25.919% { opacity: 0; } 25.969%, 100% { opacity: 1; } }
+@keyframes k53 { 0%, 26.148% { opacity: 0; } 26.198%, 100% { opacity: 1; } }
+@keyframes k54 { 0%, 26.377% { opacity: 0; } 26.427%, 100% { opacity: 1; } }
+@keyframes k55 { 0%, 26.606% { opacity: 0; } 26.656000000000002%, 100% { opacity: 1; } }
+@keyframes k56 { 0%, 26.835% { opacity: 0; } 26.885%, 100% { opacity: 1; } }
+@keyframes k57 { 0%, 27.064% { opacity: 0; } 27.114%, 100% { opacity: 1; } }
+@keyframes k58 { 0%, 27.293% { opacity: 0; } 27.343%, 100% { opacity: 1; } }
+@keyframes k59 { 0%, 27.522% { opacity: 0; } 27.572%, 100% { opacity: 1; } }
+@keyframes k60 { 0%, 27.751% { opacity: 0; } 27.801000000000002%, 100% { opacity: 1; } }
+@keyframes k61 { 0%, 27.98% { opacity: 0; } 28.03%, 100% { opacity: 1; } }
+@keyframes k62 { 0%, 28.209% { opacity: 0; } 28.259%, 100% { opacity: 1; } }
+@keyframes k63 { 0%, 28.438% { opacity: 0; } 28.488%, 100% { opacity: 1; } }
+@keyframes k64 { 0%, 28.666% { opacity: 0; } 28.716%, 100% { opacity: 1; } }
+@keyframes k65 { 0%, 28.895% { opacity: 0; } 28.945%, 100% { opacity: 1; } }
+@keyframes k66 { 0%, 29.124% { opacity: 0; } 29.174%, 100% { opacity: 1; } }
+@keyframes k67 { 0%, 29.353% { opacity: 0; } 29.403000000000002%, 100% { opacity: 1; } }
+@keyframes k68 { 0%, 29.582% { opacity: 0; } 29.632%, 100% { opacity: 1; } }
+@keyframes k69 { 0%, 29.811% { opacity: 0; } 29.861%, 100% { opacity: 1; } }
+@keyframes k70 { 0%, 30.04% { opacity: 0; } 30.09%, 100% { opacity: 1; } }
+@keyframes k71 { 0%, 30.269% { opacity: 0; } 30.319%, 100% { opacity: 1; } }
+@keyframes k72 { 0%, 30.498% { opacity: 0; } 30.548000000000002%, 100% { opacity: 1; } }
+@keyframes k73 { 0%, 30.727% { opacity: 0; } 30.777%, 100% { opacity: 1; } }
+@keyframes k74 { 0%, 30.956% { opacity: 0; } 31.006%, 100% { opacity: 1; } }
+@keyframes k75 { 0%, 31.185% { opacity: 0; } 31.235%, 100% { opacity: 1; } }
+@keyframes k76 { 0%, 31.414% { opacity: 0; } 31.464000000000002%, 100% { opacity: 1; } }
+@keyframes k77 { 0%, 31.643% { opacity: 0; } 31.693%, 100% { opacity: 1; } }
+@keyframes k78 { 0%, 31.872% { opacity: 0; } 31.922%, 100% { opacity: 1; } }
+@keyframes k79 { 0%, 32.1% { opacity: 0; } 32.15%, 100% { opacity: 1; } }
+@keyframes k80 { 0%, 32.329% { opacity: 0; } 32.379%, 100% { opacity: 1; } }
+@keyframes k81 { 0%, 32.558% { opacity: 0; } 32.608%, 100% { opacity: 1; } }
+@keyframes k82 { 0%, 32.787% { opacity: 0; } 32.836999999999996%, 100% { opacity: 1; } }
+@keyframes k83 { 0%, 33.016% { opacity: 0; } 33.065999999999995%, 100% { opacity: 1; } }
+@keyframes k84 { 0%, 33.245% { opacity: 0; } 33.294999999999995%, 100% { opacity: 1; } }
+@keyframes k85 { 0%, 33.474% { opacity: 0; } 33.523999999999994%, 100% { opacity: 1; } }
+@keyframes k86 { 0%, 33.703% { opacity: 0; } 33.753%, 100% { opacity: 1; } }
+@keyframes k87 { 0%, 33.932% { opacity: 0; } 33.982%, 100% { opacity: 1; } }
+@keyframes k88 { 0%, 34.161% { opacity: 0; } 34.211%, 100% { opacity: 1; } }
+@keyframes k89 { 0%, 34.39% { opacity: 0; } 34.44%, 100% { opacity: 1; } }
+@keyframes k90 { 0%, 34.619% { opacity: 0; } 34.669%, 100% { opacity: 1; } }
+@keyframes k91 { 0%, 34.848% { opacity: 0; } 34.897999999999996%, 100% { opacity: 1; } }
+@keyframes k92 { 0%, 35.077% { opacity: 0; } 35.126999999999995%, 100% { opacity: 1; } }
+@keyframes k93 { 0%, 35.305% { opacity: 0; } 35.355%, 100% { opacity: 1; } }
+@keyframes k94 { 0%, 35.534% { opacity: 0; } 35.583999999999996%, 100% { opacity: 1; } }
+@keyframes k95 { 0%, 35.763% { opacity: 0; } 35.812999999999995%, 100% { opacity: 1; } }
+@keyframes k96 { 0%, 35.992% { opacity: 0; } 36.041999999999994%, 100% { opacity: 1; } }
+@keyframes k97 { 0%, 36.221% { opacity: 0; } 36.270999999999994%, 100% { opacity: 1; } }
+@keyframes k98 { 0%, 39.669% { opacity: 0; } 39.718999999999994%, 100% { opacity: 1; } }
+@keyframes k99 { 0%, 40.278% { opacity: 0; } 40.327999999999996%, 100% { opacity: 1; } }
+@keyframes k100 { 0%, 40.886% { opacity: 0; } 40.936%, 100% { opacity: 1; } }
+@keyframes k101 { 0%, 41.494% { opacity: 0; } 41.544%, 100% { opacity: 1; } }
+@keyframes k102 { 0%, 47.467% { opacity: 0; } 47.516999999999996%, 100% { opacity: 1; } }
+@keyframes k103 { 0%, 47.696% { opacity: 0; } 47.745999999999995%, 100% { opacity: 1; } }
+@keyframes k104 { 0%, 47.925% { opacity: 0; } 47.974999999999994%, 100% { opacity: 1; } }
+@keyframes k105 { 0%, 48.154% { opacity: 0; } 48.204%, 100% { opacity: 1; } }
+@keyframes k106 { 0%, 48.383% { opacity: 0; } 48.433%, 100% { opacity: 1; } }
+@keyframes k107 { 0%, 48.612% { opacity: 0; } 48.662%, 100% { opacity: 1; } }
+@keyframes k108 { 0%, 48.841% { opacity: 0; } 48.891%, 100% { opacity: 1; } }
+@keyframes k109 { 0%, 49.07% { opacity: 0; } 49.12%, 100% { opacity: 1; } }
+@keyframes k110 { 0%, 49.299% { opacity: 0; } 49.349%, 100% { opacity: 1; } }
+@keyframes k111 { 0%, 49.528% { opacity: 0; } 49.577999999999996%, 100% { opacity: 1; } }
+@keyframes k112 { 0%, 49.757% { opacity: 0; } 49.806999999999995%, 100% { opacity: 1; } }
+@keyframes k113 { 0%, 49.986% { opacity: 0; } 50.035999999999994%, 100% { opacity: 1; } }
+@keyframes k114 { 0%, 50.215% { opacity: 0; } 50.265%, 100% { opacity: 1; } }
+@keyframes k115 { 0%, 50.444% { opacity: 0; } 50.494%, 100% { opacity: 1; } }
+@keyframes k116 { 0%, 50.672% { opacity: 0; } 50.721999999999994%, 100% { opacity: 1; } }
+@keyframes k117 { 0%, 50.901% { opacity: 0; } 50.951%, 100% { opacity: 1; } }
+@keyframes k118 { 0%, 51.13% { opacity: 0; } 51.18%, 100% { opacity: 1; } }
+@keyframes k119 { 0%, 51.359% { opacity: 0; } 51.409%, 100% { opacity: 1; } }
+@keyframes k120 { 0%, 51.588% { opacity: 0; } 51.638%, 100% { opacity: 1; } }
+@keyframes k121 { 0%, 51.817% { opacity: 0; } 51.867%, 100% { opacity: 1; } }
+@keyframes k122 { 0%, 52.046% { opacity: 0; } 52.096%, 100% { opacity: 1; } }
+@keyframes k123 { 0%, 52.275% { opacity: 0; } 52.324999999999996%, 100% { opacity: 1; } }
+@keyframes k124 { 0%, 52.504% { opacity: 0; } 52.553999999999995%, 100% { opacity: 1; } }
+@keyframes k125 { 0%, 52.733% { opacity: 0; } 52.782999999999994%, 100% { opacity: 1; } }
+@keyframes k126 { 0%, 52.962% { opacity: 0; } 53.012%, 100% { opacity: 1; } }
+@keyframes k127 { 0%, 53.191% { opacity: 0; } 53.241%, 100% { opacity: 1; } }
+@keyframes k128 { 0%, 53.42% { opacity: 0; } 53.47%, 100% { opacity: 1; } }
+@keyframes k129 { 0%, 53.649% { opacity: 0; } 53.699%, 100% { opacity: 1; } }
+@keyframes k130 { 0%, 53.878% { opacity: 0; } 53.928%, 100% { opacity: 1; } }
+@keyframes k131 { 0%, 54.106% { opacity: 0; } 54.156%, 100% { opacity: 1; } }
+@keyframes k132 { 0%, 54.335% { opacity: 0; } 54.385%, 100% { opacity: 1; } }
+@keyframes k133 { 0%, 54.564% { opacity: 0; } 54.614%, 100% { opacity: 1; } }
+@keyframes k134 { 0%, 54.793% { opacity: 0; } 54.842999999999996%, 100% { opacity: 1; } }
+@keyframes k135 { 0%, 55.022% { opacity: 0; } 55.071999999999996%, 100% { opacity: 1; } }
+@keyframes k136 { 0%, 55.251% { opacity: 0; } 55.300999999999995%, 100% { opacity: 1; } }
+@keyframes k137 { 0%, 55.48% { opacity: 0; } 55.529999999999994%, 100% { opacity: 1; } }
+@keyframes k138 { 0%, 55.709% { opacity: 0; } 55.759%, 100% { opacity: 1; } }
+@keyframes k139 { 0%, 55.938% { opacity: 0; } 55.988%, 100% { opacity: 1; } }
+@keyframes k140 { 0%, 56.167% { opacity: 0; } 56.217%, 100% { opacity: 1; } }
+@keyframes k141 { 0%, 56.396% { opacity: 0; } 56.446%, 100% { opacity: 1; } }
+@keyframes k142 { 0%, 56.625% { opacity: 0; } 56.675%, 100% { opacity: 1; } }
+@keyframes k143 { 0%, 56.854% { opacity: 0; } 56.903999999999996%, 100% { opacity: 1; } }
+@keyframes k144 { 0%, 57.083% { opacity: 0; } 57.132999999999996%, 100% { opacity: 1; } }
+@keyframes k145 { 0%, 57.311% { opacity: 0; } 57.361%, 100% { opacity: 1; } }
+@keyframes k146 { 0%, 57.54% { opacity: 0; } 57.589999999999996%, 100% { opacity: 1; } }
+@keyframes k147 { 0%, 57.769% { opacity: 0; } 57.818999999999996%, 100% { opacity: 1; } }
+@keyframes k148 { 0%, 57.998% { opacity: 0; } 58.047999999999995%, 100% { opacity: 1; } }
+@keyframes k149 { 0%, 58.227% { opacity: 0; } 58.276999999999994%, 100% { opacity: 1; } }
+@keyframes k150 { 0%, 58.456% { opacity: 0; } 58.506%, 100% { opacity: 1; } }
+@keyframes k151 { 0%, 58.685% { opacity: 0; } 58.735%, 100% { opacity: 1; } }
+@keyframes k152 { 0%, 58.914% { opacity: 0; } 58.964%, 100% { opacity: 1; } }
+@keyframes k153 { 0%, 59.143% { opacity: 0; } 59.193%, 100% { opacity: 1; } }
+@keyframes k154 { 0%, 59.372% { opacity: 0; } 59.422%, 100% { opacity: 1; } }
+@keyframes k155 { 0%, 59.601% { opacity: 0; } 59.650999999999996%, 100% { opacity: 1; } }
+@keyframes k156 { 0%, 59.83% { opacity: 0; } 59.879999999999995%, 100% { opacity: 1; } }
+@keyframes k157 { 0%, 60.059% { opacity: 0; } 60.108999999999995%, 100% { opacity: 1; } }
+@keyframes k158 { 0%, 60.288% { opacity: 0; } 60.337999999999994%, 100% { opacity: 1; } }
+@keyframes k159 { 0%, 60.517% { opacity: 0; } 60.567%, 100% { opacity: 1; } }
+@keyframes k160 { 0%, 60.745% { opacity: 0; } 60.794999999999995%, 100% { opacity: 1; } }
+@keyframes k161 { 0%, 64.194% { opacity: 0; } 64.244%, 100% { opacity: 1; } }
+@keyframes k162 { 0%, 64.802% { opacity: 0; } 64.852%, 100% { opacity: 1; } }
+@keyframes k163 { 0%, 65.41% { opacity: 0; } 65.46%, 100% { opacity: 1; } }
+@keyframes k164 { 0%, 71.384% { opacity: 0; } 71.434%, 100% { opacity: 1; } }
+@keyframes blink { 0%, 71.384% { opacity: 0; } 71.434%, 75.318% { opacity: 1; } 75.368%, 79.253% { opacity: 0; } 79.303%, 83.188% { opacity: 1; } 83.238%, 87.123% { opacity: 0; } 87.173%, 91.057% { opacity: 1; } 91.107%, 94.992% { opacity: 0; } 95.042%, 98.927% { opacity: 1; } 98.977%, 100.0% { opacity: 0; } }
 </style>
 <rect width="740" height="421" rx="9" fill="#0d1117"/>
 <rect width="740" height="40" rx="9" fill="#161b22"/>
@@ -16,18 +178,18 @@ text { font: 13px ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, Consolas
 <circle cx="46" cy="20" r="6" fill="#febc2e"/>
 <circle cx="68" cy="20" r="6" fill="#28c840"/>
 <text class="dim" x="370" y="25" text-anchor="middle">gh-class-sak — the invented course from tests/demo.py</text>
-<text x="24" y="77" xml:space="preserve"><tspan class="p a" style="animation-delay:0.600s">$ </tspan><tspan class="a" style="animation-delay:0.632s">g</tspan><tspan class="a" style="animation-delay:0.664s">h</tspan><tspan class="a" style="animation-delay:0.696s">-</tspan><tspan class="a" style="animation-delay:0.728s">c</tspan><tspan class="a" style="animation-delay:0.760s">l</tspan><tspan class="a" style="animation-delay:0.792s">a</tspan><tspan class="a" style="animation-delay:0.824s">s</tspan><tspan class="a" style="animation-delay:0.856s">s</tspan><tspan class="a" style="animation-delay:0.888s">-</tspan><tspan class="a" style="animation-delay:0.920s">s</tspan><tspan class="a" style="animation-delay:0.952s">a</tspan><tspan class="a" style="animation-delay:0.984s">k</tspan><tspan class="a" style="animation-delay:1.016s"> </tspan><tspan class="a" style="animation-delay:1.048s">c</tspan><tspan class="a" style="animation-delay:1.080s">l</tspan><tspan class="a" style="animation-delay:1.112s">a</tspan><tspan class="a" style="animation-delay:1.144s">s</tspan><tspan class="a" style="animation-delay:1.176s">s</tspan><tspan class="a" style="animation-delay:1.208s">r</tspan><tspan class="a" style="animation-delay:1.240s">o</tspan><tspan class="a" style="animation-delay:1.272s">o</tspan><tspan class="a" style="animation-delay:1.304s">m</tspan><tspan class="a" style="animation-delay:1.336s">s</tspan><tspan class="a" style="animation-delay:1.368s"> </tspan><tspan class="a" style="animation-delay:1.400s">c</tspan><tspan class="a" style="animation-delay:1.432s">s</tspan><tspan class="a" style="animation-delay:1.464s">1</tspan><tspan class="a" style="animation-delay:1.496s">0</tspan><tspan class="a" style="animation-delay:1.528s">1</tspan><tspan class="a" style="animation-delay:1.560s">-</tspan><tspan class="a" style="animation-delay:1.592s">f</tspan><tspan class="a" style="animation-delay:1.624s">a</tspan><tspan class="a" style="animation-delay:1.656s">l</tspan><tspan class="a" style="animation-delay:1.688s">l</tspan></text>
-<text class="o a" x="24" y="97" xml:space="preserve" style="animation-delay:2.170s">scanning cs101-fall ...</text>
-<text class="o a" x="24" y="117" xml:space="preserve" style="animation-delay:2.255s">cs101_fall: hw1</text>
-<text class="o a" x="24" y="137" xml:space="preserve" style="animation-delay:2.340s">cs101_fall: project</text>
-<text x="24" y="177" xml:space="preserve"><tspan class="p a" style="animation-delay:3.175s">$ </tspan><tspan class="a" style="animation-delay:3.207s">g</tspan><tspan class="a" style="animation-delay:3.239s">h</tspan><tspan class="a" style="animation-delay:3.271s">-</tspan><tspan class="a" style="animation-delay:3.303s">c</tspan><tspan class="a" style="animation-delay:3.335s">l</tspan><tspan class="a" style="animation-delay:3.367s">a</tspan><tspan class="a" style="animation-delay:3.399s">s</tspan><tspan class="a" style="animation-delay:3.431s">s</tspan><tspan class="a" style="animation-delay:3.463s">-</tspan><tspan class="a" style="animation-delay:3.495s">s</tspan><tspan class="a" style="animation-delay:3.527s">a</tspan><tspan class="a" style="animation-delay:3.559s">k</tspan><tspan class="a" style="animation-delay:3.591s"> </tspan><tspan class="a" style="animation-delay:3.623s">r</tspan><tspan class="a" style="animation-delay:3.655s">e</tspan><tspan class="a" style="animation-delay:3.687s">p</tspan><tspan class="a" style="animation-delay:3.719s">o</tspan><tspan class="a" style="animation-delay:3.751s">s</tspan><tspan class="a" style="animation-delay:3.783s"> </tspan><tspan class="a" style="animation-delay:3.815s">l</tspan><tspan class="a" style="animation-delay:3.847s">i</tspan><tspan class="a" style="animation-delay:3.879s">s</tspan><tspan class="a" style="animation-delay:3.911s">t</tspan><tspan class="a" style="animation-delay:3.943s"> </tspan><tspan class="a" style="animation-delay:3.975s">c</tspan><tspan class="a" style="animation-delay:4.007s">s</tspan><tspan class="a" style="animation-delay:4.039s">1</tspan><tspan class="a" style="animation-delay:4.071s">0</tspan><tspan class="a" style="animation-delay:4.103s">1</tspan><tspan class="a" style="animation-delay:4.135s">-</tspan><tspan class="a" style="animation-delay:4.167s">f</tspan><tspan class="a" style="animation-delay:4.199s">a</tspan><tspan class="a" style="animation-delay:4.231s">l</tspan><tspan class="a" style="animation-delay:4.263s">l</tspan><tspan class="a" style="animation-delay:4.295s"> </tspan><tspan class="a" style="animation-delay:4.327s">p</tspan><tspan class="a" style="animation-delay:4.359s">r</tspan><tspan class="a" style="animation-delay:4.391s">o</tspan><tspan class="a" style="animation-delay:4.423s">j</tspan><tspan class="a" style="animation-delay:4.455s">e</tspan><tspan class="a" style="animation-delay:4.487s">c</tspan><tspan class="a" style="animation-delay:4.519s">t</tspan><tspan class="a" style="animation-delay:4.551s"> </tspan><tspan class="a" style="animation-delay:4.583s">-</tspan><tspan class="a" style="animation-delay:4.615s">-</tspan><tspan class="a" style="animation-delay:4.647s">m</tspan><tspan class="a" style="animation-delay:4.679s">e</tspan><tspan class="a" style="animation-delay:4.711s">m</tspan><tspan class="a" style="animation-delay:4.743s">b</tspan><tspan class="a" style="animation-delay:4.775s">e</tspan><tspan class="a" style="animation-delay:4.807s">r</tspan><tspan class="a" style="animation-delay:4.839s">s</tspan><tspan class="a" style="animation-delay:4.871s"> </tspan><tspan class="a" style="animation-delay:4.903s">-</tspan><tspan class="a" style="animation-delay:4.935s">-</tspan><tspan class="a" style="animation-delay:4.967s">n</tspan><tspan class="a" style="animation-delay:4.999s">a</tspan><tspan class="a" style="animation-delay:5.031s">m</tspan><tspan class="a" style="animation-delay:5.063s">e</tspan></text>
-<text class="o a" x="24" y="197" xml:space="preserve" style="animation-delay:5.545s">TEAM       MEMBERS</text>
-<text class="o a" x="24" y="217" xml:space="preserve" style="animation-delay:5.630s">team-1     jdoe(Jane Doe),msmith(Marcus Smith)</text>
-<text class="o a" x="24" y="237" xml:space="preserve" style="animation-delay:5.715s">nightowls  rpatel(Riya Patel),tk-codes</text>
-<text class="o a" x="24" y="257" xml:space="preserve" style="animation-delay:5.800s">team-3     lchen(Lin Chen)</text>
-<text x="24" y="297" xml:space="preserve"><tspan class="p a" style="animation-delay:6.635s">$ </tspan><tspan class="a" style="animation-delay:6.667s">g</tspan><tspan class="a" style="animation-delay:6.699s">h</tspan><tspan class="a" style="animation-delay:6.731s">-</tspan><tspan class="a" style="animation-delay:6.763s">c</tspan><tspan class="a" style="animation-delay:6.795s">l</tspan><tspan class="a" style="animation-delay:6.827s">a</tspan><tspan class="a" style="animation-delay:6.859s">s</tspan><tspan class="a" style="animation-delay:6.891s">s</tspan><tspan class="a" style="animation-delay:6.923s">-</tspan><tspan class="a" style="animation-delay:6.955s">s</tspan><tspan class="a" style="animation-delay:6.987s">a</tspan><tspan class="a" style="animation-delay:7.019s">k</tspan><tspan class="a" style="animation-delay:7.051s"> </tspan><tspan class="a" style="animation-delay:7.083s">r</tspan><tspan class="a" style="animation-delay:7.115s">e</tspan><tspan class="a" style="animation-delay:7.147s">p</tspan><tspan class="a" style="animation-delay:7.179s">o</tspan><tspan class="a" style="animation-delay:7.211s">s</tspan><tspan class="a" style="animation-delay:7.243s"> </tspan><tspan class="a" style="animation-delay:7.275s">c</tspan><tspan class="a" style="animation-delay:7.307s">l</tspan><tspan class="a" style="animation-delay:7.339s">o</tspan><tspan class="a" style="animation-delay:7.371s">n</tspan><tspan class="a" style="animation-delay:7.403s">e</tspan><tspan class="a" style="animation-delay:7.435s"> </tspan><tspan class="a" style="animation-delay:7.467s">c</tspan><tspan class="a" style="animation-delay:7.499s">s</tspan><tspan class="a" style="animation-delay:7.531s">1</tspan><tspan class="a" style="animation-delay:7.563s">0</tspan><tspan class="a" style="animation-delay:7.595s">1</tspan><tspan class="a" style="animation-delay:7.627s">-</tspan><tspan class="a" style="animation-delay:7.659s">f</tspan><tspan class="a" style="animation-delay:7.691s">a</tspan><tspan class="a" style="animation-delay:7.723s">l</tspan><tspan class="a" style="animation-delay:7.755s">l</tspan><tspan class="a" style="animation-delay:7.787s"> </tspan><tspan class="a" style="animation-delay:7.819s">p</tspan><tspan class="a" style="animation-delay:7.851s">r</tspan><tspan class="a" style="animation-delay:7.883s">o</tspan><tspan class="a" style="animation-delay:7.915s">j</tspan><tspan class="a" style="animation-delay:7.947s">e</tspan><tspan class="a" style="animation-delay:7.979s">c</tspan><tspan class="a" style="animation-delay:8.011s">t</tspan><tspan class="a" style="animation-delay:8.043s"> </tspan><tspan class="a" style="animation-delay:8.075s">-</tspan><tspan class="a" style="animation-delay:8.107s">-</tspan><tspan class="a" style="animation-delay:8.139s">d</tspan><tspan class="a" style="animation-delay:8.171s">e</tspan><tspan class="a" style="animation-delay:8.203s">s</tspan><tspan class="a" style="animation-delay:8.235s">t</tspan><tspan class="a" style="animation-delay:8.267s"> </tspan><tspan class="a" style="animation-delay:8.299s">g</tspan><tspan class="a" style="animation-delay:8.331s">r</tspan><tspan class="a" style="animation-delay:8.363s">a</tspan><tspan class="a" style="animation-delay:8.395s">d</tspan><tspan class="a" style="animation-delay:8.427s">i</tspan><tspan class="a" style="animation-delay:8.459s">n</tspan><tspan class="a" style="animation-delay:8.491s">g</tspan></text>
-<text class="o a" x="24" y="317" xml:space="preserve" style="animation-delay:8.973s">⚠️  would clone cs101-fall/project-team-1 -&gt; grading/team-1</text>
-<text class="o a" x="24" y="337" xml:space="preserve" style="animation-delay:9.058s">⚠️  would clone cs101-fall/project-nightowls -&gt; grading/nightowls</text>
-<text class="o a" x="24" y="357" xml:space="preserve" style="animation-delay:9.143s">⚠️  would clone cs101-fall/project-team-3 -&gt; grading/team-3</text>
-<text x="24" y="397" xml:space="preserve"><tspan class="p a" style="animation-delay:9.978s">$ </tspan><tspan class="cursor" style="animation-delay:9.978s">█</tspan></text>
+<text x="24" y="77" xml:space="preserve"><tspan class="a" style="animation-name:k0" fill="#7ee787" font-weight="600">$ </tspan><tspan class="a" style="animation-name:k1">g</tspan><tspan class="a" style="animation-name:k2">h</tspan><tspan class="a" style="animation-name:k3">-</tspan><tspan class="a" style="animation-name:k4">c</tspan><tspan class="a" style="animation-name:k5">l</tspan><tspan class="a" style="animation-name:k6">a</tspan><tspan class="a" style="animation-name:k7">s</tspan><tspan class="a" style="animation-name:k8">s</tspan><tspan class="a" style="animation-name:k9">-</tspan><tspan class="a" style="animation-name:k10">s</tspan><tspan class="a" style="animation-name:k11">a</tspan><tspan class="a" style="animation-name:k12">k</tspan><tspan class="a" style="animation-name:k13"> </tspan><tspan class="a" style="animation-name:k14">c</tspan><tspan class="a" style="animation-name:k15">l</tspan><tspan class="a" style="animation-name:k16">a</tspan><tspan class="a" style="animation-name:k17">s</tspan><tspan class="a" style="animation-name:k18">s</tspan><tspan class="a" style="animation-name:k19">r</tspan><tspan class="a" style="animation-name:k20">o</tspan><tspan class="a" style="animation-name:k21">o</tspan><tspan class="a" style="animation-name:k22">m</tspan><tspan class="a" style="animation-name:k23">s</tspan><tspan class="a" style="animation-name:k24"> </tspan><tspan class="a" style="animation-name:k25">c</tspan><tspan class="a" style="animation-name:k26">s</tspan><tspan class="a" style="animation-name:k27">1</tspan><tspan class="a" style="animation-name:k28">0</tspan><tspan class="a" style="animation-name:k29">1</tspan><tspan class="a" style="animation-name:k30">-</tspan><tspan class="a" style="animation-name:k31">f</tspan><tspan class="a" style="animation-name:k32">a</tspan><tspan class="a" style="animation-name:k33">l</tspan><tspan class="a" style="animation-name:k34">l</tspan></text>
+<text class="a" style="animation-name:k35" fill="#b6c2cf" x="24" y="97" xml:space="preserve">scanning cs101-fall ...</text>
+<text class="a" style="animation-name:k36" fill="#b6c2cf" x="24" y="117" xml:space="preserve">cs101_fall: hw1</text>
+<text class="a" style="animation-name:k37" fill="#b6c2cf" x="24" y="137" xml:space="preserve">cs101_fall: project</text>
+<text x="24" y="177" xml:space="preserve"><tspan class="a" style="animation-name:k38" fill="#7ee787" font-weight="600">$ </tspan><tspan class="a" style="animation-name:k39">g</tspan><tspan class="a" style="animation-name:k40">h</tspan><tspan class="a" style="animation-name:k41">-</tspan><tspan class="a" style="animation-name:k42">c</tspan><tspan class="a" style="animation-name:k43">l</tspan><tspan class="a" style="animation-name:k44">a</tspan><tspan class="a" style="animation-name:k45">s</tspan><tspan class="a" style="animation-name:k46">s</tspan><tspan class="a" style="animation-name:k47">-</tspan><tspan class="a" style="animation-name:k48">s</tspan><tspan class="a" style="animation-name:k49">a</tspan><tspan class="a" style="animation-name:k50">k</tspan><tspan class="a" style="animation-name:k51"> </tspan><tspan class="a" style="animation-name:k52">r</tspan><tspan class="a" style="animation-name:k53">e</tspan><tspan class="a" style="animation-name:k54">p</tspan><tspan class="a" style="animation-name:k55">o</tspan><tspan class="a" style="animation-name:k56">s</tspan><tspan class="a" style="animation-name:k57"> </tspan><tspan class="a" style="animation-name:k58">l</tspan><tspan class="a" style="animation-name:k59">i</tspan><tspan class="a" style="animation-name:k60">s</tspan><tspan class="a" style="animation-name:k61">t</tspan><tspan class="a" style="animation-name:k62"> </tspan><tspan class="a" style="animation-name:k63">c</tspan><tspan class="a" style="animation-name:k64">s</tspan><tspan class="a" style="animation-name:k65">1</tspan><tspan class="a" style="animation-name:k66">0</tspan><tspan class="a" style="animation-name:k67">1</tspan><tspan class="a" style="animation-name:k68">-</tspan><tspan class="a" style="animation-name:k69">f</tspan><tspan class="a" style="animation-name:k70">a</tspan><tspan class="a" style="animation-name:k71">l</tspan><tspan class="a" style="animation-name:k72">l</tspan><tspan class="a" style="animation-name:k73"> </tspan><tspan class="a" style="animation-name:k74">p</tspan><tspan class="a" style="animation-name:k75">r</tspan><tspan class="a" style="animation-name:k76">o</tspan><tspan class="a" style="animation-name:k77">j</tspan><tspan class="a" style="animation-name:k78">e</tspan><tspan class="a" style="animation-name:k79">c</tspan><tspan class="a" style="animation-name:k80">t</tspan><tspan class="a" style="animation-name:k81"> </tspan><tspan class="a" style="animation-name:k82">-</tspan><tspan class="a" style="animation-name:k83">-</tspan><tspan class="a" style="animation-name:k84">m</tspan><tspan class="a" style="animation-name:k85">e</tspan><tspan class="a" style="animation-name:k86">m</tspan><tspan class="a" style="animation-name:k87">b</tspan><tspan class="a" style="animation-name:k88">e</tspan><tspan class="a" style="animation-name:k89">r</tspan><tspan class="a" style="animation-name:k90">s</tspan><tspan class="a" style="animation-name:k91"> </tspan><tspan class="a" style="animation-name:k92">-</tspan><tspan class="a" style="animation-name:k93">-</tspan><tspan class="a" style="animation-name:k94">n</tspan><tspan class="a" style="animation-name:k95">a</tspan><tspan class="a" style="animation-name:k96">m</tspan><tspan class="a" style="animation-name:k97">e</tspan></text>
+<text class="a" style="animation-name:k98" fill="#b6c2cf" x="24" y="197" xml:space="preserve">TEAM       MEMBERS</text>
+<text class="a" style="animation-name:k99" fill="#b6c2cf" x="24" y="217" xml:space="preserve">team-1     jdoe(Jane Doe),msmith(Marcus Smith)</text>
+<text class="a" style="animation-name:k100" fill="#b6c2cf" x="24" y="237" xml:space="preserve">nightowls  rpatel(Riya Patel),tk-codes</text>
+<text class="a" style="animation-name:k101" fill="#b6c2cf" x="24" y="257" xml:space="preserve">team-3     lchen(Lin Chen)</text>
+<text x="24" y="297" xml:space="preserve"><tspan class="a" style="animation-name:k102" fill="#7ee787" font-weight="600">$ </tspan><tspan class="a" style="animation-name:k103">g</tspan><tspan class="a" style="animation-name:k104">h</tspan><tspan class="a" style="animation-name:k105">-</tspan><tspan class="a" style="animation-name:k106">c</tspan><tspan class="a" style="animation-name:k107">l</tspan><tspan class="a" style="animation-name:k108">a</tspan><tspan class="a" style="animation-name:k109">s</tspan><tspan class="a" style="animation-name:k110">s</tspan><tspan class="a" style="animation-name:k111">-</tspan><tspan class="a" style="animation-name:k112">s</tspan><tspan class="a" style="animation-name:k113">a</tspan><tspan class="a" style="animation-name:k114">k</tspan><tspan class="a" style="animation-name:k115"> </tspan><tspan class="a" style="animation-name:k116">r</tspan><tspan class="a" style="animation-name:k117">e</tspan><tspan class="a" style="animation-name:k118">p</tspan><tspan class="a" style="animation-name:k119">o</tspan><tspan class="a" style="animation-name:k120">s</tspan><tspan class="a" style="animation-name:k121"> </tspan><tspan class="a" style="animation-name:k122">c</tspan><tspan class="a" style="animation-name:k123">l</tspan><tspan class="a" style="animation-name:k124">o</tspan><tspan class="a" style="animation-name:k125">n</tspan><tspan class="a" style="animation-name:k126">e</tspan><tspan class="a" style="animation-name:k127"> </tspan><tspan class="a" style="animation-name:k128">c</tspan><tspan class="a" style="animation-name:k129">s</tspan><tspan class="a" style="animation-name:k130">1</tspan><tspan class="a" style="animation-name:k131">0</tspan><tspan class="a" style="animation-name:k132">1</tspan><tspan class="a" style="animation-name:k133">-</tspan><tspan class="a" style="animation-name:k134">f</tspan><tspan class="a" style="animation-name:k135">a</tspan><tspan class="a" style="animation-name:k136">l</tspan><tspan class="a" style="animation-name:k137">l</tspan><tspan class="a" style="animation-name:k138"> </tspan><tspan class="a" style="animation-name:k139">p</tspan><tspan class="a" style="animation-name:k140">r</tspan><tspan class="a" style="animation-name:k141">o</tspan><tspan class="a" style="animation-name:k142">j</tspan><tspan class="a" style="animation-name:k143">e</tspan><tspan class="a" style="animation-name:k144">c</tspan><tspan class="a" style="animation-name:k145">t</tspan><tspan class="a" style="animation-name:k146"> </tspan><tspan class="a" style="animation-name:k147">-</tspan><tspan class="a" style="animation-name:k148">-</tspan><tspan class="a" style="animation-name:k149">d</tspan><tspan class="a" style="animation-name:k150">e</tspan><tspan class="a" style="animation-name:k151">s</tspan><tspan class="a" style="animation-name:k152">t</tspan><tspan class="a" style="animation-name:k153"> </tspan><tspan class="a" style="animation-name:k154">g</tspan><tspan class="a" style="animation-name:k155">r</tspan><tspan class="a" style="animation-name:k156">a</tspan><tspan class="a" style="animation-name:k157">d</tspan><tspan class="a" style="animation-name:k158">i</tspan><tspan class="a" style="animation-name:k159">n</tspan><tspan class="a" style="animation-name:k160">g</tspan></text>
+<text class="a" style="animation-name:k161" fill="#b6c2cf" x="24" y="317" xml:space="preserve">⚠️  would clone cs101-fall/project-team-1 -&gt; grading/team-1</text>
+<text class="a" style="animation-name:k162" fill="#b6c2cf" x="24" y="337" xml:space="preserve">⚠️  would clone cs101-fall/project-nightowls -&gt; grading/nightowls</text>
+<text class="a" style="animation-name:k163" fill="#b6c2cf" x="24" y="357" xml:space="preserve">⚠️  would clone cs101-fall/project-team-3 -&gt; grading/team-3</text>
+<text x="24" y="397" xml:space="preserve"><tspan class="a" style="animation-name:k164" fill="#7ee787" font-weight="600">$ </tspan><tspan class="cursor">█</tspan></text>
 </svg>
