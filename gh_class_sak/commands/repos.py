@@ -40,7 +40,7 @@ from gh_class_sak.github_api import (
     resolve_name_to_username,
     split_collaborators,
 )
-from gh_class_sak.meta_store import load_meta_classrooms
+from gh_class_sak.meta_store import join_repo_name, load_meta_classrooms
 
 
 def normalize_name(name):
@@ -104,27 +104,41 @@ def resolve_assignment_repos(classroom, assignment):
     """Resolve a classroom/assignment pair to the repos backing it.
 
     Returns (Classroom, [(team, repo)]). The classroom argument is a GitHub org
-    (or a partial matching one configured in [COURSES]); the assignment is the
-    repo name prefix those repos share. When the org has a meta repo, its
-    course prefix anchors the match and recorded repos are included by their
-    numeric id, so renamed repos still appear.
+    (or a partial matching one configured in [COURSES]). With a classroom-meta
+    repo, the assignment argument selects an assignment tsv by name; its
+    prefix-assignment join anchors the repo match and recorded repos are
+    included by their numeric id, so renamed repos still appear. Without one,
+    the assignment is the literal repo-name prefix.
     """
     gh = get_github()
     org, course_partial = resolve_classroom(classroom)
 
-    # the meta repo, when present, knows the real prefix and the recorded repos
-    effective_prefix = assignment
+    effective_prefix = assignment  # the no-meta fallback: a literal repo prefix
     recorded_rows = []
     classroom_key = normalize_course_name(course_partial) if course_partial else None
     meta_classrooms = load_meta_classrooms(gh, org, get_token())
+    matches = []
     for classroom_dir, data in sorted(meta_classrooms.items()):
         if classroom_key and classroom_dir != classroom_key:
             continue
-        prefix = data.get("prefix") or ""
-        if assignment.lower() in prefix.lower():
-            effective_prefix = prefix
-            recorded_rows = data["rows"]
-            break
+        for name in data["assignments"]:
+            if assignment.lower() in name.lower():
+                matches.append((classroom_dir, name, data))
+    # an exact name beats substring hits, so hw1 wins over hw1-bonus; a tie
+    # (hw1 in two classrooms) is an error rather than a silent first-match,
+    # because nothing in the output would reveal the wrong pick
+    exact = [m for m in matches if m[1].lower() == assignment.lower()]
+    candidates = exact or matches
+    if len(candidates) > 1:
+        error(f'assignment "{assignment}" is ambiguous in "{org}". candidates:')
+        for classroom_dir, name, _data in candidates:
+            error(f"    {classroom_dir}: {name}")
+        error("name the classroom, or use a longer assignment name")
+        sys.exit(2)
+    if candidates:
+        _dir, name, data = candidates[0]
+        effective_prefix = join_repo_name(data["prefix"], name)
+        recorded_rows = data["assignments"][name]
 
     repos = list_org_repos(gh, org)
     found = find_assignment_repos(repos, effective_prefix)

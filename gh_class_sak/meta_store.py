@@ -1,11 +1,16 @@
-"""the meta repo: versioned classroom state kept in a private repo in the org.
+"""the classroom-meta repo: versioned classroom state in a private org repo.
 
-an org can host several classrooms; each is a directory (named by the
-normalized canvas course partial):
+an org hosts a set of classrooms; each is a directory (named by the
+normalized canvas course partial) whose classroom.ini marks it as one.
+every *.tsv file in the directory is an assignment, named by its stem:
 
-    sp26_cmpe_195a/classroom.ini   [CLASSROOM] prefix = ... / template = ...
+    sp26_cmpe_195a/classroom.ini   [CLASSROOM] optional prefix / template / settings
     sp26_cmpe_195a/tas             one github login or email per line
-    sp26_cmpe_195a/students.tsv    NAME  STUDENTS  REPO  REPO_ID
+    sp26_cmpe_195a/hw1.tsv         NAME  STUDENTS  REPO  REPO_ID
+    sp26_cmpe_195a/project.tsv
+
+a row's default repo name joins the non-empty parts prefix, assignment,
+NAME with "-"; the recorded REPO/REPO_ID always wins once set.
 
 parsing and serialization are pure functions over text so they test without
 git; the git plumbing at the bottom reuses git_ops.
@@ -19,7 +24,7 @@ import click
 from gh_class_sak.core import warn
 from gh_class_sak.github_api import get_org_repo
 
-META_REPO_NAME = "meta"
+META_REPO_NAME = "classroom-meta"
 STUDENTS_HEADERS = ("NAME", "STUDENTS", "REPO", "REPO_ID")
 EMPTY = "-"
 PROTECTION_VALUES = ("none", "pr-review")
@@ -57,9 +62,11 @@ def parse_classroom_ini(text):
     }
 
 
-def serialize_classroom_ini(prefix, template=None, protection=None,
+def serialize_classroom_ini(prefix=None, template=None, protection=None,
                             linear_history=None, force_push=None):
-    lines = ["[CLASSROOM]", f"prefix = {prefix}"]
+    lines = ["[CLASSROOM]"]
+    if prefix:
+        lines.append(f"prefix = {prefix}")
     if template:
         lines.append(f"template = {template}")
     if protection is not None:
@@ -77,6 +84,15 @@ def effective_repo_settings(data):
     linear = data["linear_history"] if data["linear_history"] is not None else True
     force = data["force_push"] if data["force_push"] is not None else False
     return protection, linear, force
+
+
+def join_repo_name(*parts):
+    """join the non-empty repo-name parts with "-": the default-repo-name rule.
+
+    an unset classroom prefix simply drops its segment, so a repo made for
+    row team-1 of assignment hw1 is prefix-hw1-team-1, or hw1-team-1.
+    """
+    return "-".join(part for part in parts if part)
 
 
 # --- tas ------------------------------------------------------------------
@@ -169,7 +185,12 @@ def classroom_dir(checkout, classroom):
 
 
 def load_classroom(checkout, classroom):
-    """the parse_classroom_ini dict plus tas and rows, or None if absent."""
+    """the parse_classroom_ini dict plus tas and assignments, or None if absent.
+
+    every *.tsv file in the directory is an assignment named by its stem;
+    data["assignments"] maps name -> rows in sorted-filename order, so
+    iteration is deterministic everywhere downstream.
+    """
     path = classroom_dir(checkout, classroom)
     ini = os.path.join(path, "classroom.ini")
     if not os.path.exists(ini):
@@ -181,11 +202,12 @@ def load_classroom(checkout, classroom):
     if os.path.exists(tas_path):
         with open(tas_path) as f:
             data["tas"] = parse_tas(f.read())
-    data["rows"] = []
-    tsv_path = os.path.join(path, "students.tsv")
-    if os.path.exists(tsv_path):
-        with open(tsv_path) as f:
-            data["rows"] = parse_students_tsv(f.read())
+    data["assignments"] = {}
+    for entry in sorted(os.listdir(path)):
+        if entry.startswith(".") or not entry.endswith(".tsv"):
+            continue
+        with open(os.path.join(path, entry)) as f:
+            data["assignments"][entry[:-len(".tsv")]] = parse_students_tsv(f.read())
     return data
 
 
@@ -199,9 +221,14 @@ def list_classrooms(checkout):
     )
 
 
-def save_classroom(checkout, classroom, prefix, template=None, *, protection=None,
-                   linear_history=None, force_push=None, tas=None, rows=None):
-    """write the classroom files; only the pieces passed are (re)written."""
+def save_classroom(checkout, classroom, prefix=None, template=None, *, protection=None,
+                   linear_history=None, force_push=None, tas=None, assignments=None):
+    """write the classroom files; only the pieces passed are (re)written.
+
+    assignments maps name -> rows; only the named <name>.tsv files are
+    written, and none are ever deleted — removing an assignment is a hand
+    `git rm` in the checkout.
+    """
     path = classroom_dir(checkout, classroom)
     os.makedirs(path, exist_ok=True)
     with open(os.path.join(path, "classroom.ini"), "w") as f:
@@ -211,19 +238,19 @@ def save_classroom(checkout, classroom, prefix, template=None, *, protection=Non
     if tas is not None:
         with open(os.path.join(path, "tas"), "w") as f:
             f.write(serialize_tas(tas))
-    if rows is not None:
-        with open(os.path.join(path, "students.tsv"), "w") as f:
+    for name, rows in (assignments or {}).items():
+        with open(os.path.join(path, f"{name}.tsv"), "w") as f:
             f.write(serialize_students_tsv(rows))
 
 
 # --- git plumbing ---------------------------------------------------------
 
 def meta_checkout_dir(org):
-    return os.path.join(click.get_app_dir("gh-class-sak"), "meta", org)
+    return os.path.join(click.get_app_dir("gh-class-sak"), META_REPO_NAME, org)
 
 
 def checkout_meta(clone_url, org, token=None):
-    """clone or fast-forward the org's meta repo; returns the checkout path.
+    """clone or fast-forward the org's classroom-meta repo; returns its path.
 
     raises RuntimeError with the status when the checkout can't be brought
     up to date ("diverged" means local hand edits — commit or discard them).
@@ -234,12 +261,12 @@ def checkout_meta(clone_url, org, token=None):
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     status = clone_or_update(clone_url, dest, token)
     if status in ("failed", "not-a-repo", "diverged", "pull-failed"):
-        raise RuntimeError(f"meta checkout at {dest}: {status}")
+        raise RuntimeError(f"classroom-meta checkout at {dest}: {status}")
     return dest
 
 
 def load_meta_classrooms(gh, org, token=None):
-    """{classroom: data} from the org's meta repo; {} when none or unusable.
+    """{classroom: data} from the classroom-meta repo; {} when none or unusable.
 
     a broken checkout degrades to a warning rather than an error, because
     read-only commands must keep working from prefixes alone.
@@ -250,14 +277,14 @@ def load_meta_classrooms(gh, org, token=None):
     try:
         checkout = checkout_meta(repo.clone_url, org, token)
     except RuntimeError as exc:
-        warn(f"ignoring meta repo: {exc}")
+        warn(f"ignoring classroom-meta repo: {exc}")
         return {}
     classrooms = {}
     for classroom in list_classrooms(checkout):
         try:
             classrooms[classroom] = load_classroom(checkout, classroom)
         except ValueError as exc:
-            warn(f"ignoring classroom {classroom} in the meta repo: {exc}")
+            warn(f"ignoring classroom {classroom} in the classroom-meta repo: {exc}")
     return classrooms
 
 

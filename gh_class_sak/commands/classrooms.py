@@ -44,8 +44,9 @@ def classrooms(classroom):
         meta_classrooms = load_meta_classrooms(gh, org, get_token())
         if meta_classrooms:
             for classroom_dir, data in sorted(meta_classrooms.items()):
-                if data.get("prefix"):
-                    output(f"{classroom_dir}: {data['prefix']}")
+                if data["assignments"]:
+                    for assignment in data["assignments"]:
+                        output(f"{classroom_dir}: {assignment}")
                 else:
                     output(f"{classroom_dir}: (no assignments)")
             continue

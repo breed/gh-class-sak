@@ -1,3 +1,5 @@
+import os
+import re
 import sys
 
 import click
@@ -25,7 +27,6 @@ from gh_class_sak.github_api import (
     get_org_repo,
     get_repo_by_id,
     get_team,
-    infer_assignment_prefixes,
     list_org_repos,
     protect_default_branch,
     read_default_branch_protection,
@@ -58,7 +59,7 @@ def _open_meta(gh, org, required=True):
     repo = get_org_repo(gh, org, ms.META_REPO_NAME)
     if repo is None:
         if required:
-            error(f'no meta repo in "{org}". create one with: meta init')
+            error(f'no {ms.META_REPO_NAME} repo in "{org}". create one with: meta init')
             sys.exit(2)
         return None, None
     try:
@@ -193,53 +194,54 @@ def _reconcile_repo_protection(repo, desired, dryrun, actions):
 def _realize_classroom(gh, org, data, resolve, dryrun, actions):
     """create/adopt the repo for every row that has none, and grant push.
 
-    mutates rows in place under --no-dryrun. returns (changed, unresolved).
+    covers every assignment in the classroom. mutates rows in place under
+    --no-dryrun. returns (changed, unresolved).
     """
-    prefix = data["prefix"]
     template = _template_repo(gh, data)
     desired = ms.effective_repo_settings(data)
     changed = False
     all_unresolved = []
-    for row in data["rows"]:
-        if row["repo_id"] is not None:
-            continue
-        logins, unresolved = _resolve_row_students(row, resolve)
-        all_unresolved.extend(unresolved)
-        repo_name = f"{prefix}-{row['name']}"
-        existing = get_org_repo(gh, org, repo_name)
+    for assignment, rows in data["assignments"].items():
+        for row in rows:
+            if row["repo_id"] is not None:
+                continue
+            logins, unresolved = _resolve_row_students(row, resolve)
+            all_unresolved.extend(unresolved)
+            repo_name = ms.join_repo_name(data["prefix"], assignment, row["name"])
+            existing = get_org_repo(gh, org, repo_name)
 
-        made = {}
-        if existing is not None:
-            def _adopt(existing=existing, made=made):
-                made["repo"] = existing
-            _perform(dryrun, f"adopt existing {existing.full_name} for {row['name']}",
-                     _adopt, actions)
-            _reconcile_repo_protection(existing, desired, dryrun, actions)
-        else:
-            source = f" from {template.full_name}" if template else ""
-            def _create(repo_name=repo_name, made=made):
-                made["repo"] = create_org_repo(gh, org, repo_name, template=template)
-            _perform(dryrun, f"create private {org}/{repo_name}{source}", _create, actions)
-            if desired != UNPROTECTED:
-                if template is not None:
-                    def _protect(made=made):
-                        protect_default_branch(made["repo"], *desired)
-                    _perform(dryrun, f"protect default branch on {org}/{repo_name}"
-                             f" ({_protection_summary(desired)})", _protect, actions)
-                else:
-                    warn(f"{org}/{repo_name} starts with no branch;"
-                         " run meta apply after the first push to protect it")
+            made = {}
+            if existing is not None:
+                def _adopt(existing=existing, made=made):
+                    made["repo"] = existing
+                _perform(dryrun, f"adopt existing {existing.full_name} for {row['name']}",
+                         _adopt, actions)
+                _reconcile_repo_protection(existing, desired, dryrun, actions)
+            else:
+                source = f" from {template.full_name}" if template else ""
+                def _create(repo_name=repo_name, made=made):
+                    made["repo"] = create_org_repo(gh, org, repo_name, template=template)
+                _perform(dryrun, f"create private {org}/{repo_name}{source}", _create, actions)
+                if desired != UNPROTECTED:
+                    if template is not None:
+                        def _protect(made=made):
+                            protect_default_branch(made["repo"], *desired)
+                        _perform(dryrun, f"protect default branch on {org}/{repo_name}"
+                                 f" ({_protection_summary(desired)})", _protect, actions)
+                    else:
+                        warn(f"{org}/{repo_name} starts with no branch;"
+                             " run meta apply after the first push to protect it")
 
-        for login in logins:
-            def _grant(login=login, made=made):
-                add_collaborator(made["repo"], login, "push")
-            _perform(dryrun, f"grant push to {login} on {org}/{repo_name}",
-                     _grant, actions)
+            for login in logins:
+                def _grant(login=login, made=made):
+                    add_collaborator(made["repo"], login, "push")
+                _perform(dryrun, f"grant push to {login} on {org}/{repo_name}",
+                         _grant, actions)
 
-        if not dryrun:
-            row["repo"] = made["repo"].html_url
-            row["repo_id"] = made["repo"].id
-            changed = True
+            if not dryrun:
+                row["repo"] = made["repo"].html_url
+                row["repo_id"] = made["repo"].id
+                changed = True
     return changed, all_unresolved
 
 
@@ -263,19 +265,19 @@ def _reconcile_row_collaborators(gh, repo, logins, dryrun, actions):
 
 @gh_class_sak.group()
 def meta():
-    """Manage the org's meta repo: one directory per classroom."""
+    """Manage the org's classroom-meta repo: one directory per classroom."""
     pass
 
 
 @meta.command("init")
 @click.argument("classroom")
 @click.option("--prefix", default=None,
-              help="the classroom repo prefix (default: inferred when unambiguous)")
+              help="the repo-name prefix for the classroom's repos (optional)")
 @click.option("--template", default=None,
               help="OWNER/NAME template repo for created assignment repos")
 @dryrun_option
 def meta_init(classroom, prefix, template, dryrun):
-    """Create the meta repo and scaffold a classroom in it."""
+    """Create the classroom-meta repo and scaffold a classroom in it."""
     gh = get_github()
     org, partial = resolve_classroom(classroom)
     classroom_dir = normalize_course_name(partial or classroom)
@@ -283,17 +285,8 @@ def meta_init(classroom, prefix, template, dryrun):
     meta_repo, checkout = _open_meta(gh, org, required=False)
     existing = _load_classroom(checkout, classroom_dir) if checkout else None
 
-    if prefix is None:
-        prefix = existing["prefix"] if existing else None
-    if prefix is None:
-        inferred = infer_assignment_prefixes([r.name for r in list_org_repos(gh, org)])
-        if len(inferred) == 1:
-            prefix = inferred[0][0]
-        else:
-            error("--prefix is required; inferred candidates:")
-            for p, count in inferred:
-                error(f"    {p} ({count} repos)")
-            sys.exit(2)
+    if prefix is None and existing:
+        prefix = existing["prefix"]
     if template is None and existing:
         template = existing["template"]
 
@@ -318,12 +311,12 @@ def meta_init(classroom, prefix, template, dryrun):
 
     def _write():
         checkout_now = ms.meta_checkout_dir(org)
-        rows = existing["rows"] if existing else []
+        # assignments arrive later, via meta assign or hand-added tsv files
         ms.save_classroom(checkout_now, classroom_dir, prefix, template,
-                          tas=tas, rows=rows, **settings)
+                          tas=tas, **settings)
         ms.commit_and_push(checkout_now, f"init {classroom_dir}", get_token())
     _perform(dryrun,
-             f"record {classroom_dir}: prefix={prefix}"
+             f"record {classroom_dir}: prefix={prefix or '-'}"
              + (f" template={template}" if template else "")
              + f" tas={','.join(tas) or '-'}",
              _write, actions)
@@ -341,41 +334,58 @@ def meta_show(classroom):
 
     protection, linear_history, force_push = ms.effective_repo_settings(data)
     output(f"CLASSROOM {classroom_dir}")
-    output(f"PREFIX    {data['prefix']}")
+    output(f"PREFIX    {data['prefix'] or '-'}")
     if data["template"]:
         output(f"TEMPLATE  {data['template']}")
     output(f"TAS       {','.join(data['tas']) or '-'}")
     output(f"SETTINGS  protection={protection}"
            f" linear_history={str(linear_history).lower()}"
            f" force_push={str(force_push).lower()}")
-    output("")
-    print_table(list(ms.STUDENTS_HEADERS),
-                [[row["name"],
-                  ",".join(row["students"]) or ms.EMPTY,
-                  row["repo"] or ms.EMPTY,
-                  ms.EMPTY if row["repo_id"] is None else str(row["repo_id"])]
-                 for row in data["rows"]])
+    if not data["assignments"]:
+        output("")
+        output("(no assignments)")
+    for name, rows in data["assignments"].items():
+        output("")
+        output(f"ASSIGNMENT {name}")
+        print_table(list(ms.STUDENTS_HEADERS),
+                    [[row["name"],
+                      ",".join(row["students"]) or ms.EMPTY,
+                      row["repo"] or ms.EMPTY,
+                      ms.EMPTY if row["repo_id"] is None else str(row["repo_id"])]
+                     for row in rows])
 
 
 @meta.command("assign")
 @click.argument("classroom")
 @click.argument("table_file", type=click.File("r"))
+@click.option("--assignment", default=None,
+              help="assignment name (default: the table file's basename)")
 @dryrun_option
-def meta_assign(classroom, table_file, dryrun):
-    """Import a NAME + STUDENTS table and create the repos it describes."""
+def meta_assign(classroom, table_file, assignment, dryrun):
+    """Import a NAME + STUDENTS table as an assignment and create its repos."""
     gh = get_github()
     org, partial = resolve_classroom(classroom)
     _repo, checkout = _open_meta(gh, org)
     classroom_dir = _resolve_classroom_dir(checkout, partial, classroom)
     data = _load_classroom(checkout, classroom_dir)
 
+    if assignment is None and table_file.name in ("-", "<stdin>"):
+        error("--assignment is required when the table comes from stdin")
+        sys.exit(2)
+    name = assignment or os.path.splitext(os.path.basename(table_file.name))[0]
+    # the name becomes both a file name and a repo-name segment
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name):
+        error(f'assignment name "{name}" must be letters, digits, ".", "_", or "-"')
+        sys.exit(2)
+
     incoming = ms.parse_students_tsv(table_file.read())
-    merged, changed_names = ms.merge_rows(data["rows"], incoming)
-    data["rows"] = merged
+    merged, changed_names = ms.merge_rows(data["assignments"].get(name, []), incoming)
+    data["assignments"][name] = merged
+    data["assignments"] = dict(sorted(data["assignments"].items()))
 
     actions = []
     if changed_names:
-        _perform(dryrun, f"record rows: {', '.join(changed_names)}",
+        _perform(dryrun, f"record {name} rows: {', '.join(changed_names)}",
                  lambda: None, actions)
 
     resolve = _make_resolver(gh, org, partial or classroom_dir)
@@ -383,8 +393,9 @@ def meta_assign(classroom, table_file, dryrun):
 
     if not dryrun and (changed or changed_names):
         ms.save_classroom(checkout, classroom_dir, data["prefix"], data["template"],
-                          tas=data["tas"], rows=data["rows"], **_ini_settings(data))
-        ms.commit_and_push(checkout, f"assign {classroom_dir}", get_token())
+                          tas=data["tas"], assignments=data["assignments"],
+                          **_ini_settings(data))
+        ms.commit_and_push(checkout, f"assign {classroom_dir}/{name}", get_token())
 
     if not actions:
         output("nothing to do")
@@ -438,17 +449,17 @@ def _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe, dryrun, act
 @click.argument("classroom")
 @dryrun_option
 def meta_apply(classroom, dryrun):
-    """Reconcile the org with the meta repo: repos, TA teams, student access.
+    """Reconcile the org with the classroom-meta repo: repos, TA teams, student access.
 
-    Every classroom directory in the meta repo is reconciled, each with its
-    own tas-CLASSROOM team.
+    Every classroom directory in the classroom-meta repo is reconciled, each
+    with its own tas-CLASSROOM team.
     """
     gh = get_github()
     org, _partial = resolve_classroom(classroom)
     _repo, checkout = _open_meta(gh, org)
     classroom_dirs = ms.list_classrooms(checkout)
     if not classroom_dirs:
-        error("the meta repo has no classrooms. run: meta init")
+        error("the classroom-meta repo has no classrooms. run: meta init")
         sys.exit(2)
 
     actions = []
@@ -466,28 +477,31 @@ def meta_apply(classroom, dryrun):
         any_unresolved.extend(unresolved)
         if changed:
             ms.save_classroom(checkout, classroom_dir, data["prefix"], data["template"],
-                              tas=data["tas"], rows=data["rows"], **_ini_settings(data))
+                              tas=data["tas"], assignments=data["assignments"],
+                              **_ini_settings(data))
 
-        # the classroom's repos: prefix matches ∪ recorded ids
+        # the classroom's repos: per-assignment prefix matches ∪ recorded ids
         universe = {}
-        prefix = (data["prefix"] or "").lower()
-        for r in all_repos:
-            if prefix and r.name.lower().startswith(prefix):
-                universe[r.full_name] = r
-        for row in data["rows"]:
-            if row["repo_id"] is None:
-                continue
-            repo = by_id.get(row["repo_id"]) or get_repo_by_id(gh, row["repo_id"])
-            if repo is None:
-                warn(f"recorded repo for {row['name']} (id {row['repo_id']}) is gone")
-                continue
-            universe[repo.full_name] = repo
-            # 2. students on a realized row are exactly its push collaborators
-            logins, unresolved = _resolve_row_students(row, resolve)
-            any_unresolved.extend(unresolved)
-            _reconcile_row_collaborators(gh, repo, logins, dryrun, actions)
-            # and its default branch carries the classroom's protection settings
-            _reconcile_repo_protection(repo, desired, dryrun, actions)
+        for assignment in data["assignments"]:
+            joined = ms.join_repo_name(data["prefix"], assignment).lower()
+            for r in all_repos:
+                if r.name.lower().startswith(joined):
+                    universe[r.full_name] = r
+        for rows in data["assignments"].values():
+            for row in rows:
+                if row["repo_id"] is None:
+                    continue
+                repo = by_id.get(row["repo_id"]) or get_repo_by_id(gh, row["repo_id"])
+                if repo is None:
+                    warn(f"recorded repo for {row['name']} (id {row['repo_id']}) is gone")
+                    continue
+                universe[repo.full_name] = repo
+                # 2. students on a realized row are exactly its push collaborators
+                logins, unresolved = _resolve_row_students(row, resolve)
+                any_unresolved.extend(unresolved)
+                _reconcile_row_collaborators(gh, repo, logins, dryrun, actions)
+                # and its default branch carries the classroom's protection settings
+                _reconcile_repo_protection(repo, desired, dryrun, actions)
 
         # 3. the classroom's TA team reads exactly the classroom's repos
         ta_logins = []

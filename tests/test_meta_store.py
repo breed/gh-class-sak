@@ -35,6 +35,11 @@ class TestClassroomIni:
         text = "[CLASSROOM]\nprefix = p\n"
         assert ms.serialize_classroom_ini(**ms.parse_classroom_ini(text)) == text
 
+    def test_serialize_without_prefix_omits_the_line(self):
+        text = ms.serialize_classroom_ini()
+        assert text == "[CLASSROOM]\n"
+        assert ms.parse_classroom_ini(text)["prefix"] is None
+
     def test_bad_protection_value_raises(self):
         with pytest.raises(ValueError, match="protection"):
             ms.parse_classroom_ini("[CLASSROOM]\nprefix = p\nprotection = review\n")
@@ -117,9 +122,18 @@ class TestMergeRows:
         assert merged == self.EXISTING
 
 
+class TestJoinRepoName:
+    def test_joins_the_parts_with_dashes(self):
+        assert ms.join_repo_name("sp26-195a", "hw1", "team-1") == "sp26-195a-hw1-team-1"
+
+    def test_an_unset_prefix_drops_its_segment(self):
+        assert ms.join_repo_name(None, "hw1", "team-1") == "hw1-team-1"
+        assert ms.join_repo_name("", "hw1", "team-1") == "hw1-team-1"
+
+
 @pytest.fixture
 def bare_origin(tmp_path):
-    origin = tmp_path / "meta.git"
+    origin = tmp_path / "classroom-meta.git"
     GitRepo.init(origin, bare=True)
     return origin
 
@@ -135,8 +149,9 @@ class TestGitPlumbing:
     def test_full_cycle_against_a_local_origin(self, bare_origin, checkout_root):
         checkout = ms.checkout_meta(str(bare_origin), ORG)
         ms.save_classroom(checkout, "cs101", "prefix-a", "ORG/Tpl",
-                       tas=["ta-one"], rows=[{"name": "t1", "students": ["a"],
-                                              "repo": None, "repo_id": None}])
+                       tas=["ta-one"],
+                       assignments={"hw1": [{"name": "t1", "students": ["a"],
+                                             "repo": None, "repo_id": None}]})
         assert ms.commit_and_push(checkout, "seed") is True
 
         # a "second machine" sees the pushed state
@@ -145,7 +160,42 @@ class TestGitPlumbing:
         assert course["prefix"] == "prefix-a"
         assert course["template"] == "ORG/Tpl"
         assert course["tas"] == ["ta-one"]
-        assert course["rows"][0]["name"] == "t1"
+        assert course["assignments"]["hw1"][0]["name"] == "t1"
+
+    def test_load_classroom_collects_every_tsv_sorted(self, bare_origin, checkout_root):
+        checkout = ms.checkout_meta(str(bare_origin), ORG)
+        row = {"name": "t1", "students": [], "repo": None, "repo_id": None}
+        ms.save_classroom(checkout, "cs101", "p",
+                          assignments={"project": [row], "hw1": [row]})
+        course = ms.load_classroom(checkout, "cs101")
+        assert list(course["assignments"]) == ["hw1", "project"]
+
+    def test_save_classroom_writes_only_named_assignments(self, bare_origin,
+                                                          checkout_root):
+        checkout = ms.checkout_meta(str(bare_origin), ORG)
+        row = {"name": "t1", "students": [], "repo": None, "repo_id": None}
+        ms.save_classroom(checkout, "cs101", "p",
+                          assignments={"hw1": [row], "project": [row]})
+        other = {"name": "t2", "students": ["b"], "repo": None, "repo_id": None}
+        ms.save_classroom(checkout, "cs101", "p", assignments={"hw1": [other]})
+        course = ms.load_classroom(checkout, "cs101")
+        assert course["assignments"]["hw1"][0]["name"] == "t2"
+        assert course["assignments"]["project"][0]["name"] == "t1"
+
+    def test_classroom_without_tsvs_has_no_assignments(self, bare_origin,
+                                                       checkout_root):
+        checkout = ms.checkout_meta(str(bare_origin), ORG)
+        ms.save_classroom(checkout, "cs101", "p")
+        assert ms.load_classroom(checkout, "cs101")["assignments"] == {}
+
+    def test_students_tsv_is_just_an_assignment_named_students(self, bare_origin,
+                                                               checkout_root):
+        checkout = ms.checkout_meta(str(bare_origin), ORG)
+        ms.save_classroom(checkout, "cs101", "p")
+        with open(os.path.join(checkout, "cs101", "students.tsv"), "w") as f:
+            f.write("t1 a\n")
+        course = ms.load_classroom(checkout, "cs101")
+        assert list(course["assignments"]) == ["students"]
 
     def test_push_is_a_no_op_when_clean(self, bare_origin, checkout_root):
         checkout = ms.checkout_meta(str(bare_origin), ORG)
@@ -176,7 +226,7 @@ class TestLoadMetaCourses:
         ms.save_classroom(seed, "cs101", "prefix-a", tas=["ta-one"])
         ms.commit_and_push(seed, "seed")
 
-        meta_repo = FakeRepo(ORG, "meta", clone_url=str(bare_origin))
+        meta_repo = FakeRepo(ORG, "classroom-meta", clone_url=str(bare_origin))
         gh = FakeGithub(orgs=[FakeOrg(ORG, [meta_repo])])
         courses = ms.load_meta_classrooms(gh, ORG)
         assert list(courses) == ["cs101"]
@@ -192,7 +242,7 @@ class TestLoadMetaCourses:
             f.write("[CLASSROOM]\nprefix = p\nprotection = review\n")
         ms.commit_and_push(seed, "seed")
 
-        meta_repo = FakeRepo(ORG, "meta", clone_url=str(bare_origin))
+        meta_repo = FakeRepo(ORG, "classroom-meta", clone_url=str(bare_origin))
         gh = FakeGithub(orgs=[FakeOrg(ORG, [meta_repo])])
         classrooms = ms.load_meta_classrooms(gh, ORG)
         assert list(classrooms) == ["cs101"]

@@ -27,19 +27,22 @@ a swiss army knife for managing github classrooms now the official github classr
 
 github classroom is gone, so nothing may call `gh classroom` or the `/classrooms` and `/assignments` REST endpoints.
 
-- a CLASSROOM maps to a canvas course and is a directory in its org's meta repository; an org can host several classrooms. the classroom argument matches either side of a `[COURSES]` mapping (canvas course partial = github org), and is used verbatim as an org name when there is no config
-- an ASSIGNMENT is the repo name prefix that its repos share. repos are found by listing the org and filtering on that prefix
-- a TEAM is the repo name with the assignment prefix stripped off
+- a github ORG hosts a set of classrooms
+- a CLASSROOM is a directory containing a `classroom.ini` in its org's `classroom-meta` repo, named by the normalized canvas course partial it maps to. the classroom argument matches either side of a `[COURSES]` mapping (canvas course partial = github org), and is used verbatim as an org name when there is no config
+- an ASSIGNMENT is a `.tsv` file in a classroom directory, named by its basename. without a classroom-meta repo, an assignment is instead the repo name prefix its repos share, found by listing the org and filtering on that prefix
+- a TEAM is the repo name with the assignment's repo prefix stripped off
+- the default repo name joins the non-empty parts of the classroom prefix, the assignment, and the row NAME with `-` (the prefix is optional); a recorded REPO/REPO_ID always wins over the default name
 - use PyGithub to talk to github and GitPython to talk to git. do not hand-roll requests sessions or pagination
 
-# the meta repo
+# the classroom-meta repo
 
-- each org may have a private repo named `meta` recording classroom state: one directory per classroom (normalized canvas partial) with `classroom.ini` ([CLASSROOM] prefix, optional template, optional repo settings), `tas` (one login or email per line), and `students.tsv` (NAME STUDENTS REPO REPO_ID)
+- each org may have a private repo named `classroom-meta` recording classroom state: one directory per classroom with `classroom.ini` ([CLASSROOM] optional prefix, optional template, optional repo settings), `tas` (one login or email per line), and one `<assignment>.tsv` per assignment (NAME STUDENTS REPO REPO_ID)
 - classroom.ini repo settings, all optional: `protection` (none or pr-review — default none, pr-review requires one approving review), `linear_history` (default true), `force_push` (default false)
-- in students.tsv the instructor supplies NAME (suffix appended to the classroom prefix) and STUDENTS (comma-joined emails/logins that get write access); the tool fills REPO (url) and REPO_ID (github's permanent numeric id) when it creates the repo, and never clobbers them on re-import
-- `meta apply` reconciles reality to the meta for every classroom: creates missing repos (privately, from the template when set), each classroom's TAs go into a `COURSENAME-tas` team added as a read collaborator on that classroom's student repos, students get write on their repos, unlisted non-admin collaborators are revoked. admins are never touched
+- in an assignment tsv the instructor supplies NAME and STUDENTS (comma-joined emails/logins that get write access); the tool fills REPO (url) and REPO_ID (github's permanent numeric id) when it creates the repo, and never clobbers them on re-import
+- `meta assign CLASSROOM TABLE [--assignment NAME]` imports a table as the assignment named by the flag or, by default, the table file's basename
+- `meta apply` reconciles reality to the meta for every classroom and assignment: creates missing repos (privately, from the template when set), each classroom's TAs go into a `COURSENAME-tas` team added as a read collaborator on that classroom's student repos across all its assignments, students get write on their repos, unlisted non-admin collaborators are revoked. admins are never touched
 - `meta apply`/`meta assign` put the effective repo settings on each repo's default branch. a repo created without a template has no branch yet, so its protection lands on the next `meta apply` after the first push. the all-off trio (none/false/true) skips the protection API entirely and existing protection is never removed; free org plans can't protect private repos (warn, don't fail); a protection write replaces hand-set extras like status checks
-- discovery honors recorded REPO_IDs, so renamed repos stay tracked
+- discovery honors recorded REPO_IDs, so renamed repos stay tracked; the repos ASSIGNMENT argument selects an assignment tsv by case-insensitive substring, exact name wins over substring hits, and a name matching in several classrooms is an error
 
 # getting information about instructors and students
 

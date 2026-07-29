@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.6.0
+
+The classroom model becomes explicit: an org hosts a set of classrooms; a classroom is a
+directory containing a `classroom.ini` in the org's meta repo; **each `.tsv` file in a
+classroom directory is an assignment**, named by its basename. A row's default repo name
+joins the non-empty parts of classroom `prefix`, assignment, and `NAME` with dashes; the
+recorded `REPO`/`REPO_ID` still always wins once set.
+
+Breaking changes:
+
+- the meta repo is renamed **`meta` → `classroom-meta`**. There is no fallback: a repo
+  still named `meta` is simply not seen.
+- `students.tsv` is no longer special — it would now be read as an assignment named
+  `students`. Assignments live in one tsv each.
+- `meta init` no longer infers a prefix from org repo names; `--prefix` is optional and
+  simply recorded (unset means repo names start at the assignment segment)
+- `meta assign` gains `--assignment NAME`; the default name is the table file's basename
+  (`project.tsv` → `project`). The commit message and record output name the assignment.
+- the `repos list/members/missing/clone` ASSIGNMENT argument now selects an assignment
+  tsv by case-insensitive substring (exact name beats substring). A name that matches in
+  several classrooms is an error listing the candidates — name the classroom to pick one.
+  Without a classroom-meta repo the argument is the literal repo prefix, as before.
+- `classrooms` prints one line per assignment per classroom directory; `meta show` prints
+  one table per assignment.
+
+**Migrating an existing org by hand** (the tool does not do this for you):
+
+1. rename the repo: `gh repo rename classroom-meta -R ORG/meta` (renames keep the repo id
+   and redirect old URLs)
+2. in each classroom directory, rename `students.tsv` to `<assignment>.tsv` and **shorten
+   `prefix` so that `prefix-assignment` spells the old prefix** — e.g.
+   `prefix = sp26-cmpe-195a-project` becomes `prefix = sp26-cmpe-195a` plus
+   `project.tsv`. This keeps every existing repo name matching; skip it and `meta apply`
+   drops the old repos from the TA team's universe.
+3. delete the stale local checkout under your app dir's `gh-class-sak/meta/` directory
+
 ## v0.5.0
 
 Branch protection for assignment repos, configured per classroom in `classroom.ini`:
