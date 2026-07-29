@@ -8,6 +8,8 @@ is gone.**
 [![Python](https://img.shields.io/pypi/pyversions/gh-class-sak)](https://pypi.org/project/gh-class-sak/)
 [![License](https://img.shields.io/pypi/l/gh-class-sak)](LICENSE)
 
+![Terminal demo: gh-class-sak listing classrooms, showing an assignment's teams and members, and previewing a bulk clone for grading](https://raw.githubusercontent.com/breed/gh-class-sak/main/docs/demo.svg)
+
 A **classroom** is just a GitHub org. An **assignment** is the repo-name prefix its repos
 share. A **team** is whatever follows that prefix. Nothing else is required — no Classroom
 API, no per-assignment bookkeeping, no state file. Point it at an org and it works out the

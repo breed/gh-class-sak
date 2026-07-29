@@ -41,6 +41,14 @@ the tool records the repo URL and GitHub's permanent numeric id when it creates 
   permanent id — so repos renamed away from the prefix are no longer invisible. with a
   meta repo, `classrooms` lists classroom directories rather than the org
 
+Project infrastructure (no runtime effect):
+
+- the README now opens with an animated terminal cast, `docs/demo.svg`. It is rendered
+  from the same invented course as the console examples (`python -m tests.demo_svg`) and
+  drift-tested like them, so it always shows what the CLI really prints
+- a dev container (`.devcontainer/devcontainer.json`): one-click contributor setup in
+  Codespaces or VS Code, with Python and the dev dependencies preinstalled
+
 ## v0.3.0
 
 GitHub Classroom has been discontinued, so the `/classrooms`, `/classrooms/{id}/assignments`,

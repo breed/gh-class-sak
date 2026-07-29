@@ -19,6 +19,10 @@ python -m venv .venv
 
 Requires Python 3.9 or newer and git. Nothing else — no GitHub token, no Canvas account.
 
+Prefer zero setup? [Open the repo in a Codespace][codespace] — the dev container
+(`.devcontainer/devcontainer.json`) comes with Python, the dev dependencies, and ruff
+preinstalled, straight in your browser.
+
 ## The two commands you need
 
 ```bash
@@ -116,6 +120,7 @@ unreviewable — not because we object to the tools.
 Be kind. We use "we" rather than "you" when something goes wrong, and we assume good
 faith. Report problems privately to the maintainer via [@breed](https://github.com/breed).
 
+[codespace]: https://codespaces.new/breed/gh-class-sak
 [gfi]: https://github.com/breed/gh-class-sak/labels/good%20first%20issue
 [docs]: https://github.com/breed/gh-class-sak/labels/documentation
 [discussions]: https://github.com/breed/gh-class-sak/discussions

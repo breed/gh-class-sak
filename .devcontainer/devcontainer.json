@@ -1,0 +1,31 @@
+// One-click contributor environment: open in GitHub Codespaces (or VS Code's
+// Dev Containers extension) and `pytest` just works — no local Python setup,
+// no token, no Canvas account. See CONTRIBUTING.md.
+{
+  "name": "gh-class-sak",
+
+  // 3.12 matches the version CI lints on; the test matrix covers 3.9-3.14
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+
+  "postCreateCommand": "pip install -e '.[dev]'",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        // `ruff check` is the CI gate; `ruff format` is deliberately not
+        // adopted (see .github/workflows/ci.yml), so no format-on-save
+        "editor.formatOnSave": false
+      }
+    }
+  },
+
+  "remoteUser": "vscode"
+}
