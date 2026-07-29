@@ -18,6 +18,7 @@ from gh_class_sak.core import (
     would,
 )
 from gh_class_sak.github_api import (
+    UNPROTECTED,
     add_collaborator,
     create_org_repo,
     create_team,
@@ -26,10 +27,14 @@ from gh_class_sak.github_api import (
     get_team,
     infer_assignment_prefixes,
     list_org_repos,
+    protect_default_branch,
+    read_default_branch_protection,
     remove_collaborator,
     resolve_email_to_username,
     split_collaborators,
 )
+
+REPO_SETTING_KEYS = ("protection", "linear_history", "force_push")
 
 
 def tas_team_name(classroom_dir):
@@ -86,6 +91,20 @@ def _resolve_classroom_dir(checkout, partial, classroom):
     sys.exit(2)
 
 
+def _load_classroom(checkout, classroom):
+    """load_classroom, exiting with the message when classroom.ini is invalid."""
+    try:
+        return ms.load_classroom(checkout, classroom)
+    except ValueError as exc:
+        error(f"{classroom}/classroom.ini: {exc}")
+        sys.exit(2)
+
+
+def _ini_settings(data):
+    """a classroom's raw repo-setting keys, for passing back through save_classroom."""
+    return {key: data[key] for key in REPO_SETTING_KEYS}
+
+
 def _make_resolver(gh, org, course_partial):
     """entry -> github login. logins pass through; emails resolve via the
     canvas roster (profile links) and then the github search api. returns
@@ -140,6 +159,37 @@ def _template_repo(gh, data):
     return repo
 
 
+def _protection_summary(desired):
+    """the settings trio as prose for action messages."""
+    protection, linear_history, force_push = desired
+    parts = []
+    if protection == "pr-review":
+        parts.append("require pr review")
+    if linear_history:
+        parts.append("linear history")
+    if not force_push:
+        parts.append("no force push")
+    return ", ".join(parts)
+
+
+def _reconcile_repo_protection(repo, desired, dryrun, actions):
+    """put the classroom's branch protection on a repo when it has drifted.
+
+    desired == UNPROTECTED enforces nothing, so nothing is written — existing
+    protection is left alone rather than deleted.
+    """
+    if desired == UNPROTECTED:
+        return
+    current = read_default_branch_protection(repo)
+    if current is None or current == desired:
+        return
+
+    def _protect():
+        protect_default_branch(repo, *desired)
+    _perform(dryrun, f"protect {repo.default_branch} on {repo.full_name}"
+             f" ({_protection_summary(desired)})", _protect, actions)
+
+
 def _realize_classroom(gh, org, data, resolve, dryrun, actions):
     """create/adopt the repo for every row that has none, and grant push.
 
@@ -147,6 +197,7 @@ def _realize_classroom(gh, org, data, resolve, dryrun, actions):
     """
     prefix = data["prefix"]
     template = _template_repo(gh, data)
+    desired = ms.effective_repo_settings(data)
     changed = False
     all_unresolved = []
     for row in data["rows"]:
@@ -163,11 +214,21 @@ def _realize_classroom(gh, org, data, resolve, dryrun, actions):
                 made["repo"] = existing
             _perform(dryrun, f"adopt existing {existing.full_name} for {row['name']}",
                      _adopt, actions)
+            _reconcile_repo_protection(existing, desired, dryrun, actions)
         else:
             source = f" from {template.full_name}" if template else ""
             def _create(repo_name=repo_name, made=made):
                 made["repo"] = create_org_repo(gh, org, repo_name, template=template)
             _perform(dryrun, f"create private {org}/{repo_name}{source}", _create, actions)
+            if desired != UNPROTECTED:
+                if template is not None:
+                    def _protect(made=made):
+                        protect_default_branch(made["repo"], *desired)
+                    _perform(dryrun, f"protect default branch on {org}/{repo_name}"
+                             f" ({_protection_summary(desired)})", _protect, actions)
+                else:
+                    warn(f"{org}/{repo_name} starts with no branch;"
+                         " run meta apply after the first push to protect it")
 
         for login in logins:
             def _grant(login=login, made=made):
@@ -220,7 +281,7 @@ def meta_init(classroom, prefix, template, dryrun):
     classroom_dir = normalize_course_name(partial or classroom)
 
     meta_repo, checkout = _open_meta(gh, org, required=False)
-    existing = ms.load_classroom(checkout, classroom_dir) if checkout else None
+    existing = _load_classroom(checkout, classroom_dir) if checkout else None
 
     if prefix is None:
         prefix = existing["prefix"] if existing else None
@@ -253,10 +314,13 @@ def meta_init(classroom, prefix, template, dryrun):
             ms.checkout_meta(repo.clone_url, org, get_token())
         _perform(dryrun, f"create private {org}/{ms.META_REPO_NAME}", _create_meta, actions)
 
+    settings = _ini_settings(existing) if existing else {}
+
     def _write():
         checkout_now = ms.meta_checkout_dir(org)
         rows = existing["rows"] if existing else []
-        ms.save_classroom(checkout_now, classroom_dir, prefix, template, tas=tas, rows=rows)
+        ms.save_classroom(checkout_now, classroom_dir, prefix, template,
+                          tas=tas, rows=rows, **settings)
         ms.commit_and_push(checkout_now, f"init {classroom_dir}", get_token())
     _perform(dryrun,
              f"record {classroom_dir}: prefix={prefix}"
@@ -273,13 +337,17 @@ def meta_show(classroom):
     org, partial = resolve_classroom(classroom)
     _repo, checkout = _open_meta(gh, org)
     classroom_dir = _resolve_classroom_dir(checkout, partial, classroom)
-    data = ms.load_classroom(checkout, classroom_dir)
+    data = _load_classroom(checkout, classroom_dir)
 
+    protection, linear_history, force_push = ms.effective_repo_settings(data)
     output(f"CLASSROOM {classroom_dir}")
     output(f"PREFIX    {data['prefix']}")
     if data["template"]:
         output(f"TEMPLATE  {data['template']}")
     output(f"TAS       {','.join(data['tas']) or '-'}")
+    output(f"SETTINGS  protection={protection}"
+           f" linear_history={str(linear_history).lower()}"
+           f" force_push={str(force_push).lower()}")
     output("")
     print_table(list(ms.STUDENTS_HEADERS),
                 [[row["name"],
@@ -299,7 +367,7 @@ def meta_assign(classroom, table_file, dryrun):
     org, partial = resolve_classroom(classroom)
     _repo, checkout = _open_meta(gh, org)
     classroom_dir = _resolve_classroom_dir(checkout, partial, classroom)
-    data = ms.load_classroom(checkout, classroom_dir)
+    data = _load_classroom(checkout, classroom_dir)
 
     incoming = ms.parse_students_tsv(table_file.read())
     merged, changed_names = ms.merge_rows(data["rows"], incoming)
@@ -315,7 +383,7 @@ def meta_assign(classroom, table_file, dryrun):
 
     if not dryrun and (changed or changed_names):
         ms.save_classroom(checkout, classroom_dir, data["prefix"], data["template"],
-                          tas=data["tas"], rows=data["rows"])
+                          tas=data["tas"], rows=data["rows"], **_ini_settings(data))
         ms.commit_and_push(checkout, f"assign {classroom_dir}", get_token())
 
     if not actions:
@@ -389,15 +457,16 @@ def meta_apply(classroom, dryrun):
     by_id = {r.id: r for r in all_repos}
 
     for classroom_dir in classroom_dirs:
-        data = ms.load_classroom(checkout, classroom_dir)
+        data = _load_classroom(checkout, classroom_dir)
         resolve = _make_resolver(gh, org, classroom_dir)
+        desired = ms.effective_repo_settings(data)
 
         # 1. realize rows that don't have a repo yet (hand-added ones included)
         changed, unresolved = _realize_classroom(gh, org, data, resolve, dryrun, actions)
         any_unresolved.extend(unresolved)
         if changed:
             ms.save_classroom(checkout, classroom_dir, data["prefix"], data["template"],
-                              tas=data["tas"], rows=data["rows"])
+                              tas=data["tas"], rows=data["rows"], **_ini_settings(data))
 
         # the classroom's repos: prefix matches ∪ recorded ids
         universe = {}
@@ -417,6 +486,8 @@ def meta_apply(classroom, dryrun):
             logins, unresolved = _resolve_row_students(row, resolve)
             any_unresolved.extend(unresolved)
             _reconcile_row_collaborators(gh, repo, logins, dryrun, actions)
+            # and its default branch carries the classroom's protection settings
+            _reconcile_repo_protection(repo, desired, dryrun, actions)
 
         # 3. the classroom's TA team reads exactly the classroom's repos
         ta_logins = []

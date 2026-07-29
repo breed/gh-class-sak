@@ -22,25 +22,61 @@ from gh_class_sak.github_api import get_org_repo
 META_REPO_NAME = "meta"
 STUDENTS_HEADERS = ("NAME", "STUDENTS", "REPO", "REPO_ID")
 EMPTY = "-"
+PROTECTION_VALUES = ("none", "pr-review")
 
 
 # --- classroom.ini ---------------------------------------------------
 
 def parse_classroom_ini(text):
-    """(prefix, template) from a classroom.ini; template may be None."""
+    """{prefix, template, protection, linear_history, force_push}; unset keys are None.
+
+    raises ValueError on a protection value outside PROTECTION_VALUES or a
+    boolean that isn't true/false.
+    """
     config = ConfigParser()
     config.optionxform = str
     config.read_string(text)
-    prefix = config.get("CLASSROOM", "prefix", fallback=None)
-    template = config.get("CLASSROOM", "template", fallback=None)
-    return prefix, template
+
+    def _bool(key):
+        try:
+            return config.getboolean("CLASSROOM", key, fallback=None)
+        except ValueError:
+            raise ValueError(f'{key} must be true or false,'
+                             f' got "{config.get("CLASSROOM", key)}"') from None
+
+    protection = config.get("CLASSROOM", "protection", fallback=None)
+    if protection is not None and protection not in PROTECTION_VALUES:
+        raise ValueError(f'protection must be one of {", ".join(PROTECTION_VALUES)},'
+                         f' got "{protection}"')
+    return {
+        "prefix": config.get("CLASSROOM", "prefix", fallback=None),
+        "template": config.get("CLASSROOM", "template", fallback=None),
+        "protection": protection,
+        "linear_history": _bool("linear_history"),
+        "force_push": _bool("force_push"),
+    }
 
 
-def serialize_classroom_ini(prefix, template=None):
+def serialize_classroom_ini(prefix, template=None, protection=None,
+                            linear_history=None, force_push=None):
     lines = ["[CLASSROOM]", f"prefix = {prefix}"]
     if template:
         lines.append(f"template = {template}")
+    if protection is not None:
+        lines.append(f"protection = {protection}")
+    if linear_history is not None:
+        lines.append(f"linear_history = {str(linear_history).lower()}")
+    if force_push is not None:
+        lines.append(f"force_push = {str(force_push).lower()}")
     return "\n".join(lines) + "\n"
+
+
+def effective_repo_settings(data):
+    """(protection, linear_history, force_push) with defaults none/true/false."""
+    protection = data["protection"] if data["protection"] is not None else "none"
+    linear = data["linear_history"] if data["linear_history"] is not None else True
+    force = data["force_push"] if data["force_push"] is not None else False
+    return protection, linear, force
 
 
 # --- tas ------------------------------------------------------------------
@@ -133,24 +169,24 @@ def classroom_dir(checkout, classroom):
 
 
 def load_classroom(checkout, classroom):
-    """{prefix, template, tas, rows} for a classroom dir, or None if absent."""
+    """the parse_classroom_ini dict plus tas and rows, or None if absent."""
     path = classroom_dir(checkout, classroom)
     ini = os.path.join(path, "classroom.ini")
     if not os.path.exists(ini):
         return None
     with open(ini) as f:
-        prefix, template = parse_classroom_ini(f.read())
-    tas = []
+        data = parse_classroom_ini(f.read())
+    data["tas"] = []
     tas_path = os.path.join(path, "tas")
     if os.path.exists(tas_path):
         with open(tas_path) as f:
-            tas = parse_tas(f.read())
-    rows = []
+            data["tas"] = parse_tas(f.read())
+    data["rows"] = []
     tsv_path = os.path.join(path, "students.tsv")
     if os.path.exists(tsv_path):
         with open(tsv_path) as f:
-            rows = parse_students_tsv(f.read())
-    return {"prefix": prefix, "template": template, "tas": tas, "rows": rows}
+            data["rows"] = parse_students_tsv(f.read())
+    return data
 
 
 def list_classrooms(checkout):
@@ -163,12 +199,15 @@ def list_classrooms(checkout):
     )
 
 
-def save_classroom(checkout, classroom, prefix, template=None, tas=None, rows=None):
+def save_classroom(checkout, classroom, prefix, template=None, *, protection=None,
+                   linear_history=None, force_push=None, tas=None, rows=None):
     """write the classroom files; only the pieces passed are (re)written."""
     path = classroom_dir(checkout, classroom)
     os.makedirs(path, exist_ok=True)
     with open(os.path.join(path, "classroom.ini"), "w") as f:
-        f.write(serialize_classroom_ini(prefix, template))
+        f.write(serialize_classroom_ini(prefix, template, protection=protection,
+                                        linear_history=linear_history,
+                                        force_push=force_push))
     if tas is not None:
         with open(os.path.join(path, "tas"), "w") as f:
             f.write(serialize_tas(tas))
@@ -213,7 +252,13 @@ def load_meta_classrooms(gh, org, token=None):
     except RuntimeError as exc:
         warn(f"ignoring meta repo: {exc}")
         return {}
-    return {c: load_classroom(checkout, c) for c in list_classrooms(checkout)}
+    classrooms = {}
+    for classroom in list_classrooms(checkout):
+        try:
+            classrooms[classroom] = load_classroom(checkout, classroom)
+        except ValueError as exc:
+            warn(f"ignoring classroom {classroom} in the meta repo: {exc}")
+    return classrooms
 
 
 def commit_and_push(checkout, message, token=None):
