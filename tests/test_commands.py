@@ -9,7 +9,9 @@ from tests.conftest import ORG, run
 
 def lines(result):
     assert result.exit_code == 0, result.output
-    return [ln for ln in result.output.splitlines() if ln.strip()]
+    # stdout only: progress messages go to stderr and are not part of the
+    # output contract
+    return [ln for ln in result.stdout.splitlines() if ln.strip()]
 
 
 def columns(line):
@@ -22,8 +24,17 @@ class TestClassrooms:
         out = lines(run(cli, "classrooms"))
         assert out == [f"{ORG}: hw1", f"{ORG}: project"]
 
-    def test_falls_back_to_token_orgs_with_no_config(self, cli, no_config):
-        out = lines(run(cli, "classrooms"))
+    def test_errors_when_no_config_and_no_argument(self, cli, no_config):
+        result = run(cli, "classrooms")
+        assert result.exit_code == 2
+        assert "no classroom" in result.stderr
+
+    def test_takes_org_argument_verbatim_with_no_config(self, cli, no_config):
+        out = lines(run(cli, "classrooms", ORG))
+        assert out == [f"{ORG}: hw1", f"{ORG}: project"]
+
+    def test_resolves_classroom_argument_through_config(self, cli, config_file):
+        out = lines(run(cli, "classrooms", "195A"))
         assert out == [f"{ORG}: hw1", f"{ORG}: project"]
 
 

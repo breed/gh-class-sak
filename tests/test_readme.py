@@ -58,7 +58,7 @@ def demo_cli(monkeypatch, tmp_path):
 
 def test_readme_documents_the_core_commands():
     documented = {tuple(args[:2]) for args, _ in BLOCKS}
-    assert ("classrooms",) in documented
+    assert any(args[0] == "classrooms" for args in documented)
     assert ("repos", "list") in documented
     assert ("repos", "clone") in documented
 
