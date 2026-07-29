@@ -217,11 +217,6 @@ def resolve_classroom(name):
     return org, partials[0] if len(partials) == 1 else None
 
 
-def resolve_org(name):
-    """resolve a partial classroom name to a GitHub org."""
-    return resolve_classroom(name)[0]
-
-
 def resolve_course_mapping(config, org):
     """map a resolved GitHub org back to its Canvas course partial."""
     matches = []

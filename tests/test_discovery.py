@@ -99,7 +99,7 @@ class TestSharedOrg:
         assert core.resolve_classroom(ORG) == (ORG, None)
 
     def test_org_lookup_still_succeeds(self, shared):
-        assert core.resolve_org("195B") == ORG
+        assert core.resolve_classroom("195B")[0] == ORG
 
     def test_course_mapping_reports_the_ambiguity(self, shared):
         config = core.load_config()
@@ -108,19 +108,21 @@ class TestSharedOrg:
         assert exc.value.code == 2
 
 
-class TestResolveOrg:
+class TestResolveClassroomOrg:
+    """the org half of resolve_classroom, across the config cases."""
+
     def test_matches_the_org_value(self, config_file):
-        assert core.resolve_org("CMPE-195") == ORG
+        assert core.resolve_classroom("CMPE-195")[0] == ORG
 
     def test_matches_the_canvas_key(self, config_file):
         # users type the course name they know, not the org
-        assert core.resolve_org("195A") == ORG
+        assert core.resolve_classroom("195A")[0] == ORG
 
     def test_falls_through_to_a_literal_org_with_no_config(self, no_config):
-        assert core.resolve_org("some-other-org") == "some-other-org"
+        assert core.resolve_classroom("some-other-org")[0] == "some-other-org"
 
     def test_falls_through_when_config_has_no_match(self, config_file):
-        assert core.resolve_org("unrelated-org") == "unrelated-org"
+        assert core.resolve_classroom("unrelated-org")[0] == "unrelated-org"
 
     def test_exits_2_on_ambiguity(self, tmp_path, monkeypatch):
         path = tmp_path / "cfg.ini"
@@ -130,7 +132,7 @@ class TestResolveOrg:
         )
         monkeypatch.setattr(core, "config_ini", str(path))
         with pytest.raises(SystemExit) as exc:
-            core.resolve_org("cmpe-195")
+            core.resolve_classroom("cmpe-195")
         assert exc.value.code == 2
 
 
