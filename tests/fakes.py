@@ -43,9 +43,41 @@ class FakeCommit:
 _repo_id_counter = [1000]
 
 
+class FakeBranchProtection:
+    def __init__(self, required_pull_request_reviews, required_linear_history,
+                 allow_force_pushes):
+        self.required_pull_request_reviews = required_pull_request_reviews
+        self.required_linear_history = required_linear_history
+        self.allow_force_pushes = allow_force_pushes
+
+
+class FakeBranch:
+    def __init__(self, repo, name):
+        self._repo = repo
+        self.name = name
+
+    def get_protection(self):
+        if self._repo._protection_403:
+            raise GithubException(403, {"message": "Upgrade to GitHub Team"}, None)
+        if self._repo._protection is None:
+            raise GithubException(404, {"message": "Branch not protected"}, None)
+        return self._repo._protection
+
+    def edit_protection(self, **kwargs):
+        if self._repo._protection_403:
+            raise GithubException(403, {"message": "Upgrade to GitHub Team"}, None)
+        self._repo.protection_log.append((self.name, dict(kwargs)))
+        reviews = kwargs.get("required_approving_review_count")
+        self._repo._protection = FakeBranchProtection(
+            {"required_approving_review_count": reviews} if reviews else None,
+            kwargs.get("required_linear_history", False),
+            kwargs.get("allow_force_pushes", False))
+
+
 class FakeRepo:
     def __init__(self, org, name, collaborators=(), commits=(), commits_raise=False,
-                 repo_id=None, clone_url=None):
+                 repo_id=None, clone_url=None, default_branch="main", has_branch=True,
+                 protection_403=False):
         _repo_id_counter[0] += 1
         self.id = repo_id if repo_id is not None else _repo_id_counter[0]
         self.name = name
@@ -56,6 +88,16 @@ class FakeRepo:
         self._commits = list(commits)
         self._commits_raise = commits_raise
         self.collab_log = []
+        self.default_branch = default_branch
+        self._has_branch = has_branch
+        self._protection = None
+        self._protection_403 = protection_403
+        self.protection_log = []
+
+    def get_branch(self, name):
+        if not self._has_branch or name != self.default_branch:
+            raise GithubException(404, {"message": "Branch not found"}, None)
+        return FakeBranch(self, name)
 
     def get_collaborators(self):
         return list(self._collaborators)
@@ -142,11 +184,14 @@ class FakeOrg:
 
     def create_repo(self, name, private=False, auto_init=False, **_kwargs):
         repo = self._new_repo(name, private)
+        # like github: no commits means no branch to protect yet
+        repo._has_branch = bool(auto_init)
         self.created_repos.append((name, None))
         return repo
 
     def create_repo_from_template(self, name, repo, private=False, **_kwargs):
         created = self._new_repo(name, private)
+        created._has_branch = True
         self.created_repos.append((name, repo.full_name))
         return created
 

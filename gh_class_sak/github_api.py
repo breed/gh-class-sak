@@ -180,6 +180,69 @@ def create_org_repo(gh, org_name, repo_name, template=None, auto_init=False):
     return org.create_repo(repo_name, private=True, auto_init=auto_init)
 
 
+# a branch with no protection enforces nothing: no review, no linear history,
+# force pushes allowed. also the settings trio that asks for exactly that.
+UNPROTECTED = ("none", False, True)
+
+
+def _warn_unprotectable(repo, exc):
+    """the two expected protection failures: branch not born yet, free plan."""
+    if exc.status == 404:
+        warn(f"{repo.full_name}: no {repo.default_branch} branch to protect yet;"
+             " meta apply will protect it after the first push")
+    else:
+        warn(f"{repo.full_name}: branch protection needs a public repo or a paid"
+             f" plan: {_exc_message(exc)}")
+
+
+def read_default_branch_protection(repo):
+    """(protection, linear_history, force_push) on the default branch, or None.
+
+    an unprotected branch reads as UNPROTECTED. warns and returns None when the
+    branch doesn't exist yet or the plan can't protect private repos.
+    """
+    try:
+        branch = repo.get_branch(repo.default_branch)
+    except GithubException as exc:
+        if exc.status == 404:
+            _warn_unprotectable(repo, exc)
+            return None
+        raise
+    try:
+        protection = branch.get_protection()
+    except GithubException as exc:
+        if exc.status == 404:
+            return UNPROTECTED
+        if exc.status == 403:
+            _warn_unprotectable(repo, exc)
+            return None
+        raise
+    return ("pr-review" if protection.required_pull_request_reviews else "none",
+            bool(protection.required_linear_history),
+            bool(protection.allow_force_pushes))
+
+
+def protect_default_branch(repo, protection, linear_history, force_push):
+    """put branch protection on the default branch; True when it took.
+
+    the protection API replaces the whole object, so hand-set extras (status
+    checks, push restrictions, ...) are wiped by a write. warns and returns
+    False when the branch doesn't exist yet or the plan can't protect it.
+    """
+    kwargs = {"required_linear_history": linear_history,
+              "allow_force_pushes": force_push}
+    if protection == "pr-review":
+        kwargs["required_approving_review_count"] = 1
+    try:
+        repo.get_branch(repo.default_branch).edit_protection(**kwargs)
+    except GithubException as exc:
+        if exc.status in (403, 404):
+            _warn_unprotectable(repo, exc)
+            return False
+        raise
+    return True
+
+
 def get_team(gh, org_name, slug):
     """a team in the org by slug, or None when it doesn't exist."""
     try:

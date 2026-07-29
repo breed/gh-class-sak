@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from git import Repo as GitRepo
 
@@ -7,14 +9,49 @@ from tests.fakes import FakeGithub, FakeOrg, FakeRepo
 ORG = "SJSU-CMPE-195"
 
 
-class TestCourseIni:
+class TestClassroomIni:
     def test_round_trip_with_template(self):
         text = ms.serialize_classroom_ini("sp26-project", "ORG/Template")
-        assert ms.parse_classroom_ini(text) == ("sp26-project", "ORG/Template")
+        assert ms.parse_classroom_ini(text) == {
+            "prefix": "sp26-project", "template": "ORG/Template",
+            "protection": None, "linear_history": None, "force_push": None,
+        }
 
     def test_round_trip_without_template(self):
         text = ms.serialize_classroom_ini("sp26-project")
-        assert ms.parse_classroom_ini(text) == ("sp26-project", None)
+        parsed = ms.parse_classroom_ini(text)
+        assert parsed["prefix"] == "sp26-project"
+        assert parsed["template"] is None
+
+    def test_round_trip_with_repo_settings(self):
+        text = ms.serialize_classroom_ini("p", protection="pr-review",
+                                          linear_history=False, force_push=True)
+        parsed = ms.parse_classroom_ini(text)
+        assert parsed["protection"] == "pr-review"
+        assert parsed["linear_history"] is False
+        assert parsed["force_push"] is True
+
+    def test_absent_settings_are_not_written_back(self):
+        text = "[CLASSROOM]\nprefix = p\n"
+        assert ms.serialize_classroom_ini(**ms.parse_classroom_ini(text)) == text
+
+    def test_bad_protection_value_raises(self):
+        with pytest.raises(ValueError, match="protection"):
+            ms.parse_classroom_ini("[CLASSROOM]\nprefix = p\nprotection = review\n")
+
+    def test_bad_boolean_raises(self):
+        with pytest.raises(ValueError, match="linear_history"):
+            ms.parse_classroom_ini("[CLASSROOM]\nprefix = p\nlinear_history = maybe\n")
+
+    def test_effective_repo_settings_defaults(self):
+        parsed = ms.parse_classroom_ini("[CLASSROOM]\nprefix = p\n")
+        assert ms.effective_repo_settings(parsed) == ("none", True, False)
+
+    def test_effective_repo_settings_passes_explicit_values(self):
+        parsed = ms.parse_classroom_ini(
+            "[CLASSROOM]\nprefix = p\nprotection = pr-review\n"
+            "linear_history = false\nforce_push = true\n")
+        assert ms.effective_repo_settings(parsed) == ("pr-review", False, True)
 
 
 class TestTas:
@@ -144,3 +181,19 @@ class TestLoadMetaCourses:
         courses = ms.load_meta_classrooms(gh, ORG)
         assert list(courses) == ["cs101"]
         assert courses["cs101"]["prefix"] == "prefix-a"
+
+    def test_bad_classroom_ini_is_skipped_with_a_warning(self, bare_origin,
+                                                         checkout_root, capsys):
+        seed = ms.checkout_meta(str(bare_origin), "seeding")
+        ms.save_classroom(seed, "cs101", "prefix-a")
+        bad = os.path.join(seed, "cs210")
+        os.makedirs(bad)
+        with open(os.path.join(bad, "classroom.ini"), "w") as f:
+            f.write("[CLASSROOM]\nprefix = p\nprotection = review\n")
+        ms.commit_and_push(seed, "seed")
+
+        meta_repo = FakeRepo(ORG, "meta", clone_url=str(bare_origin))
+        gh = FakeGithub(orgs=[FakeOrg(ORG, [meta_repo])])
+        classrooms = ms.load_meta_classrooms(gh, ORG)
+        assert list(classrooms) == ["cs101"]
+        assert "cs210" in capsys.readouterr().err
