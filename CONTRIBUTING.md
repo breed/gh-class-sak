@@ -39,7 +39,7 @@ The flip side: **please don't add a test that reaches the network.** If you need
 behaviour, extend the fakes. A missing attribute on a fake is a signal that production
 code started depending on something new, which is usually worth a second look anyway.
 
-To try it against a real org, see the [README](README.md#authentication) for token and
+To try it against a real org, see [Getting started](docs/getting-started.md) for token and
 config setup.
 
 ## Finding something to work on

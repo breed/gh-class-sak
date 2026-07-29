@@ -1,0 +1,136 @@
+# Getting started
+
+This walk-through takes you from an empty shell to browsing a course, wiring in Canvas,
+and managing a classroom from a versioned state repo. Every `console` example is replayed
+against an invented demo course by the test suite, so the output shown is real.
+
+## Install
+
+```bash
+pip install gh-class-sak
+```
+
+Or, to keep it out of your project environments:
+
+```bash
+pipx install gh-class-sak      # or: uv tool install gh-class-sak
+```
+
+Requires Python 3.9+.
+
+## Authentication
+
+Your GitHub token is resolved in this order:
+
+1. `GH_TOKEN` environment variable
+2. `gh auth token` (GitHub CLI)
+
+If you already use the `gh` CLI, there is nothing to set up.
+
+## First look at a course
+
+A **classroom** is just a GitHub org. An **assignment** is the repo-name prefix its repos
+share. A **team** is whatever follows that prefix. Point the tool at an org and it works
+the rest out from the repo names:
+
+```console
+$ gh-class-sak classrooms cs101-fall
+scanning cs101-fall ...
+cs101-fall: hw1
+cs101-fall: project
+```
+
+List the teams on an assignment, with their members and real names:
+
+```console
+$ gh-class-sak repos list cs101-fall project --members --name
+TEAM       MEMBERS
+team-1     jdoe(Jane Doe),msmith(Marcus Smith)
+nightowls  rpatel(Riya Patel),tk-codes
+team-3     lchen(Lin Chen)
+```
+
+Pull every team's repo down for grading. Mutating commands are safe by default — they
+*preview* with a ⚠️ until you add `--no-dryrun`:
+
+```console
+$ gh-class-sak repos clone cs101-fall project --dest grading
+⚠️  would clone cs101-fall/project-team-1 -> grading/team-1
+⚠️  would clone cs101-fall/project-nightowls -> grading/nightowls
+⚠️  would clone cs101-fall/project-team-3 -> grading/team-3
+```
+
+Add `--no-dryrun` and it actually clones, fast-forwarding any repo you already have.
+
+## Wire in Canvas (optional)
+
+A config file unlocks the roster features: `--group`, `--instructors`, `--email`, and
+`repos missing`. Its location follows the platform convention:
+`~/.config/gh-class-sak.ini` on Linux, `~/Library/Application Support/gh-class-sak.ini`
+on macOS, and `%APPDATA%\gh-class-sak.ini` on Windows. When a command that needs the
+config can't find it, the error prints the exact path.
+
+```ini
+[CANVAS]
+url = https://your-canvas-instance.instructure.com
+token = YOUR_CANVAS_API_TOKEN
+
+[COURSES]
+CS-101 = cs101-fall
+CS-210A = cs210-org
+```
+
+`[COURSES]` maps a Canvas course name partial (key) to a **GitHub org** (value). The
+classroom argument matches either side, so with the config above all of `101`, `CS-101`,
+and `cs101-fall` resolve to the same org. Matching is case-insensitive and treats hyphens,
+underscores, and spaces as equivalent.
+
+Several Canvas courses may map to one org — two sections sharing a repo home is normal. In
+that case name the course (`195A`), not the org, so the Canvas lookups know which one you
+mean.
+
+> ⚠️ The config file holds your Canvas API token in plain text. Keep it readable only by
+> you.
+
+## Manage a classroom from a state repo
+
+Prefix discovery needs no setup, but it can't survive a team renaming their repo, and it
+knows nothing about who *should* have access. The `meta` command group fixes both with a
+private [classroom-meta repo](commands.md#the-classroom-meta-repo) in the org: one
+directory per classroom, one `.tsv` file per assignment.
+
+Record a classroom (with a Canvas config, the TA list is seeded from the course's
+enrollments):
+
+```console
+$ gh-class-sak meta init cs101-fall
+no canvas config; seed the tas file by hand
+⚠️  would create private cs101-fall/classroom-meta
+⚠️  would record cs101_fall: prefix=- tas=-
+```
+
+Then feed `meta assign` your team table — emails and logins mixed freely, the file's
+basename names the assignment:
+
+```
+NAME       STUDENTS
+team-1     jane@sjsu.edu,msmith
+nightowls  rpatel,tk-codes
+```
+
+```bash
+gh-class-sak meta assign cs101-fall project.tsv --no-dryrun
+```
+
+It creates each repo privately (from a template, if the classroom names one), grants the
+students push, and records the repo's URL and permanent id — so even a renamed repo stays
+tracked. From then on, `meta apply` reconciles everything: missing repos, student access,
+the classroom's TA team, and branch protection. Run it twice — the second pass prints
+`nothing to do`.
+
+## Where to next
+
+- **[Commands](commands.md)** — the full reference: every command, every flag, and the
+  classroom-meta repo in detail
+- **[CONTRIBUTING.md](../CONTRIBUTING.md)** — the test suite stubs GitHub and Canvas, so
+  you can hack on the tool without a course or a token

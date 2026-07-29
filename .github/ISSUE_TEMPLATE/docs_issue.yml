@@ -17,7 +17,7 @@ body:
     attributes:
       label: Where?
       description: URL, or path to the file.
-      placeholder: "README.md, the 'How group matching works' section"
+      placeholder: "docs/commands.md, the 'How group matching works' section"
     validations:
       required: true
 

@@ -36,6 +36,13 @@ Breaking changes:
    drops the old repos from the TA team's universe.
 3. delete the stale local checkout under your app dir's `gh-class-sak/meta/` directory
 
+Project infrastructure (no runtime effect):
+
+- the README is now a pitch page — what the tool is and does, with verified examples.
+  Usage documentation moved to `docs/getting-started.md` (a walk-through) and
+  `docs/commands.md` (the full reference). The console-fence drift test now replays
+  every example in `docs/*.md` too, so the moved pages can't go stale either
+
 ## v0.5.0
 
 Branch protection for assignment repos, configured per classroom in `classroom.ini`:
