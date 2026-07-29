@@ -9,6 +9,7 @@ If this fails, the CLI's output changed. Re-run the command against the demo
 fixture and paste the new output into the README — don't relax the test.
 """
 
+import os
 import re
 import shlex
 from pathlib import Path
@@ -60,12 +61,18 @@ def test_readme_documents_the_core_commands():
     assert ("repos", "clone") in documented
 
 
+def _normalized(text):
+    # windows prints paths with native separators; the README documents the
+    # unix flavor. separator direction is not the drift this test guards.
+    return text.replace(os.sep, "/") if os.sep != "/" else text
+
+
 @pytest.mark.parametrize(("args", "expected"), BLOCKS,
                          ids=[" ".join(args) for args, _ in BLOCKS])
 def test_readme_output_matches_the_cli(demo_cli, args, expected):
     result = demo_cli.invoke(gh_class_sak, args)
     assert result.exit_code == 0, result.output
-    assert result.output.rstrip() == expected, (
+    assert _normalized(result.output.rstrip()) == expected, (
         f"README output for `gh-class-sak {' '.join(args)}` is stale.\n"
         f"README says:\n{expected}\n\nthe CLI prints:\n{result.output.rstrip()}"
     )
