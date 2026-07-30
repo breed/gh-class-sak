@@ -7,12 +7,17 @@ import click
 from gh_class_sak import meta_store as ms
 from gh_class_sak.commands.repos import Classroom, fetch_enrollment_data, print_table
 from gh_class_sak.core import (
+    add_org_to_config,
+    config_ini,
+    configured_orgs,
     dryrun_option,
     error,
     get_github,
     get_token,
     gh_class_sak,
-    load_config,
+    has_canvas_config,
+    info,
+    match_org,
     normalize_course_name,
     output,
     resolve_classroom,
@@ -27,12 +32,14 @@ from gh_class_sak.github_api import (
     get_org_repo,
     get_repo_by_id,
     get_team,
+    infer_assignment_prefixes,
     list_org_repos,
     protect_default_branch,
     read_default_branch_protection,
     remove_collaborator,
     resolve_email_to_username,
     split_collaborators,
+    team_name,
 )
 
 REPO_SETTING_KEYS = ("protection", "linear_history", "force_push")
@@ -42,6 +49,13 @@ def tas_team_name(classroom_dir):
     """each classroom gets its own COURSENAME-tas team, so TAs of one
     classroom in an org don't gain access to another classroom's repos."""
     return f"{classroom_dir}-tas"
+
+
+def _check_assignment_name(name):
+    """the name becomes both a file name and a repo-name segment."""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name):
+        error(f'assignment name "{name}" must be letters, digits, ".", "_", or "-"')
+        sys.exit(2)
 
 
 def _perform(dryrun, message, fn, actions):
@@ -117,7 +131,7 @@ def _make_resolver(gh, org, course_partial):
         nonlocal canvas_map
         if canvas_map is None:
             canvas_map = {}
-            if load_config(required=False) and course_partial:
+            if has_canvas_config() and course_partial:
                 data = fetch_enrollment_data(Classroom(org, course_partial),
                                              resolve_students=True)
                 for person in data["students"] + data["instructors"]:
@@ -269,18 +283,37 @@ def meta():
     pass
 
 
+def _pick_org(org_option, classroom):
+    """the org hosting a new classroom: --org, the single configured org, or
+    — with no config — the classroom argument itself."""
+    orgs = configured_orgs()
+    if org_option:
+        return match_org(org_option, orgs) or org_option
+    if len(orgs) == 1:
+        return orgs[0]
+    if orgs:
+        error("several orgs are configured; pass --org. orgs:")
+        for candidate in orgs:
+            error(f"    {candidate}")
+        sys.exit(2)
+    return classroom
+
+
 @meta.command("init")
 @click.argument("classroom")
+@click.option("--org", default=None,
+              help="the github org hosting the classroom"
+                   " (required when several orgs are configured)")
 @click.option("--prefix", default=None,
               help="the repo-name prefix for the classroom's repos (optional)")
 @click.option("--template", default=None,
               help="OWNER/NAME template repo for created assignment repos")
 @dryrun_option
-def meta_init(classroom, prefix, template, dryrun):
-    """Create the classroom-meta repo and scaffold a classroom in it."""
+def meta_init(classroom, org, prefix, template, dryrun):
+    """Create the classroom-meta repo and record CLASSROOM (a course name) in it."""
     gh = get_github()
-    org, partial = resolve_classroom(classroom)
-    classroom_dir = normalize_course_name(partial or classroom)
+    org = _pick_org(org, classroom)
+    classroom_dir = normalize_course_name(classroom)
 
     meta_repo, checkout = _open_meta(gh, org, required=False)
     existing = _load_classroom(checkout, classroom_dir) if checkout else None
@@ -291,8 +324,8 @@ def meta_init(classroom, prefix, template, dryrun):
         template = existing["template"]
 
     tas = list(existing["tas"]) if existing else []
-    if load_config(required=False):
-        data = fetch_enrollment_data(Classroom(org, partial or classroom_dir))
+    if has_canvas_config():
+        data = fetch_enrollment_data(Classroom(org, classroom_dir))
         for inst in data["instructors"]:
             entry = inst.get("github") or inst.get("email")
             if entry and entry not in tas:
@@ -327,7 +360,7 @@ def meta_init(classroom, prefix, template, dryrun):
 def meta_show(classroom):
     """Show a classroom's recorded state."""
     gh = get_github()
-    org, partial = resolve_classroom(classroom)
+    org, partial = resolve_classroom(gh, classroom)
     _repo, checkout = _open_meta(gh, org)
     classroom_dir = _resolve_classroom_dir(checkout, partial, classroom)
     data = _load_classroom(checkout, classroom_dir)
@@ -364,7 +397,7 @@ def meta_show(classroom):
 def meta_assign(classroom, table_file, assignment, dryrun):
     """Import a NAME + STUDENTS table as an assignment and create its repos."""
     gh = get_github()
-    org, partial = resolve_classroom(classroom)
+    org, partial = resolve_classroom(gh, classroom)
     _repo, checkout = _open_meta(gh, org)
     classroom_dir = _resolve_classroom_dir(checkout, partial, classroom)
     data = _load_classroom(checkout, classroom_dir)
@@ -373,10 +406,7 @@ def meta_assign(classroom, table_file, assignment, dryrun):
         error("--assignment is required when the table comes from stdin")
         sys.exit(2)
     name = assignment or os.path.splitext(os.path.basename(table_file.name))[0]
-    # the name becomes both a file name and a repo-name segment
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name):
-        error(f'assignment name "{name}" must be letters, digits, ".", "_", or "-"')
-        sys.exit(2)
+    _check_assignment_name(name)
 
     incoming = ms.parse_students_tsv(table_file.read())
     merged, changed_names = ms.merge_rows(data["assignments"].get(name, []), incoming)
@@ -455,7 +485,7 @@ def meta_apply(classroom, dryrun):
     with its own tas-CLASSROOM team.
     """
     gh = get_github()
-    org, _partial = resolve_classroom(classroom)
+    org, _partial = resolve_classroom(gh, classroom)
     _repo, checkout = _open_meta(gh, org)
     classroom_dirs = ms.list_classrooms(checkout)
     if not classroom_dirs:
@@ -522,3 +552,149 @@ def meta_apply(classroom, dryrun):
         output("nothing to do")
     if any_unresolved:
         sys.exit(1)
+
+
+@gh_class_sak.command("migrate-github-classroom")
+@click.argument("org")
+@dryrun_option
+def migrate_github_classroom(org, dryrun):
+    """Import ORG's GitHub Classroom leftovers into the classroom-meta repo.
+
+    GitHub Classroom named repos ASSIGNMENT-TEAM but kept no course marker,
+    so this scans ORG's repos, infers the assignments from shared name
+    prefixes, and asks which course each one belongs to (blank skips it) and
+    what to call it. Every imported row records the repo's collaborators as
+    the students plus its url and permanent id, so it is tracked from day
+    one. ORG is added to the config's [ORGS] when it isn't there yet.
+    """
+    gh = get_github()
+    orgs = configured_orgs()
+    org = match_org(org, orgs) or org
+
+    repos = [r for r in list_org_repos(gh, org) if r.name != ms.META_REPO_NAME]
+    inferred = [prefix for prefix, _count in
+                infer_assignment_prefixes([r.name for r in repos])]
+    if not inferred:
+        error(f'no assignment-shaped repo names (PREFIX-TEAM) in "{org}"')
+        sys.exit(2)
+
+    # each repo belongs to the most specific assignment prefix that fits it
+    grouped = {prefix: [] for prefix in inferred}
+    unmatched = []
+    for repo in repos:
+        fits = [p for p in inferred if repo.name.lower().startswith(p.lower() + "-")]
+        if fits:
+            grouped[max(fits, key=len)].append(repo)
+        else:
+            unmatched.append(repo.name)
+    if unmatched:
+        info(f"ignoring {len(unmatched)} repos matching no assignment:"
+             f" {', '.join(sorted(unmatched))}")
+
+    # ask where each inferred assignment belongs before previewing anything
+    plan = []  # (classroom_dir, assignment_name, repos)
+    for prefix in inferred:
+        teams = ", ".join(team_name(r.name, prefix) for r in grouped[prefix])
+        info(f'{prefix}: {len(grouped[prefix])} repos ({teams})')
+        course = click.prompt(f'  course for "{prefix}" (blank to skip)',
+                              default="", show_default=False)
+        if not course.strip():
+            info(f"  skipping {prefix}")
+            continue
+        name = click.prompt(f'  assignment name for "{prefix}"', default=prefix)
+        _check_assignment_name(name)
+        plan.append((normalize_course_name(course.strip()), name, grouped[prefix]))
+    if not plan:
+        output("nothing to do")
+        return
+
+    actions = []
+    if org not in orgs:
+        def _add_org():
+            add_org_to_config(org)
+        _perform(dryrun, f"add {org} to [ORGS] in {config_ini}", _add_org, actions)
+
+    meta_repo, checkout = _open_meta(gh, org, required=False)
+    if meta_repo is None:
+        def _create_meta():
+            repo = create_org_repo(gh, org, ms.META_REPO_NAME, auto_init=True)
+            ms.checkout_meta(repo.clone_url, org, get_token())
+        _perform(dryrun, f"create private {org}/{ms.META_REPO_NAME}",
+                 _create_meta, actions)
+
+    by_dir = {}
+    for classroom_dir, name, assignment_repos in plan:
+        by_dir.setdefault(classroom_dir, []).append((name, assignment_repos))
+
+    writes = []  # (classroom_dir, existing, assignments, tas, changed)
+    for classroom_dir, entries in by_dir.items():
+        existing = _load_classroom(checkout, classroom_dir) if checkout else None
+        assignments = dict(existing["assignments"]) if existing else {}
+
+        members_of = {}
+        for _name, assignment_repos in entries:
+            for repo in assignment_repos:
+                if repo.full_name not in members_of:
+                    members, _admins = split_collaborators(repo)
+                    members_of[repo.full_name] = [m.login for m in members]
+        # a login with write on every one of the classroom's repos is staff,
+        # not a student: record it in the tas file instead of every row
+        tas_detected = []
+        if len(members_of) >= 2:
+            common = set.intersection(*(set(m) for m in members_of.values()))
+            tas_detected = sorted(common)
+        tas = list(existing["tas"]) if existing else []
+        new_tas = [login for login in tas_detected if login not in tas]
+        if new_tas:
+            _perform(dryrun, f"record {classroom_dir} tas: {', '.join(new_tas)}",
+                     lambda: None, actions)
+        tas += new_tas
+
+        changed_any = bool(new_tas)
+        for name, assignment_repos in entries:
+            incoming = []
+            for repo in assignment_repos:
+                students = [login for login in members_of[repo.full_name]
+                            if login not in tas_detected]
+                incoming.append({"name": team_name(repo.name, name),
+                                 "students": students,
+                                 "repo": None, "repo_id": None})
+            merged, changed = ms.merge_rows(assignments.get(name, []), incoming)
+            # adopt each scanned repo's url and permanent id, but never
+            # clobber a recorded one
+            by_name = {team_name(r.name, name): r for r in assignment_repos}
+            for row in merged:
+                if row["repo_id"] is None and row["name"] in by_name:
+                    row["repo"] = by_name[row["name"]].html_url
+                    row["repo_id"] = by_name[row["name"]].id
+                    if row["name"] not in changed:
+                        changed.append(row["name"])
+            assignments[name] = merged
+            if changed:
+                changed_any = True
+                _perform(dryrun, f"record {classroom_dir}/{name}:"
+                         f" {', '.join(changed)}", lambda: None, actions)
+        writes.append((classroom_dir, existing, assignments, tas, changed_any))
+
+    wrote = False
+    for classroom_dir, existing, assignments, tas, changed in writes:
+        if not changed and existing is not None:
+            continue
+        wrote = True
+        settings = _ini_settings(existing) if existing else {}
+
+        def _write(classroom_dir=classroom_dir, existing=existing,
+                   assignments=assignments, tas=tas, settings=settings):
+            checkout_now = ms.meta_checkout_dir(org)
+            ms.save_classroom(checkout_now, classroom_dir,
+                              existing["prefix"] if existing else None,
+                              existing["template"] if existing else None,
+                              tas=tas, assignments=assignments, **settings)
+        _perform(dryrun, f"record {classroom_dir}: {len(assignments)} assignments,"
+                 f" {sum(len(rows) for rows in assignments.values())} teams",
+                 _write, actions)
+    if wrote and not dryrun:
+        ms.commit_and_push(ms.meta_checkout_dir(org), f"migrate {org}", get_token())
+
+    if not actions:
+        output("nothing to do")

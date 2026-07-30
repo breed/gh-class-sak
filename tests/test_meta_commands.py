@@ -1,3 +1,4 @@
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -106,7 +107,9 @@ class TestMetaInit:
     def test_seeds_tas_from_canvas(self, env, config_file, fake_canvas, monkeypatch):
         monkeypatch.setattr(core, "get_canvas", lambda: fake_canvas)
         monkeypatch.setattr(repos_cmd, "get_canvas", lambda: fake_canvas)
-        result = run(env.runner, "meta", "init", "195A", "--prefix", PREFIX,
+        # the argument names the new course literally — partials only ever
+        # resolve classrooms that already exist
+        result = run(env.runner, "meta", "init", "CMPE-195A", "--prefix", PREFIX,
                      "--no-dryrun")
         assert result.exit_code == 0, result.output
         assert meta_state(env)["tas"] == ["profbeth"]
@@ -568,7 +571,7 @@ class TestMetaDiscovery:
         seed_meta(env, course="cmpe_195b", prefix="sp26-cmpe-195b",
                   assignments={ASSIGNMENT: []})
         path = tmp_path / "cfg.ini"
-        path.write_text(f"[CANVAS]\nurl = u\ntoken = t\n\n[COURSES]\nCMPE-195A = {ORG}\n")
+        path.write_text(f"[ORGS]\n{ORG}\n")
         monkeypatch.setattr(core, "config_ini", str(path))
         result = run(env.runner, "repos", "list", "195A", "project")
         assert result.exit_code == 0, result.output
@@ -579,7 +582,7 @@ class TestMetaDiscovery:
         # not the org — and each of its assignment tsvs gets a line
         seed_meta(env, assignments={ASSIGNMENT: []})
         path = tmp_path / "cfg.ini"
-        path.write_text(f"[CANVAS]\nurl = u\ntoken = t\n\n[COURSES]\nCMPE-195A = {ORG}\n")
+        path.write_text(f"[ORGS]\n{ORG}\n")
         monkeypatch.setattr(core, "config_ini", str(path))
         result = run(env.runner, "classrooms")
         assert result.exit_code == 0, result.output
@@ -590,8 +593,210 @@ class TestMetaDiscovery:
             self, env, tmp_path, monkeypatch):
         seed_meta(env)
         path = tmp_path / "cfg.ini"
-        path.write_text(f"[CANVAS]\nurl = u\ntoken = t\n\n[COURSES]\nCMPE-195A = {ORG}\n")
+        path.write_text(f"[ORGS]\n{ORG}\n")
         monkeypatch.setattr(core, "config_ini", str(path))
         result = run(env.runner, "classrooms")
         assert result.exit_code == 0, result.output
         assert f"{COURSE}: (no assignments)" in result.output
+
+
+def orgs_config(tmp_path, monkeypatch, *orgs):
+    path = tmp_path / "cfg.ini"
+    path.write_text("[ORGS]\n" + "".join(f"{org}\n" for org in orgs))
+    monkeypatch.setattr(core, "config_ini", str(path))
+
+
+def seed_second_org(env, login, course, prefix=None):
+    """a second org with its own classroom-meta, for cross-org resolution."""
+    org = FakeOrg(login, local_git_root=str(env.root))
+    env.gh._orgs[login] = org
+    bare = env.root / f"{login}-classroom-meta.git"
+    GitRepo.init(bare, bare=True)
+    work = ms.checkout_meta(str(bare), f"seed-{login}")
+    ms.save_classroom(work, course, prefix, assignments={ASSIGNMENT: []})
+    ms.commit_and_push(work, "seed")
+    org._repos.append(FakeRepo(login, "classroom-meta", clone_url=str(bare)))
+    return org
+
+
+class TestClassroomResolution:
+    """resolve_classroom against real metas: the course list lives there."""
+
+    def test_a_course_name_resolves_through_the_meta(self, env, tmp_path, monkeypatch):
+        seed_meta(env, assignments={ASSIGNMENT: []})
+        orgs_config(tmp_path, monkeypatch, ORG)
+        assert core.resolve_classroom(env.gh, "195A") == (ORG, COURSE)
+
+    def test_an_org_name_wins_without_a_meta_lookup(self, env, tmp_path, monkeypatch):
+        # no classroom-meta seeded at all: an org match must not need one
+        orgs_config(tmp_path, monkeypatch, ORG)
+        assert core.resolve_classroom(env.gh, ORG) == (ORG, None)
+
+    def test_a_course_in_another_org_resolves(self, env, tmp_path, monkeypatch):
+        seed_meta(env, assignments={ASSIGNMENT: []})
+        seed_second_org(env, "other-org", "sp26_beta")
+        orgs_config(tmp_path, monkeypatch, ORG, "other-org")
+        assert core.resolve_classroom(env.gh, "beta") == ("other-org", "sp26_beta")
+
+    def test_ambiguous_course_names_exit_2(self, env, tmp_path, monkeypatch):
+        seed_meta(env, course="sp26_alpha", assignments={ASSIGNMENT: []})
+        seed_second_org(env, "other-org", "sp26_beta")
+        orgs_config(tmp_path, monkeypatch, ORG, "other-org")
+        result = run(env.runner, "repos", "list", "sp26", ASSIGNMENT)
+        assert result.exit_code == 2
+        assert f"{ORG}: sp26_alpha" in result.output
+        assert "other-org: sp26_beta" in result.output
+
+    def test_an_unknown_name_falls_back_to_a_literal_org(self, env, tmp_path,
+                                                         monkeypatch):
+        seed_meta(env, assignments={ASSIGNMENT: []})
+        orgs_config(tmp_path, monkeypatch, ORG)
+        assert core.resolve_classroom(env.gh, "physics-dept") == ("physics-dept", None)
+
+
+class TestMigrateGithubClassroom:
+    """prompts run per inferred assignment, alphabetically: hw1 then project.
+    the input feeds course-for-hw1, name-for-hw1, course-for-project, ..."""
+
+    def seed_classroom_era_repos(self, env):
+        # the prof is an admin; the TA has plain write on every repo, the way
+        # GitHub Classroom set staff up
+        prof = FakeNamedUser("prof", role_name="admin", admin=True)
+        ta = FakeNamedUser("ta-sam", role_name="write")
+        repos = [
+            FakeRepo(ORG, "project-team-1", collaborators=[
+                FakeNamedUser("jdoe", role_name="write"),
+                FakeNamedUser("msmith", role_name="write"), ta, prof]),
+            FakeRepo(ORG, "project-nightowls", collaborators=[
+                FakeNamedUser("rpatel", role_name="write"), ta, prof]),
+            FakeRepo(ORG, "hw1-jdoe", collaborators=[
+                FakeNamedUser("jdoe", role_name="write"), ta]),
+            FakeRepo(ORG, "hw1-rpatel", collaborators=[
+                FakeNamedUser("rpatel", role_name="write"), ta]),
+            FakeRepo(ORG, "sandbox"),
+        ]
+        env.org._repos += repos
+        return repos
+
+    def migrate(self, env, *flags, input):
+        return run(env.runner, "migrate-github-classroom", ORG, *flags, input=input)
+
+    def test_dryrun_previews_and_writes_nothing(self, env):
+        self.seed_classroom_era_repos(env)
+        result = self.migrate(env, input="CMPE-30\n\nCMPE-30\n\n")
+        assert result.exit_code == 0, result.output
+        assert f"would add {ORG} to [ORGS]" in result.output
+        assert f"would create private {ORG}/classroom-meta" in result.output
+        assert "would record cmpe_30 tas: ta-sam" in result.output
+        assert "would record cmpe_30/hw1: jdoe, rpatel" in result.output
+        assert "would record cmpe_30/project: team-1, nightowls" in result.output
+        assert "would record cmpe_30: 2 assignments, 4 teams" in result.output
+        assert ("ignoring 2 repos matching no assignment: Template, sandbox"
+                in result.output)
+        assert env.org.created_repos == []
+        assert not os.path.exists(core.config_ini)
+        assert ms.load_meta_classrooms(env.gh, ORG) == {}
+
+    def test_no_dryrun_builds_courses_and_the_config(self, env):
+        repos = self.seed_classroom_era_repos(env)
+        result = self.migrate(env, "--no-dryrun",
+                              input="CMPE-30\n\nCMPE-195A\n\n")
+        assert result.exit_code == 0, result.output
+
+        state = ms.load_meta_classrooms(env.gh, ORG)
+        assert list(state["cmpe_30"]["assignments"]) == ["hw1"]
+        rows = {row["name"]: row
+                for row in state["cmpe_195a"]["assignments"]["project"]}
+        # the admin and the everywhere-collaborator TA are both excluded
+        assert rows["team-1"]["students"] == ["jdoe", "msmith"]
+        assert rows["team-1"]["repo_id"] == repos[0].id
+        assert rows["nightowls"]["repo"] == repos[1].html_url
+        # the TA landed in each classroom's tas file instead
+        assert state["cmpe_30"]["tas"] == ["ta-sam"]
+        assert state["cmpe_195a"]["tas"] == ["ta-sam"]
+
+        # the org landed in the config's [ORGS]
+        assert core.configured_orgs() == [ORG]
+
+    def test_blank_course_skips_the_assignment(self, env):
+        self.seed_classroom_era_repos(env)
+        result = self.migrate(env, "--no-dryrun", input="\nCMPE-195A\n\n")
+        assert result.exit_code == 0, result.output
+        assert "skipping hw1" in result.output
+        state = ms.load_meta_classrooms(env.gh, ORG)
+        assert list(state) == ["cmpe_195a"]
+        assert list(state["cmpe_195a"]["assignments"]) == ["project"]
+
+    def test_skipping_everything_touches_nothing(self, env):
+        self.seed_classroom_era_repos(env)
+        result = self.migrate(env, "--no-dryrun", input="\n\n")
+        assert result.exit_code == 0, result.output
+        assert "nothing to do" in result.output
+        assert not os.path.exists(core.config_ini)
+        assert ms.load_meta_classrooms(env.gh, ORG) == {}
+
+    def test_rerun_has_nothing_to_do(self, env):
+        self.seed_classroom_era_repos(env)
+        answers = "CMPE-30\n\nCMPE-195A\n\n"
+        self.migrate(env, "--no-dryrun", input=answers)
+        result = self.migrate(env, "--no-dryrun", input=answers)
+        assert result.exit_code == 0, result.output
+        assert "nothing to do" in result.output
+
+    def test_never_clobbers_a_recorded_repo(self, env):
+        self.seed_classroom_era_repos(env)
+        seed_meta(env, course="cmpe_195a", prefix=None, tas=("ta-sam",),
+                  assignments={
+                      "project": [{"name": "team-1", "students": ["jdoe"],
+                                   "repo": "https://recorded", "repo_id": 424242}]})
+        result = self.migrate(env, "--no-dryrun", input="\nCMPE-195A\n\n")
+        assert result.exit_code == 0, result.output
+        state = meta_state(env, "cmpe_195a")
+        rows = {row["name"]: row for row in state["assignments"]["project"]}
+        assert rows["team-1"]["repo_id"] == 424242
+        assert rows["nightowls"]["repo_id"] is not None
+        # the already-recorded ta is not duplicated
+        assert state["tas"] == ["ta-sam"]
+
+    def test_a_previously_imported_ta_is_cleaned_out_of_students(self, env):
+        # the first release of migrate put write-everywhere TAs in STUDENTS;
+        # re-running repairs those rows
+        self.seed_classroom_era_repos(env)
+        seed_meta(env, course="cmpe_195a", prefix=None, assignments={
+            "project": [{"name": "team-1", "students": ["jdoe", "msmith", "ta-sam"],
+                         "repo": "https://recorded", "repo_id": 424242}]})
+        result = self.migrate(env, "--no-dryrun", input="\nCMPE-195A\n\n")
+        assert result.exit_code == 0, result.output
+        state = meta_state(env, "cmpe_195a")
+        rows = {row["name"]: row for row in state["assignments"]["project"]}
+        assert rows["team-1"]["students"] == ["jdoe", "msmith"]
+        assert state["tas"] == ["ta-sam"]
+
+    def test_org_without_assignment_shaped_repos_exits_2(self, env):
+        result = self.migrate(env, input="")
+        assert result.exit_code == 2
+        assert "no assignment-shaped repo names" in result.output
+
+
+class TestMetaInitOrgOption:
+    def test_several_orgs_require_the_option(self, env, tmp_path, monkeypatch):
+        seed_second_org(env, "other-org", "sp26_beta")
+        orgs_config(tmp_path, monkeypatch, ORG, "other-org")
+        result = run(env.runner, "meta", "init", "CS-101")
+        assert result.exit_code == 2
+        assert "pass --org" in result.output
+        assert "other-org" in result.output
+
+    def test_org_option_picks_by_partial_match(self, env, tmp_path, monkeypatch):
+        seed_second_org(env, "other-org", "sp26_beta")
+        orgs_config(tmp_path, monkeypatch, ORG, "other-org")
+        result = run(env.runner, "meta", "init", "CS-101", "--org", "other",
+                     "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert "cs_101" in ms.load_meta_classrooms(env.gh, "other-org")
+
+    def test_a_single_configured_org_is_the_default(self, env, tmp_path, monkeypatch):
+        orgs_config(tmp_path, monkeypatch, ORG)
+        result = run(env.runner, "meta", "init", "CS-101", "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert "cs_101" in ms.load_meta_classrooms(env.gh, ORG)

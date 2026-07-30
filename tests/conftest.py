@@ -116,7 +116,7 @@ def config_file(tmp_path, monkeypatch):
     path = tmp_path / "gh-class-sak.ini"
     path.write_text(
         "[CANVAS]\nurl = https://canvas.example.edu\ntoken = xyz\n\n"
-        f"[COURSES]\nCMPE-195A = {ORG}\n"
+        f"[ORGS]\n{ORG}\n"
     )
     monkeypatch.setattr(core, "config_ini", str(path))
     return str(path)
@@ -132,8 +132,9 @@ def no_config(tmp_path, monkeypatch):
 def cli(monkeypatch, fake_github, fake_canvas):
     """A CliRunner with GitHub, Canvas, and token access stubbed out."""
     from gh_class_sak.commands import meta as meta_cmd
+    from gh_class_sak.commands import setup as setup_cmd
 
-    for mod in (core, repos_cmd, classrooms_cmd, meta_cmd):
+    for mod in (core, repos_cmd, classrooms_cmd, meta_cmd, setup_cmd):
         monkeypatch.setattr(mod, "get_github", lambda: fake_github, raising=False)
         monkeypatch.setattr(mod, "get_token", lambda: "ghp_faketoken", raising=False)
     monkeypatch.setattr(core, "get_canvas", lambda: fake_canvas)
@@ -141,6 +142,6 @@ def cli(monkeypatch, fake_github, fake_canvas):
     return CliRunner()
 
 
-def run(cli, *args):
+def run(cli, *args, input=None):
     from gh_class_sak.core import gh_class_sak
-    return cli.invoke(gh_class_sak, list(args))
+    return cli.invoke(gh_class_sak, list(args), input=input)

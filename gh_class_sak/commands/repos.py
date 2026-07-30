@@ -18,7 +18,6 @@ from gh_class_sak.core import (
     dryrun_option,
     error,
     get_canvas,
-    get_config,
     get_github,
     get_token,
     gh_class_sak,
@@ -26,7 +25,6 @@ from gh_class_sak.core import (
     normalize_course_name,
     output,
     resolve_classroom,
-    resolve_course_mapping,
     resolve_name,
     warn,
     would,
@@ -110,7 +108,7 @@ def resolve_assignment_repos(classroom, assignment):
     are included by their numeric id, so renamed repos still appear.
     """
     gh = get_github()
-    org, course_partial = resolve_classroom(classroom)
+    org, course_partial = resolve_classroom(gh, classroom)
 
     classroom_key = normalize_course_name(course_partial) if course_partial else None
     meta_classrooms = load_meta_classrooms(gh, org, get_token())
@@ -165,11 +163,25 @@ def resolve_assignment_repos(classroom, assignment):
     return Classroom(org, course_partial), found
 
 
+def _single_classroom_dir(org):
+    """the org's one classroom directory; ambiguous or absent is an error."""
+    meta_classrooms = load_meta_classrooms(get_github(), org, get_token())
+    if not meta_classrooms:
+        error(f'no classroom-meta repo in "{org}". create one with: meta init')
+        sys.exit(2)
+    if len(meta_classrooms) > 1:
+        error(f'"{org}" hosts several classrooms, so the course is ambiguous:')
+        for classroom_dir in meta_classrooms:
+            error(f"    {classroom_dir}")
+        error("name one of the courses instead of the org")
+        sys.exit(2)
+    return next(iter(meta_classrooms))
+
+
 def resolve_canvas_course(room):
     """Resolve a classroom to a Canvas course, returning shared context."""
-    config = get_config()
     canvas = get_canvas()
-    course_partial = room.course_partial or resolve_course_mapping(config, room.org)
+    course_partial = room.course_partial or _single_classroom_dir(room.org)
 
     courses = list_courses(canvas)
     for c in courses:

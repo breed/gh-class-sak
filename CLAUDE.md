@@ -28,7 +28,7 @@ a swiss army knife for managing github classrooms now the official github classr
 github classroom is gone, so nothing may call `gh classroom` or the `/classrooms` and `/assignments` REST endpoints.
 
 - a github ORG hosts a set of classrooms
-- a CLASSROOM is a directory containing a `classroom.ini` in its org's `classroom-meta` repo, named by the normalized canvas course partial it maps to. the classroom argument matches either side of a `[COURSES]` mapping (canvas course partial = github org), and is used verbatim as an org name when there is no config
+- a CLASSROOM is a directory containing a `classroom.ini` in its org's `classroom-meta` repo, named by the normalized canvas course partial it maps to. the config's `[ORGS]` section lists the github orgs, one per line — the course list itself lives in classroom-meta, never in the config. the classroom argument matches a configured org by name first (no meta lookup), else a classroom directory found in the configured orgs' classroom-meta repos; it is used verbatim as an org name when there is no config
 - an ASSIGNMENT is a `.tsv` file in a classroom directory, named by its basename. the classroom-meta repo is required: commands that read a classroom error out (pointing at `meta init`) when the org has none — there is no prefix-inference fallback
 - an assignment's repos are found by their name prefix (the prefix-assignment join) plus the recorded REPO_IDs
 - a TEAM is the repo name with the assignment's repo prefix stripped off
@@ -40,6 +40,7 @@ github classroom is gone, so nothing may call `gh classroom` or the `/classrooms
 - each org may have a private repo named `classroom-meta` recording classroom state: one directory per classroom with `classroom.ini` ([CLASSROOM] optional prefix, optional template, optional repo settings), `tas` (one login or email per line), and one `<assignment>.tsv` per assignment (NAME STUDENTS REPO REPO_ID)
 - classroom.ini repo settings, all optional: `protection` (none or pr-review — default none, pr-review requires one approving review), `linear_history` (default true), `force_push` (default false)
 - in an assignment tsv the instructor supplies NAME and STUDENTS (comma-joined emails/logins that get write access); the tool fills REPO (url) and REPO_ID (github's permanent numeric id) when it creates the repo, and never clobbers them on re-import
+- `meta init CLASSROOM [--org ORG]` records the literally-named new course; the org is the single `[ORGS]` entry, the partially-matched `--org`, or — with no config — the classroom argument itself. several configured orgs without `--org` is an error
 - `meta assign CLASSROOM TABLE [--assignment NAME]` imports a table as the assignment named by the flag or, by default, the table file's basename
 - `meta apply` reconciles reality to the meta for every classroom and assignment: creates missing repos (privately, from the template when set), each classroom's TAs go into a `COURSENAME-tas` team added as a read collaborator on that classroom's student repos across all its assignments, students get write on their repos, unlisted non-admin collaborators are revoked. admins are never touched
 - `meta apply`/`meta assign` put the effective repo settings on each repo's default branch. a repo created without a template has no branch yet, so its protection lands on the next `meta apply` after the first push. the all-off trio (none/false/true) skips the protection API entirely and existing protection is never removed; free org plans can't protect private repos (warn, don't fail); a protection write replaces hand-set extras like status checks
@@ -77,8 +78,10 @@ find the github ids of all the students and instructors using the canvas REST AP
 
 # subcommands
 
+- help-me-setup: explain the config file (print a template when none exists) and verify the setup: github token, each configured org and its classroom-meta repo, canvas credentials. read-only, exit 1 when something needs attention
+- migrate-github-classroom: takes an ORG; scans its Classroom-era repos (named ASSIGNMENT-TEAM), infers the assignments from shared name prefixes, then prompts per assignment for the course it belongs to (blank skips) and its name (default: the prefix). records one tsv per assignment under the chosen course's classroom dir — collaborators as students, repo url and permanent id filled in. a login with write on every one of a classroom's repos (>=2 repos) is a TA: excluded from STUDENTS and recorded in the classroom's tas file instead. adds the org to the config's [ORGS] when missing (creating the file if needed); merges like `meta assign` and never clobbers recorded repos; standard dryrun pair with prompts asked before the preview
 - classrooms: list the classrooms and corresponding assignments
-    - takes an optional CLASSROOM; without it, lists every org mapped in `[COURSES]`. errors out when neither is given — never enumerate the orgs the token belongs to
+    - takes an optional CLASSROOM; without it, lists every org in `[ORGS]`. errors out when neither is given — never enumerate the orgs the token belongs to
     - each assignment will have this format: CLASSROOM: ASSIGNMENT
     - classrooms and assignments come from the classroom-meta repo: one line per assignment tsv per classroom directory
 - repos list: takes a CLASSROOM and ASSIGNMENT and lists each repo

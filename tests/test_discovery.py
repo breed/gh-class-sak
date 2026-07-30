@@ -1,14 +1,51 @@
 import pytest
 
 from gh_class_sak import core
-from gh_class_sak.github_api import find_assignment_repos, team_name
-from tests.fakes import FakeRepo
+from gh_class_sak.github_api import (
+    find_assignment_repos,
+    infer_assignment_prefixes,
+    team_name,
+)
+from tests.fakes import FakeGithub, FakeOrg, FakeRepo
 
 ORG = "SJSU-CMPE-195"
 
 
 def repo(name):
     return FakeRepo(ORG, name)
+
+
+class TestInferAssignmentPrefixes:
+    def test_groups_repos_by_shared_prefix(self):
+        names = ["project-team-12", "project-red-team", "hw1-a", "hw1-b", "hw1-c"]
+        assert infer_assignment_prefixes(names) == [("hw1", 3), ("project", 2)]
+
+    def test_ignores_repos_with_no_prefix(self):
+        assert infer_assignment_prefixes(["sandbox", "hw1-a", "hw1-b"]) == [("hw1", 2)]
+
+    def test_ignores_prefixes_used_by_one_repo(self):
+        # project-team appears once, so only the shared "project" survives
+        names = ["project-team-12", "project-red-team"]
+        assert infer_assignment_prefixes(names) == [("project", 2)]
+
+    def test_prefers_the_most_specific_prefix_with_equal_coverage(self):
+        # every repo is hw1-part2-*, so "hw1" and "hw1-part2" cover the same
+        # repos and only the longer one should be reported
+        names = ["hw1-part2-a", "hw1-part2-b"]
+        assert infer_assignment_prefixes(names) == [("hw1-part2", 2)]
+
+    def test_suppresses_sub_patterns_of_an_accepted_prefix(self):
+        # hw1-part2 is how two of the teams are named, not a second assignment
+        names = ["hw1-part2-a", "hw1-part2-b", "hw1-solo"]
+        assert infer_assignment_prefixes(names) == [("hw1", 3)]
+
+    def test_reports_unrelated_assignments_separately(self):
+        names = ["group-project-team-1", "group-project-team-2", "group-project-red",
+                 "sp26-cmpe-195a-template", "sp26-cmpe-195b-template"]
+        assert infer_assignment_prefixes(names) == [("group-project", 3), ("sp26-cmpe", 2)]
+
+    def test_empty_input(self):
+        assert infer_assignment_prefixes([]) == []
 
 
 class TestTeamName:
@@ -40,62 +77,49 @@ class TestFindAssignmentRepos:
         assert find_assignment_repos([repo("hw1-a")], "final") == []
 
 
-class TestSharedOrg:
-    """Two Canvas courses can live in one GitHub org, as SJSU-CMPE-195 does."""
+class TestMatchOrg:
+    ORGS = ["cmpe-195-a", "cmpe-195-b"]
 
-    @pytest.fixture
-    def shared(self, tmp_path, monkeypatch):
-        path = tmp_path / "cfg.ini"
-        path.write_text(
-            "[CANVAS]\nurl = u\ntoken = t\n\n"
-            f"[COURSES]\nSP26_CMPE_195A = {ORG}\nSP26_CMPE_195B = {ORG}\n"
-        )
-        monkeypatch.setattr(core, "config_ini", str(path))
-        return str(path)
+    def test_partial_match(self):
+        assert core.match_org("195-a", self.ORGS) == "cmpe-195-a"
 
-    def test_course_partial_selects_one_of_the_courses(self, shared):
-        assert core.resolve_classroom("195A") == (ORG, "SP26_CMPE_195A")
-        assert core.resolve_classroom("195B") == (ORG, "SP26_CMPE_195B")
+    def test_exact_beats_partial(self):
+        assert core.match_org("cmpe-195-a", self.ORGS + ["cmpe-195-a-old"]) \
+            == "cmpe-195-a"
 
-    def test_naming_the_org_resolves_it_but_leaves_the_course_open(self, shared):
-        # the org is unambiguous, the canvas course is not
-        assert core.resolve_classroom(ORG) == (ORG, None)
+    def test_no_match_is_none(self):
+        assert core.match_org("physics", self.ORGS) is None
 
-    def test_org_lookup_still_succeeds(self, shared):
-        assert core.resolve_classroom("195B")[0] == ORG
-
-    def test_course_mapping_reports_the_ambiguity(self, shared):
-        config = core.load_config()
+    def test_ambiguity_exits_2(self):
         with pytest.raises(SystemExit) as exc:
-            core.resolve_course_mapping(config, ORG)
+            core.match_org("cmpe-195", self.ORGS)
         assert exc.value.code == 2
 
 
 class TestResolveClassroomOrg:
-    """the org half of resolve_classroom, across the config cases."""
+    """the org side of resolve_classroom; gh is only touched for course names,
+    so these pass gh=None or an org with no classroom-meta repo."""
 
-    def test_matches_the_org_value(self, config_file):
-        assert core.resolve_classroom("CMPE-195")[0] == ORG
+    def test_matches_a_configured_org(self, config_file):
+        assert core.resolve_classroom(None, "CMPE-195") == (ORG, None)
 
-    def test_matches_the_canvas_key(self, config_file):
-        # users type the course name they know, not the org
-        assert core.resolve_classroom("195A")[0] == ORG
+    def test_org_match_leaves_the_classroom_open(self, config_file):
+        assert core.resolve_classroom(None, ORG) == (ORG, None)
 
     def test_falls_through_to_a_literal_org_with_no_config(self, no_config):
-        assert core.resolve_classroom("some-other-org")[0] == "some-other-org"
+        assert core.resolve_classroom(None, "some-other-org") == ("some-other-org", None)
 
-    def test_falls_through_when_config_has_no_match(self, config_file):
-        assert core.resolve_classroom("unrelated-org")[0] == "unrelated-org"
+    def test_falls_through_when_nothing_matches(self, config_file):
+        # neither an org nor a classroom dir (the org has no classroom-meta)
+        gh = FakeGithub(orgs=[FakeOrg(ORG)])
+        assert core.resolve_classroom(gh, "unrelated-org") == ("unrelated-org", None)
 
-    def test_exits_2_on_ambiguity(self, tmp_path, monkeypatch):
+    def test_exits_2_on_org_ambiguity(self, tmp_path, monkeypatch):
         path = tmp_path / "cfg.ini"
-        path.write_text(
-            "[CANVAS]\nurl = u\ntoken = t\n\n"
-            "[COURSES]\nCMPE-195A = cmpe-195-a\nCMPE-195B = cmpe-195-b\n"
-        )
+        path.write_text("[ORGS]\ncmpe-195-a\ncmpe-195-b\n")
         monkeypatch.setattr(core, "config_ini", str(path))
         with pytest.raises(SystemExit) as exc:
-            core.resolve_classroom("cmpe-195")
+            core.resolve_classroom(None, "cmpe-195")
         assert exc.value.code == 2
 
 
@@ -113,15 +137,53 @@ class TestLoadConfig:
         assert config.get("CANVAS", "url") == "https://canvas.example.edu"
         assert core.configured_orgs(config) == [ORG]
 
+    def test_orgs_keep_their_config_order(self, tmp_path, monkeypatch):
+        path = tmp_path / "cfg.ini"
+        path.write_text("[ORGS]\nzeta-org\nalpha-org\n")
+        monkeypatch.setattr(core, "config_ini", str(path))
+        assert core.configured_orgs() == ["zeta-org", "alpha-org"]
+
+    def test_a_canvas_only_config_has_no_orgs(self, tmp_path, monkeypatch):
+        path = tmp_path / "cfg.ini"
+        path.write_text("[CANVAS]\nurl = u\ntoken = t\n")
+        monkeypatch.setattr(core, "config_ini", str(path))
+        assert core.configured_orgs() == []
+
+    def test_add_org_creates_the_config_file(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(core, "config_ini", str(tmp_path / "sub" / "cfg.ini"))
+        core.add_org_to_config("new-org")
+        assert core.configured_orgs() == ["new-org"]
+
+    def test_add_org_preserves_comments_and_other_sections(self, tmp_path,
+                                                           monkeypatch):
+        path = tmp_path / "cfg.ini"
+        path.write_text("# my config\n[ORGS]\nfirst-org\n\n"
+                        "[CANVAS]\nurl = u\ntoken = t\n")
+        monkeypatch.setattr(core, "config_ini", str(path))
+        core.add_org_to_config("second-org")
+        text = path.read_text()
+        assert "# my config" in text
+        assert "url = u" in text
+        assert core.configured_orgs() == ["second-org", "first-org"]
+
+    def test_add_org_appends_the_section_to_a_canvas_only_config(
+            self, tmp_path, monkeypatch):
+        path = tmp_path / "cfg.ini"
+        path.write_text("[CANVAS]\nurl = u\ntoken = t\n")
+        monkeypatch.setattr(core, "config_ini", str(path))
+        core.add_org_to_config("new-org")
+        assert core.configured_orgs() == ["new-org"]
+        assert core.load_config().get("CANVAS", "url") == "u"
+
     def test_warns_on_a_malformed_config_instead_of_ignoring_it(
             self, tmp_path, monkeypatch, capsys):
         # a typo'd section header must not silently read as "no config"
         path = tmp_path / "cfg.ini"
-        path.write_text("[CANVAS]\nurl = u\ntoken = t\n\n[COURSE]\nX = org\n")
+        path.write_text("[ORG]\nsome-org\n")
         monkeypatch.setattr(core, "config_ini", str(path))
 
         assert core.load_config(required=False) is None
-        assert "missing [COURSES] section" in capsys.readouterr().err
+        assert "no [CANVAS] or [ORGS] section" in capsys.readouterr().err
 
         with pytest.raises(SystemExit) as exc:
             core.load_config(required=True)
@@ -137,13 +199,3 @@ class TestLoadConfig:
         assert "ignoring config" in capsys.readouterr().err
 
 
-class TestResolveCourseMapping:
-    def test_maps_org_back_to_canvas_partial(self, config_file):
-        config = core.load_config()
-        assert core.resolve_course_mapping(config, ORG) == "CMPE-195A"
-
-    def test_exits_2_when_unmapped(self, config_file):
-        config = core.load_config()
-        with pytest.raises(SystemExit) as exc:
-            core.resolve_course_mapping(config, "unknown-org")
-        assert exc.value.code == 2

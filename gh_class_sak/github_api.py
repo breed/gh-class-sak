@@ -1,4 +1,5 @@
 import sys
+from collections import Counter
 
 from github import GithubException
 
@@ -46,6 +47,44 @@ def find_assignment_repos(repos, prefix):
     if not matched:
         matched = [r for r in repos if lowered in r.name.lower()]
     return [(team_name(r.name, prefix), r) for r in matched]
+
+
+def infer_assignment_prefixes(repo_names):
+    """guess assignment prefixes from repo names shaped as PREFIX-TEAM.
+
+    the migration path for orgs left behind by GitHub Classroom, which named
+    repos this way. a candidate is any leading run of '-' separated parts
+    shared by at least two repos. two rules then cut the candidates down to
+    plausible assignments:
+
+    - if a longer candidate covers exactly the same repos, it is more specific
+      and wins ("hw1" loses to "hw1-part2" when every hw1 repo is hw1-part2)
+    - once a prefix is accepted, anything extending it is a team naming pattern
+      rather than a separate assignment ("group-project-team" under
+      "group-project"), so it is suppressed
+    """
+    counts = Counter()
+    for name in repo_names:
+        parts = name.split("-")
+        for k in range(1, len(parts)):
+            counts["-".join(parts[:k])] += 1
+
+    shared = {p: c for p, c in counts.items() if c >= 2}
+
+    # keep the most specific prefix of each equal-coverage chain
+    specific = {p: c for p, c in shared.items()
+                if not any(o != p and o.startswith(p + "-") and shared[o] == c
+                           for o in shared)}
+
+    # broadest first, so an assignment claims its own sub-patterns
+    accepted = []
+    for prefix, count in sorted(specific.items(), key=lambda pc: (-pc[1], len(pc[0]), pc[0])):
+        if any(prefix.startswith(a + "-") for a, _ in accepted):
+            continue
+        accepted.append((prefix, count))
+
+    accepted.sort(key=lambda pc: pc[0])
+    return accepted
 
 
 def split_collaborators(repo):

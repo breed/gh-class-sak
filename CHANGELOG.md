@@ -1,5 +1,42 @@
 # Changelog
 
+## v0.8.0
+
+The config file no longer carries the course list — classroom-meta *is* the course
+list. The config keeps only the GitHub orgs and the Canvas credentials.
+
+Breaking changes:
+
+- `[COURSES]` is gone. List your orgs in a new `[ORGS]` section, one per line, and
+  delete the mappings. Course names keep working: resolution matches the classroom
+  argument against the configured org names first (no meta lookup), then against the
+  classroom directories in those orgs' classroom-meta repos. Ambiguity is an error
+  listing the candidates.
+- `meta init` takes the new course's literal name; the org comes from `--org` (matched
+  partially against `[ORGS]`), from the single configured org, or — with no config —
+  from the CLASSROOM argument itself, as before. Several configured orgs without
+  `--org` is an error.
+- naming an org that hosts several classrooms is reported as ambiguous by listing the
+  org's classroom directories (the `[COURSES]` mapping used to arbitrate this).
+
+New:
+
+- `gh-class-sak help-me-setup` explains the config file (printing a template when none
+  exists) and verifies the whole setup: the github token, each configured org and its
+  classroom-meta repo, and the canvas credentials. Read-only; exit 1 when something
+  needs attention.
+- `gh-class-sak migrate-github-classroom ORG` imports an org left behind by GitHub
+  Classroom: assignments inferred from the `ASSIGNMENT-TEAM` repo names (one-off repos
+  ignored and listed), then an interactive pass asks which course each assignment
+  belongs to (blank skips it) and what to call it — Classroom kept no course marker, so
+  only you can attribute them. Each row records the team, its collaborators as
+  students, and the repo's url and permanent id — except staff: a login with write on
+  every one of a classroom's repos is recorded in the `tas` file instead of the
+  `STUDENTS` columns, and re-running the migration repairs rows imported before that
+  detection existed. The org is added to `[ORGS]` when missing (the config file is
+  created if needed). Merges like `meta assign` — recorded repos are never clobbered —
+  under the standard dryrun/no-dryrun pair.
+
 ## v0.7.0
 
 The classroom-meta repo is now required. The prefix-inference workarounds for orgs

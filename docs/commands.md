@@ -6,12 +6,59 @@ page is replayed byte-for-byte against the invented demo course by the test suit
 
 New here? Start with [Getting started](getting-started.md).
 
+## The classroom argument
+
+Every command's `CLASSROOM` argument names either a **GitHub org** or a **classroom**.
+An org name (or a partial matching exactly one `[ORGS]` entry) wins first, without
+touching any meta repo. Otherwise the configured orgs' classroom-meta repos are
+searched for a classroom directory matching the name — so Canvas course names work.
+Ambiguity is an error listing the candidates; with no config the argument is used
+verbatim as an org name.
+
+## help-me-setup
+
+Explain the config file and verify the whole setup: the GitHub token, the config's
+`[ORGS]` (each org's reachability and classroom-meta repo, with its classrooms), and
+the `[CANVAS]` credentials. With no config file it prints a template to start from.
+Read-only; exits 0 when everything checks out, 1 when something needs attention.
+
+```bash
+gh-class-sak help-me-setup
+```
+
+## migrate-github-classroom
+
+Import an org left behind by GitHub Classroom. Classroom named repos
+`ASSIGNMENT-TEAM` but kept no record of which course an assignment belonged to — orgs
+often hosted several — so this is interactive: it scans the org's repos, infers the
+assignments from shared name prefixes (the most specific prefix wins, and one-off repos
+are ignored and listed), then asks, per assignment, **which course it belongs to**
+(blank skips it) and **what to call it** (default: the inferred prefix). Each imported
+row carries the team name, the repo's collaborators as the students, and the repo's url
+and **permanent id** — so every imported repo is rename-proof from day one.
+
+Staff are detected, not imported as students: a login with write access on **every** one
+of a classroom's repos (Classroom set TAs up exactly like that) is left out of the
+`STUDENTS` columns and recorded in the classroom's `tas` file instead — where the next
+`meta apply` gives it team read and revokes the leftover per-repo write. Re-running the
+migration also repairs rows imported before this detection existed.
+
+```
+gh-class-sak migrate-github-classroom ORG [--dryrun/--no-dryrun]
+```
+
+When the org isn't in the config's `[ORGS]` yet, it is added (the config file is created
+if needed). Like every mutating command it previews by default — the questions are asked
+first, then the plan prints as `would …` lines. Re-importing **never clobbers** a
+recorded repo; rows merge like `meta assign`, so running it again after Classroom's
+sunset picked up stragglers only adds what's new.
+
 ## classrooms
 
 List each classroom in an org and its assignments, straight from the org's
 [classroom-meta repo](#the-classroom-meta-repo) — one line per assignment tsv. Pass the
-org (or a course name from the config) as the argument; with no argument, every org
-mapped in the `[COURSES]` section of the config is listed. Orgs are never discovered from
+org (or a course name) as the argument; with no argument, every org listed in the
+`[ORGS]` section of the config is scanned. Orgs are never discovered from
 your token — your account may belong to orgs with thousands of unrelated repos, and
 scanning them would take forever.
 
@@ -137,7 +184,12 @@ which is how a repo stays tracked even after students rename it.
 ### meta init
 
 Create the classroom-meta repo (when the org doesn't have one yet) and record a
-classroom. With a Canvas config, the `tas` file is seeded from the course's TA and
+classroom. The argument is the **new course's name**, taken literally — partials only
+ever resolve classrooms that already exist. The org comes from `--org` (matched
+partially against `[ORGS]`), from the single configured org, or — with no config — from
+the argument itself; with several orgs configured and no `--org`, it's an error.
+
+With a Canvas config, the `tas` file is seeded from the course's TA and
 teacher enrollments. `--prefix` is optional — set one when several classrooms share an
 org, so their repo names can't collide. Like every mutating command, it previews by
 default; in an org with no classroom-meta repo yet, a

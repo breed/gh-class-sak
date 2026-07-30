@@ -23,16 +23,16 @@ def classrooms(classroom):
     gh = get_github()
 
     if classroom:
-        org, _partial = resolve_classroom(classroom)
+        org, _partial = resolve_classroom(gh, classroom)
         orgs = [org]
     else:
         # orgs are never discovered from the token: enumerating every org the
         # user belongs to means paginating giant unrelated orgs (e.g. apache)
         orgs = configured_orgs()
         if not orgs:
-            error("no classroom given and no configured courses found")
-            error(f"pass a classroom (github org), or map courses to orgs in "
-                  f"the [COURSES] section of {config_ini}")
+            error("no classroom given and no configured orgs found")
+            error(f"pass a classroom (github org), or list orgs in "
+                  f"the [ORGS] section of {config_ini}")
             sys.exit(2)
 
     missing = False

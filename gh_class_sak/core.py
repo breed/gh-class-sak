@@ -13,16 +13,11 @@ config_ini = click.get_app_dir("gh-class-sak.ini")
 _token = None
 
 
-def get_token():
-    global _token
-    if _token:
-        return _token
-
+def probe_token():
+    """(token, source) without exiting; (None, None) when nothing is found."""
     token = os.environ.get("GH_TOKEN")
     if token:
-        _token = token
-        return token
-
+        return token, "GH_TOKEN environment variable"
     try:
         result = subprocess.run(
             ["gh", "auth", "token"],
@@ -30,11 +25,22 @@ def get_token():
         )
         token = result.stdout.strip()
         if token:
-            _token = token
-            return token
+            return token, "gh auth token"
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
             FileNotFoundError):
         pass
+    return None, None
+
+
+def get_token():
+    global _token
+    if _token:
+        return _token
+
+    token, _source = probe_token()
+    if token:
+        _token = token
+        return token
 
     error("no github token found. either:")
     error("  - set GH_TOKEN environment variable")
@@ -115,17 +121,18 @@ def normalize_course_name(name):
 def load_config(required=True):
     """read the ini config; return None instead of exiting when not required.
 
-    a missing file is normal (the canvas features are optional). a file that
-    exists but doesn't parse or lacks a section is a mistake, so it is at
-    least warned about rather than silently treated as absent.
+    a missing file is normal (the config is optional). a file that exists but
+    doesn't parse or contains none of the known sections is a mistake, so it
+    is at least warned about rather than silently treated as absent.
     """
     if not os.path.exists(config_ini):
         if not required:
             return None
         error(f"config file not found: {config_ini}")
-        error("create it with [CANVAS] and [COURSES] sections")
+        error("create it with an [ORGS] section (one github org per line)"
+              " and, for the canvas features, a [CANVAS] section")
         sys.exit(1)
-    config = ConfigParser()
+    config = ConfigParser(allow_no_value=True)
     config.optionxform = str  # preserve key case
     try:
         config.read(config_ini)
@@ -135,18 +142,23 @@ def load_config(required=True):
             return None
         error(f"cannot parse {config_ini}: {exc}")
         sys.exit(1)
-    for section in ("CANVAS", "COURSES"):
-        if section not in config:
-            if not required:
-                warn(f"ignoring config {config_ini}: missing [{section}] section")
-                return None
-            error(f"missing [{section}] section in {config_ini}")
-            sys.exit(1)
+    if not any(section in config for section in ("CANVAS", "ORGS")):
+        if not required:
+            warn(f"ignoring config {config_ini}: no [CANVAS] or [ORGS] section")
+            return None
+        error(f"no [CANVAS] or [ORGS] section in {config_ini}")
+        sys.exit(1)
     return config
 
 
 def get_config():
     return load_config(required=True)
+
+
+def has_canvas_config():
+    """whether the canvas features can work: a config with a [CANVAS] section."""
+    config = load_config(required=False)
+    return config is not None and "CANVAS" in config
 
 
 def get_canvas():
@@ -167,75 +179,98 @@ def _names_overlap(a, b):
 
 
 def configured_orgs(config=None):
-    """the GitHub orgs listed as [COURSES] values, in config order."""
+    """the GitHub orgs listed in the [ORGS] section, one per line, in order."""
     if config is None:
         config = load_config(required=False)
-    if config is None:
+    if config is None or "ORGS" not in config:
         return []
     seen = set()
     orgs = []
-    for _, org in config.items("COURSES"):
+    for org in config.options("ORGS"):
         if org not in seen:
             seen.add(org)
             orgs.append(org)
     return orgs
 
 
-def resolve_classroom(name):
-    """resolve a partial classroom name to (github org, canvas course partial).
+def add_org_to_config(org):
+    """append an org to the [ORGS] section, creating file or section as needed.
 
-    matches either side of a [COURSES] mapping, so both the canvas course
-    partial and the org name work. several courses may share one org, in which
-    case naming the org alone leaves the canvas partial undetermined and it
-    comes back None. falls back to treating the argument as a literal org name,
-    so the tool works with no config at all.
+    a text-level edit rather than ConfigParser.write, so comments and layout
+    in a hand-maintained config survive.
     """
-    config = load_config(required=False)
-    if config is None:
-        return name, None
+    text = ""
+    if os.path.exists(config_ini):
+        with open(config_ini) as f:
+            text = f.read()
+    lines = text.splitlines()
+    stripped = [line.strip() for line in lines]
+    if "[ORGS]" in stripped:
+        lines.insert(stripped.index("[ORGS]") + 1, org)
+        text = "\n".join(lines) + "\n"
+    else:
+        if text and not text.endswith("\n"):
+            text += "\n"
+        if text:
+            text += "\n"
+        text += f"[ORGS]\n{org}\n"
+    parent = os.path.dirname(config_ini)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with open(config_ini, "w") as f:
+        f.write(text)
 
-    entries = [(canvas_partial, org) for canvas_partial, org in config.items("COURSES")
-               if _names_overlap(name, org) or _names_overlap(name, canvas_partial)]
-    if not entries:
-        return name, None
 
-    orgs = []
-    for _, org in entries:
-        if org not in orgs:
-            orgs.append(org)
-    if len(orgs) > 1:
-        exact = [org for org in orgs if org.lower() == name.lower()]
+def match_org(name, orgs):
+    """the configured org a partial name means, or None when nothing matches.
+
+    an exact (case-insensitive) match beats partial overlaps; several partial
+    matches with no exact winner are an error.
+    """
+    matched = [org for org in orgs if _names_overlap(name, org)]
+    if len(matched) > 1:
+        exact = [org for org in matched if org.lower() == name.lower()]
         if len(exact) != 1:
-            error(f'ambiguous classroom "{name}", matches several orgs in {config_ini}:')
-            for org in orgs:
+            error(f'"{name}" matches several orgs in {config_ini}:')
+            for org in matched:
                 error(f"    {org}")
             sys.exit(2)
-        orgs = exact
-
-    org = orgs[0]
-    partials = [c for c, o in entries if o == org]
-    return org, partials[0] if len(partials) == 1 else None
+        matched = exact
+    return matched[0] if matched else None
 
 
-def resolve_course_mapping(config, org):
-    """map a resolved GitHub org back to its Canvas course partial."""
-    matches = []
-    for canvas_partial, github_org in config.items("COURSES"):
-        if _names_overlap(org, github_org):
-            matches.append((canvas_partial, github_org))
-    if len(matches) == 0:
-        error(f'no course mapping found for org "{org}" in {config_ini}')
-        error("configured mappings:")
-        for k, v in config.items("COURSES"):
-            error(f"    {k} = {v}")
+def resolve_classroom(gh, name):
+    """resolve a classroom argument to (github org, classroom dir or None).
+
+    the argument names either a configured org or a classroom — a directory
+    in one of the configured orgs' classroom-meta repos, so the canvas course
+    name works too. an org match wins without touching any meta repo; the
+    classroom dir comes back None then, to be pinned later when needed. with
+    no configured orgs the argument is used verbatim as an org name.
+    """
+    orgs = configured_orgs()
+    if not orgs:
+        return name, None
+
+    org = match_org(name, orgs)
+    if org is not None:
+        return org, None
+
+    from gh_class_sak.meta_store import load_meta_classrooms
+
+    candidates = []
+    for org in orgs:
+        for classroom_dir in load_meta_classrooms(gh, org, get_token()):
+            if _names_overlap(name, classroom_dir):
+                candidates.append((org, classroom_dir))
+    if len(candidates) > 1:
+        error(f'ambiguous classroom "{name}", matches several classrooms:')
+        for org, classroom_dir in candidates:
+            error(f"    {org}: {classroom_dir}")
         sys.exit(2)
-    if len(matches) > 1:
-        error(f'"{org}" hosts several canvas courses, so the course is ambiguous:')
-        for k, v in matches:
-            error(f"    {k} = {v}")
-        error("name one of the courses instead of the org")
-        sys.exit(2)
-    return matches[0][0]
+    if candidates:
+        return candidates[0]
+    return name, None
 
 
 @click.group()
