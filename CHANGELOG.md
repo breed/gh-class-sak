@@ -21,6 +21,10 @@ Breaking changes:
 
 New:
 
+- a startup warning (stderr, terminals only — pipes and scripts stay clean) says this
+  is beta code replacing the departing GitHub Classroom; when no orgs are configured a
+  second warning notes that, unlike the pre-1.0 versions, the program replaces GitHub
+  Classroom rather than working with it, and points at `help-me-setup`
 - `gh-class-sak help-me-setup` explains the config file (printing a template when none
   exists) and verifies the whole setup: the github token, each configured org and its
   classroom-meta repo, and the canvas credentials. Read-only; exit 1 when something

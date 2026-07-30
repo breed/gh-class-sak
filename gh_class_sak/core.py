@@ -273,7 +273,17 @@ def resolve_classroom(gh, name):
     return name, None
 
 
+def _interactive():
+    """warnings are for humans at a terminal, not for pipes or the test suite."""
+    return sys.stderr.isatty()
+
+
 @click.group()
 @click.version_option(version=version("gh-class-sak"), prog_name="gh-class-sak")
 def gh_class_sak():
-    pass
+    if not _interactive():
+        return
+    warn("this is beta code to replace github classroom, which is going away")
+    if not configured_orgs():
+        warn("unlike the pre-1.0 versions, this program replaces github classroom"
+             " rather than working with it — run: gh-class-sak help-me-setup")

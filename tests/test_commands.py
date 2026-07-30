@@ -294,6 +294,32 @@ class TestGitOps:
         assert clone_or_update(str(origin), dest) == "diverged"
 
 
+class TestStartupWarnings:
+    def test_beta_banner_shows_at_a_terminal(self, cli, config_file, monkeypatch):
+        from gh_class_sak import core
+        monkeypatch.setattr(core, "_interactive", lambda: True)
+        result = run(cli, "classrooms", ORG)
+        assert "beta code to replace github classroom" in result.output
+        # orgs are configured, so the replaces-not-works-with warning stays quiet
+        assert "pre-1.0" not in result.output
+
+    def test_missing_orgs_adds_the_replacement_warning(self, cli, no_config,
+                                                       monkeypatch):
+        from gh_class_sak import core
+        monkeypatch.setattr(core, "_interactive", lambda: True)
+        result = run(cli, "classrooms", ORG)
+        assert "beta code to replace github classroom" in result.output
+        assert ("unlike the pre-1.0 versions, this program replaces github classroom"
+                in result.output)
+        assert "help-me-setup" in result.output
+
+    def test_warnings_stay_out_of_piped_output(self, cli, no_config):
+        # CliRunner's streams are not ttys, like any pipe — the drift-tested
+        # docs fences depend on this staying true
+        result = run(cli, "classrooms", ORG)
+        assert "beta code" not in result.output
+
+
 @pytest.mark.parametrize("command", ["list", "members", "missing", "clone"])
 def test_every_repos_subcommand_reports_an_unknown_org(cli, no_config, command):
     result = run(cli, "repos", command, "no-such-org", "project")
