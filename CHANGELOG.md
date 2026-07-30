@@ -1,9 +1,14 @@
 # Changelog
 
-## v0.8.0
+## v1.0.0
 
-The config file no longer carries the course list — classroom-meta *is* the course
-list. The config keeps only the GitHub orgs and the Canvas credentials.
+The release that replaces GitHub Classroom — and the first one on PyPI since v0.2.1,
+so everything from v0.3.0 down was never published. If you are coming from the PyPI
+version, start with the [README](README.md) and `gh-class-sak help-me-setup`: the
+model changed completely when GitHub Classroom was discontinued.
+
+In this version: the config file no longer carries the course list — classroom-meta
+*is* the course list. The config keeps only the GitHub orgs and the Canvas credentials.
 
 Breaking changes:
 
