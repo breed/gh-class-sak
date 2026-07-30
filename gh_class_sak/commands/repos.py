@@ -231,7 +231,7 @@ def extract_github_username(profile):
     return None
 
 
-def _github_from_canvas_profiles(canvas, people):
+def _github_from_canvas_profiles(course, people):
     """Fill in each person's "github" from their Canvas profile, in parallel.
 
     Only Canvas is hit concurrently; the GitHub fallbacks below run serially
@@ -239,7 +239,7 @@ def _github_from_canvas_profiles(canvas, people):
     """
     def _fetch(uid):
         try:
-            return uid, extract_github_username(get_user_profile(canvas, uid))
+            return uid, extract_github_username(get_user_profile(course, uid))
         except Exception as exc:
             warn(f"failed to fetch canvas profile for {people[uid]['name']}: {exc}")
             return uid, None
@@ -298,12 +298,12 @@ def fetch_enrollment_data(room, canvas_ctx=None, gh=None, resolve_students=False
             }
         bucket[user_id]["section_ids"].add(section_id)
 
-    _github_from_canvas_profiles(canvas, instructors)
+    _github_from_canvas_profiles(course, instructors)
     if gh:
         _github_from_search(gh, instructors)
 
     if resolve_students:
-        _github_from_canvas_profiles(canvas, students)
+        _github_from_canvas_profiles(course, students)
 
     return {
         "students": list(students.values()),

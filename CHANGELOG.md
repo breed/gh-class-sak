@@ -2,6 +2,37 @@
 
 ## v1.0.1
 
+- `meta init` defaults a new classroom's `prefix` to the classroom argument (made
+  repo-name safe) — `meta init f26-cmpe-30` records `prefix = f26-cmpe-30`, so the
+  classroom's repos are namespaced by the course out of the box. `--prefix ""` opts
+  out, and a re-init never backfills a prefixless classroom (migrated directories may
+  embed the prefix in their assignment names)
+- identities are now written `EMAIL/GITHUBID`: both halves
+  (`joe@example.com/JoeDevExample`), email only (`joe@example.com/`), or GitHub id only
+  (`/JoeDevExample`). The syntax applies everywhere ids are recorded — tsv `STUDENTS`
+  columns, the `tas` file, Canvas-sourced rows (which now keep both halves), migration
+  output — and everywhere they are read: a `/githubid` half is used directly with no
+  lookups, an email-only identity resolves via Canvas then the GitHub search API.
+  Legacy bare entries still parse (an `@` means an email, anything else a GitHub id)
+- fix: Canvas profiles (the source of GitHub ids) are now fetched through the course —
+  `/courses/:id/users/:uid` — instead of the account-scoped `/users/:uid`, which most
+  installs restrict to admin-or-self and 404 for a teacher token. Previously every
+  profile but your own failed with "failed to fetch canvas profile", and GitHub ids
+  silently fell back to email search
+- `meta assign --from-canvas --assignment NAME` builds the table from the Canvas roster
+  instead of a file: one row per enrolled person — students, instructors, and TAs —
+  named by their GitHub-safe name (accents stripped, characters a repo name can't hold
+  become `-`), carrying their GitHub id from the Canvas profile or their email for the
+  usual resolution. `--canvas-group SET` makes it one row per group in that Canvas
+  group set, and records the set's name per assignment in `classroom.ini`
+  `[GROUP_SETS]`
+- `meta init --canvas-course NAME` records the Canvas course's name in
+  `classroom.ini`; Canvas lookups prefer it over the classroom directory name
+- `meta show` now checks the recorded state against the live org: every student in the
+  assignment tables carries a membership marker (✅ collaborator, 📧 invited but not
+  yet accepted, ❌ not a collaborator; a legend prints when markers appear), and a
+  `TAS TEAM` line reports whether the classroom's `<classroom>-tas` team matches the
+  `tas` file, listing missing and extra members
 - fix: assignment repos are matched by leading prefix only. The old substring
   fallback meant a prefixless classroom's `assignments` tsv matched every
   `…-assignments-…` repo in the org, listing other classes' repos under their full

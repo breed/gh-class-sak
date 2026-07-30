@@ -177,13 +177,16 @@ and **every `.tsv` file in it is an assignment**, named by its basename:
 classroom-meta/
   sp26_cmpe_195a/                  one directory per classroom
     classroom.ini                  [CLASSROOM] optional prefix, template, repo settings
-    tas                            one github login or email per line
+    tas                            one EMAIL/GITHUBID identity per line
     hw1.tsv                        one file per assignment: NAME  STUDENTS  REPO  REPO_ID
     project.tsv
 ```
 
 The tsv files are the heart of it. You supply the first two columns — `NAME` (the team
-suffix) and `STUDENTS` (the comma-joined emails or GitHub logins who get write access). A
+suffix) and `STUDENTS`: comma-joined **identities** in `EMAIL/GITHUBID` syntax —
+`joe@example.com/JoeDevExample` when both are known, `joe@example.com/` for email only
+(resolved to a GitHub id via Canvas and then the GitHub search API), `/JoeDevExample`
+for a bare GitHub id. A
 repo's default name joins the non-empty parts of classroom `prefix`, assignment, and
 `NAME` with dashes: with `prefix = sp26-195a`, row `team-1` of `hw1.tsv` becomes
 `sp26-195a-hw1-team-1`; with no prefix, just `hw1-team-1`. The tool fills in the last two
@@ -199,15 +202,19 @@ partially against `[ORGS]`), from the single configured org, or — with no conf
 the argument itself; with several orgs configured and no `--org`, it's an error.
 
 With a Canvas config, the `tas` file is seeded from the course's TA and
-teacher enrollments. `--prefix` is optional — set one when several classrooms share an
-org, so their repo names can't collide. Like every mutating command, it previews by
+teacher enrollments. `--prefix` defaults to the classroom argument itself (made
+repo-name safe), so a new classroom's repos are namespaced by its course name; pass
+`--prefix ""` to record none. Existing classrooms keep their recorded prefix — a
+re-init never backfills one. `--canvas-course NAME` records the Canvas
+course's name in `classroom.ini`, and the Canvas lookups use it from then on (otherwise
+they match on the classroom directory name). Like every mutating command, it previews by
 default; in an org with no classroom-meta repo yet, a
 `would create private ORG/classroom-meta` line comes first:
 
 ```console
-$ gh-class-sak meta init cs101-fall
+$ gh-class-sak meta init CS-101 --org cs101-fall
 no canvas config; seed the tas file by hand
-⚠️  would record cs101_fall: prefix=- tas=-
+⚠️  would record cs_101: prefix=CS-101 tas=-
 ```
 
 ### meta assign
@@ -216,8 +223,8 @@ Feed it a team table — just the two columns, emails and logins mixed freely:
 
 ```
 NAME       STUDENTS
-team-1     jane@sjsu.edu,msmith
-nightowls  rpatel,tk-codes
+team-1     jane@sjsu.edu/,/msmith
+nightowls  /rpatel,/tk-codes
 ```
 
 ```
@@ -231,6 +238,21 @@ email nothing can resolve is a loud error. Under `--no-dryrun` it creates each m
 repo (privately, from the template when `classroom.ini` names one), records the URL and
 repo id, and grants the listed students push. Re-importing an updated table changes
 student lists but **never clobbers a recorded repo**.
+
+Instead of a file, `--from-canvas` builds the table from the Canvas roster
+(`--assignment` is required then, since there's no filename to name it):
+
+```
+gh-class-sak meta assign CLASSROOM --from-canvas --assignment hw1 [--canvas-group SET]
+```
+
+Without `--canvas-group`, everyone enrolled in the course — students, instructors, and
+TAs alike — gets a row: the `NAME` is the person's name made GitHub-safe (accents
+stripped, anything a repo name can't hold becomes `-`), and the `STUDENTS` entry is
+their `email/githubid` identity — both halves, as far as Canvas knows them. With `--canvas-group SET`, each **group** in that Canvas group set gets a
+row instead, its members drawn from the roster the same way — and the group set's name
+is recorded in `classroom.ini` under `[GROUP_SETS]` for the assignment. Everything else
+works exactly like a file import: merge, never-clobber, dryrun first.
 
 ### meta apply
 
@@ -279,8 +301,15 @@ API entirely; existing protection is never removed.
 
 ### meta show
 
-Print a classroom's recorded state: prefix, template, TAs, effective repo settings, and
-one table per assignment.
+Print a classroom's recorded state — prefix, template, TAs, effective repo settings, and
+one table per assignment — checked against the live org:
+
+- each student in the tables carries a membership marker for their repo: ✅ means
+  collaborator, 📧 means invited but not yet accepted, ❌ means not a collaborator at
+  all (rows whose repo isn't created yet stay unmarked; a legend prints whenever
+  markers appear)
+- a `TAS TEAM` line compares the classroom's `<classroom>-tas` team to the `tas` file:
+  `(matches tas)`, `(not created — run: meta apply)`, or the missing and extra members
 
 Once repos are recorded, `repos list`, `repos members`, `repos missing`, and `repos clone`
 all include them by id — so a renamed repo shows up under its original team name instead

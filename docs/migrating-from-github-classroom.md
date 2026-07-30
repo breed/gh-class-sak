@@ -15,7 +15,7 @@ hand-editable, diffable, and invisible to students:
 classroom-meta/
   cs_101/                          one directory per classroom
     classroom.ini                  [CLASSROOM] optional prefix, template, repo settings
-    tas                            one github login or email per line
+    tas                            one EMAIL/GITHUBID identity per line
     hw1.tsv                        one file per assignment: NAME  STUDENTS  REPO  REPO_ID
     project.tsv
 ```
@@ -53,7 +53,7 @@ project: 3 repos (team-1, nightowls, team-3)
   course for "project" (blank to skip): CS-101
   assignment name for "project" [project]:
 ⚠️  would add cs101-fall to [ORGS] in /home/you/.config/gh-class-sak.ini
-⚠️  would record cs_101 tas: ta-alice
+⚠️  would record cs_101 tas: /ta-alice
 ⚠️  would record cs_101/hw1: jdoe, rpatel
 ⚠️  would record cs_101/project: team-1, nightowls, team-3
 ⚠️  would create private cs101-fall/classroom-meta
@@ -67,7 +67,7 @@ re-run with `--no-dryrun`. What the import records:
   reconstructed as tsv rows with `REPO` and `REPO_ID` filled in, so a team renaming
   their repo can't hide it
 - **collaborators as the students** — each row's `STUDENTS` column is the repo's
-  write-access collaborators
+  write-access collaborators, recorded as `/githubid` identities
 - **TAs detected, not imported as students** — a login with write access on *every* one
   of a classroom's repos (exactly how Classroom set staff up) goes into the `tas` file
   instead of the `STUDENTS` columns

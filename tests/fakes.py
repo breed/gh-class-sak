@@ -74,10 +74,15 @@ class FakeBranch:
             kwargs.get("allow_force_pushes", False))
 
 
+class FakeInvitation:
+    def __init__(self, login):
+        self.invitee = FakeNamedUser(login)
+
+
 class FakeRepo:
     def __init__(self, org, name, collaborators=(), commits=(), commits_raise=False,
                  repo_id=None, clone_url=None, default_branch="main", has_branch=True,
-                 protection_403=False):
+                 protection_403=False, invitations=()):
         _repo_id_counter[0] += 1
         self.id = repo_id if repo_id is not None else _repo_id_counter[0]
         self.name = name
@@ -93,6 +98,10 @@ class FakeRepo:
         self._protection = None
         self._protection_403 = protection_403
         self.protection_log = []
+        self._invitations = [FakeInvitation(login) for login in invitations]
+
+    def get_pending_invitations(self):
+        return list(self._invitations)
 
     def get_branch(self, name):
         if not self._has_branch or name != self.default_branch:
@@ -282,9 +291,15 @@ class FakeCourse:
         self.id = id
         self.name = name
         self._categories = list(categories)
+        self._canvas = None  # wired up by FakeCanvas
 
     def get_group_categories(self):
         return list(self._categories)
+
+    def get_user(self, user_id):
+        # the course-scoped user lookup teachers are allowed
+        return _FakeCanvasProfileHolder(
+            self._canvas._profiles.get(str(user_id), {}))
 
 
 class FakeProfile(dict):
@@ -296,6 +311,8 @@ class FakeCanvas:
         self._courses = list(courses)
         self._enrollments = list(enrollments)
         self._profiles = profiles or {}
+        for course in self._courses:
+            course._canvas = self
 
     def get_courses(self, enrollment_type=None):
         return list(self._courses) if enrollment_type == "teacher" else []
@@ -313,7 +330,10 @@ class FakeCanvas:
         }
 
     def get_user(self, user_id):
-        return _FakeCanvasProfileHolder(self._profiles.get(str(user_id), {}))
+        # the account-scoped /users/:id is admin-or-self on real installs
+        # (SJSU's canvas 404s it for teacher tokens); nothing in the tool may
+        # rely on it
+        raise Exception("Not Found: /users/:id is admin-or-self")
 
 
 class _FakeCanvasProfileHolder:

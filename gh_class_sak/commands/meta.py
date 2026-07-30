@@ -5,7 +5,13 @@ import sys
 import click
 
 from gh_class_sak import meta_store as ms
-from gh_class_sak.commands.repos import Classroom, fetch_enrollment_data, print_table
+from gh_class_sak.commands.repos import (
+    Classroom,
+    fetch_canvas_groups,
+    fetch_enrollment_data,
+    normalize_name,
+    print_table,
+)
 from gh_class_sak.core import (
     add_org_to_config,
     config_ini,
@@ -32,8 +38,10 @@ from gh_class_sak.github_api import (
     get_org_repo,
     get_repo_by_id,
     get_team,
+    github_safe_name,
     infer_assignment_prefixes,
     list_org_repos,
+    pending_invitees,
     protect_default_branch,
     read_default_branch_protection,
     remove_collaborator,
@@ -134,8 +142,10 @@ def _load_classroom(checkout, classroom):
 
 
 def _ini_settings(data):
-    """a classroom's raw repo-setting keys, for passing back through save_classroom."""
-    return {key: data[key] for key in REPO_SETTING_KEYS}
+    """a classroom's raw classroom.ini keys, for passing back through
+    save_classroom."""
+    keys = REPO_SETTING_KEYS + ("canvas_course", "group_sets")
+    return {key: data[key] for key in keys}
 
 
 def _make_resolver(gh, org, course_partial):
@@ -158,10 +168,13 @@ def _make_resolver(gh, org, course_partial):
         return canvas_map.get(email.lower())
 
     def resolve(entry):
-        if "@" not in entry:
-            return entry
+        email, github = ms.parse_identity(entry)
+        if github:
+            return github
+        if not email:
+            return None
         if entry not in cache:
-            cache[entry] = _canvas_lookup(entry) or resolve_email_to_username(gh, entry)
+            cache[entry] = _canvas_lookup(email) or resolve_email_to_username(gh, email)
         return cache[entry]
 
     return resolve
@@ -323,11 +336,14 @@ def _pick_org(org_option, classroom):
               help="the github org hosting the classroom"
                    " (required when several orgs are configured)")
 @click.option("--prefix", default=None,
-              help="the repo-name prefix for the classroom's repos (optional)")
+              help="the repo-name prefix for the classroom's repos"
+                   ' (default: the classroom argument; --prefix "" for none)')
 @click.option("--template", default=None,
               help="OWNER/NAME template repo for created assignment repos")
+@click.option("--canvas-course", default=None,
+              help="the canvas course name to record in classroom.ini")
 @dryrun_option
-def meta_init(classroom, org, prefix, template, dryrun):
+def meta_init(classroom, org, prefix, template, canvas_course, dryrun):
     """Create the classroom-meta repo and record CLASSROOM (a course name) in it."""
     gh = get_github()
     org = _pick_org(org, classroom)
@@ -338,16 +354,38 @@ def meta_init(classroom, org, prefix, template, dryrun):
 
     if prefix is None and existing:
         prefix = existing["prefix"]
+    elif prefix is None:
+        # a new classroom namespaces its repos by its own name; migrated
+        # classrooms keep whatever they recorded (their assignment names may
+        # already carry the prefix), so this only fires for new directories
+        prefix = github_safe_name(classroom)
     if template is None and existing:
         template = existing["template"]
+    if canvas_course is None and existing:
+        canvas_course = existing["canvas_course"]
 
     tas = list(existing["tas"]) if existing else []
     if has_canvas_config():
-        data = fetch_enrollment_data(Classroom(org, classroom_dir))
+        known_emails, known_githubs = set(), set()
+        for entry in tas:
+            known_email, known_github = ms.parse_identity(entry)
+            if known_email:
+                known_emails.add(known_email.lower())
+            if known_github:
+                known_githubs.add(known_github.lower())
+        data = fetch_enrollment_data(Classroom(org, canvas_course or classroom_dir))
         for inst in data["instructors"]:
-            entry = inst.get("github") or inst.get("email")
-            if entry and entry not in tas:
-                tas.append(entry)
+            email, github = inst.get("email"), inst.get("github")
+            if not email and not github:
+                continue
+            if (github and github.lower() in known_githubs) or \
+                    (email and email.lower() in known_emails):
+                continue
+            tas.append(ms.format_identity(email, github))
+            if email:
+                known_emails.add(email.lower())
+            if github:
+                known_githubs.add(github.lower())
     elif not tas:
         warn("no canvas config; seed the tas file by hand")
 
@@ -359,6 +397,7 @@ def meta_init(classroom, org, prefix, template, dryrun):
         _perform(dryrun, f"create private {org}/{ms.META_REPO_NAME}", _create_meta, actions)
 
     settings = _ini_settings(existing) if existing else {}
+    settings["canvas_course"] = canvas_course
 
     def _write():
         checkout_now = ms.meta_checkout_dir(org)
@@ -369,14 +408,59 @@ def meta_init(classroom, org, prefix, template, dryrun):
     _perform(dryrun,
              f"record {classroom_dir}: prefix={prefix or '-'}"
              + (f" template={template}" if template else "")
+             + (f" canvas_course={canvas_course}" if canvas_course else "")
              + f" tas={','.join(tas) or '-'}",
              _write, actions)
+
+
+def _mark_students(row, repo):
+    """the row's students, each marked with its live repo membership:
+    ✅ collaborator, 📧 invited but not yet accepted, ❌ neither."""
+    if repo is None:
+        return ",".join(row["students"]) or ms.EMPTY
+    collaborators = {c.login.lower() for c in repo.get_collaborators()}
+    invited = {login.lower() for login in pending_invitees(repo)}
+    cells = []
+    for student in row["students"]:
+        _email, github = ms.parse_identity(student)
+        lowered = (github or student).lower()
+        if lowered in collaborators:
+            cells.append(f"\N{WHITE HEAVY CHECK MARK}{student}")
+        elif lowered in invited:
+            cells.append(f"\N{E-MAIL SYMBOL}{student}")
+        else:
+            cells.append(f"\N{CROSS MARK}{student}")
+    return ",".join(cells) or ms.EMPTY
+
+
+def _tas_team_line(gh, org, classroom_dir, configured_tas):
+    """how the classroom's tas team compares to the configured tas file."""
+    name = tas_team_name(classroom_dir)
+    team = get_team(gh, org, name)
+    if team is None:
+        return f"TAS TEAM  {name} (not created — run: meta apply)"
+    members = {m.login.lower() for m in team.get_members()}
+    configured = {}
+    for entry in configured_tas:
+        _email, github = ms.parse_identity(entry)
+        configured[(github or entry).lower()] = entry
+    missing = sorted(entry for key, entry in configured.items()
+                     if key not in members)
+    extra = sorted(members - set(configured))
+    if not missing and not extra:
+        return f"TAS TEAM  {name} (matches tas)"
+    parts = []
+    if missing:
+        parts.append("missing: " + ", ".join(missing))
+    if extra:
+        parts.append("extra: " + ", ".join(extra))
+    return f"TAS TEAM  {name} ({'; '.join(parts)})"
 
 
 @meta.command("show")
 @click.argument("classroom")
 def meta_show(classroom):
-    """Show a classroom's recorded state."""
+    """Show a classroom's recorded state, checked against the live org."""
     gh = get_github()
     org, partial = resolve_classroom(gh, classroom)
     _repo, checkout = _open_meta(gh, org)
@@ -389,31 +473,114 @@ def meta_show(classroom):
     if data["template"]:
         output(f"TEMPLATE  {data['template']}")
     output(f"TAS       {','.join(data['tas']) or '-'}")
+    output(_tas_team_line(gh, org, classroom_dir, data["tas"]))
     output(f"SETTINGS  protection={protection}"
            f" linear_history={str(linear_history).lower()}"
            f" force_push={str(force_push).lower()}")
+
+    by_id = {r.id: r for r in list_org_repos(gh, org)}
     if not data["assignments"]:
         output("")
         output("(no assignments)")
+    marked = False
     for name, rows in data["assignments"].items():
+        table = []
+        for row in rows:
+            repo = None
+            if row["repo_id"] is not None:
+                repo = by_id.get(row["repo_id"]) or get_repo_by_id(gh, row["repo_id"])
+                if repo is None:
+                    warn(f"recorded repo for {row['name']}"
+                         f" (id {row['repo_id']}) is gone")
+            students = _mark_students(row, repo)
+            marked = marked or students != (",".join(row["students"]) or ms.EMPTY)
+            table.append([row["name"], students,
+                          row["repo"] or ms.EMPTY,
+                          ms.EMPTY if row["repo_id"] is None else str(row["repo_id"])])
         output("")
         output(f"ASSIGNMENT {name}")
-        print_table(list(ms.STUDENTS_HEADERS),
-                    [[row["name"],
-                      ",".join(row["students"]) or ms.EMPTY,
-                      row["repo"] or ms.EMPTY,
-                      ms.EMPTY if row["repo_id"] is None else str(row["repo_id"])]
-                     for row in rows])
+        print_table(list(ms.STUDENTS_HEADERS), table)
+    if marked:
+        output("")
+        output("markers: \N{WHITE HEAVY CHECK MARK} collaborator"
+               "   \N{E-MAIL SYMBOL} invited, not yet accepted"
+               "   \N{CROSS MARK} not a collaborator")
+
+
+def _rows_from_canvas(room, canvas_group, unresolvable):
+    """assignment rows built from the canvas roster.
+
+    without a group set: one row per enrolled person — students, instructors,
+    and TAs alike — named by their github-safe name, carrying their github id
+    (or email, to be resolved later). with one: one row per group in the set.
+    """
+    enrollment = fetch_enrollment_data(room, resolve_students=True)
+    people = enrollment["students"] + enrollment["instructors"]
+
+    def _entry(person):
+        email, github = person.get("email"), person.get("github")
+        if not email and not github:
+            error(f'no github id or email in canvas for "{person.get("name")}"')
+            unresolvable.append(person.get("name"))
+            return None
+        return ms.format_identity(email, github)
+
+    if canvas_group is None:
+        rows = []
+        for person in people:
+            entry = _entry(person)
+            if entry:
+                rows.append({"name": github_safe_name(person["name"]),
+                             "students": [entry], "repo": None, "repo_id": None})
+        return rows
+
+    by_name = {normalize_name(p["name"]): p for p in people if p.get("name")}
+    rows = []
+    for group in fetch_canvas_groups(room, canvas_group):
+        entries = []
+        for member in group["members"]:
+            person = by_name.get(normalize_name(member))
+            if person is None:
+                error(f'cannot find an enrollment for group member "{member}"')
+                unresolvable.append(member)
+                continue
+            entry = _entry(person)
+            if entry:
+                entries.append(entry)
+        rows.append({"name": github_safe_name(group["name"]),
+                     "students": entries, "repo": None, "repo_id": None})
+    return rows
 
 
 @meta.command("assign")
 @click.argument("classroom")
-@click.argument("table_file", type=click.File("r"))
+@click.argument("table_file", type=click.File("r"), required=False)
 @click.option("--assignment", default=None,
-              help="assignment name (default: the table file's basename)")
+              help="assignment name (default: the table file's basename;"
+                   " required with --from-canvas)")
+@click.option("--from-canvas", is_flag=True,
+              help="build the table from the canvas roster instead of a file")
+@click.option("--canvas-group", default=None,
+              help="with --from-canvas: one row per group in this canvas group set")
 @dryrun_option
-def meta_assign(classroom, table_file, assignment, dryrun):
+def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group, dryrun):
     """Import a NAME + STUDENTS table as an assignment and create its repos."""
+    if from_canvas and table_file is not None:
+        error("--from-canvas replaces the table file; pass one or the other")
+        sys.exit(2)
+    if not from_canvas and table_file is None:
+        error("pass a table file, or --from-canvas to build one from the roster")
+        sys.exit(2)
+    if canvas_group and not from_canvas:
+        error("--canvas-group only makes sense with --from-canvas")
+        sys.exit(2)
+    if from_canvas and not assignment:
+        error("--assignment is required with --from-canvas")
+        sys.exit(2)
+    if from_canvas and not has_canvas_config():
+        error(f"--from-canvas needs a [CANVAS] section in {config_ini}")
+        sys.exit(2)
+
     gh = get_github()
     org, partial = resolve_classroom(gh, classroom)
     _repo, checkout = _open_meta(gh, org)
@@ -426,20 +593,34 @@ def meta_assign(classroom, table_file, assignment, dryrun):
     name = assignment or os.path.splitext(os.path.basename(table_file.name))[0]
     _check_assignment_name(name)
 
-    incoming = ms.parse_students_tsv(table_file.read())
+    actions = []
+    unresolvable = []
+    group_set_changed = False
+    course = partial or data["canvas_course"] or classroom_dir
+    if from_canvas:
+        incoming = _rows_from_canvas(Classroom(org, course), canvas_group,
+                                     unresolvable)
+        if canvas_group and data["group_sets"].get(name) != canvas_group:
+            group_set_changed = True
+            data["group_sets"] = {**data["group_sets"], name: canvas_group}
+            _perform(dryrun, f"record {name} group set: {canvas_group}",
+                     lambda: None, actions)
+    else:
+        incoming = ms.parse_students_tsv(table_file.read())
+
     merged, changed_names = ms.merge_rows(data["assignments"].get(name, []), incoming)
     data["assignments"][name] = merged
     data["assignments"] = dict(sorted(data["assignments"].items()))
 
-    actions = []
     if changed_names:
         _perform(dryrun, f"record {name} rows: {', '.join(changed_names)}",
                  lambda: None, actions)
 
-    resolve = _make_resolver(gh, org, partial or classroom_dir)
+    resolve = _make_resolver(gh, org, course)
     changed, unresolved = _realize_classroom(gh, org, data, resolve, dryrun, actions)
+    unresolved = unresolvable + unresolved
 
-    if not dryrun and (changed or changed_names):
+    if not dryrun and (changed or changed_names or group_set_changed):
         ms.save_classroom(checkout, classroom_dir, data["prefix"], data["template"],
                           tas=data["tas"], assignments=data["assignments"],
                           **_ini_settings(data))
@@ -517,7 +698,7 @@ def meta_apply(classroom, dryrun):
 
     for classroom_dir in classroom_dirs:
         data = _load_classroom(checkout, classroom_dir)
-        resolve = _make_resolver(gh, org, classroom_dir)
+        resolve = _make_resolver(gh, org, data["canvas_course"] or classroom_dir)
         desired = ms.effective_repo_settings(data)
 
         # 1. realize rows that don't have a repo yet (hand-added ones included)
@@ -670,7 +851,13 @@ def migrate_github_classroom(org, dryrun):
             common = set.intersection(*(set(m) for m in members_of.values()))
             tas_detected = sorted(common)
         tas = list(existing["tas"]) if existing else []
-        new_tas = [login for login in tas_detected if login not in tas]
+        known_githubs = set()
+        for entry in tas:
+            _email, github = ms.parse_identity(entry)
+            if github:
+                known_githubs.add(github.lower())
+        new_tas = [ms.format_identity(None, login) for login in tas_detected
+                   if login.lower() not in known_githubs]
         if new_tas:
             _perform(dryrun, f"record {classroom_dir} tas: {', '.join(new_tas)}",
                      lambda: None, actions)
@@ -680,7 +867,8 @@ def migrate_github_classroom(org, dryrun):
         for name, inferred_prefix, assignment_repos in entries:
             incoming = []
             for repo in assignment_repos:
-                students = [login for login in members_of[repo.full_name]
+                students = [ms.format_identity(None, login)
+                            for login in members_of[repo.full_name]
                             if login not in tas_detected]
                 # the team is the repo name minus the repo-name prefix the
                 # assignment was inferred from, whatever the assignment is

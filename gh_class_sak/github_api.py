@@ -1,4 +1,5 @@
 import sys
+import unicodedata
 from collections import Counter
 
 from github import GithubException
@@ -25,6 +26,21 @@ def list_org_repos(gh, org_name):
     except GithubException as exc:
         error(f'cannot list repos for org "{org_name}": {_exc_message(exc)}')
         sys.exit(2)
+
+
+def github_safe_name(name):
+    """a person's or group's name as a valid github repo-name fragment.
+
+    accented letters lose their accents, anything github won't take in a
+    repo name becomes "-", runs collapse, and the edges are trimmed.
+    """
+    ascii_name = unicodedata.normalize("NFKD", name)
+    ascii_name = "".join(ch for ch in ascii_name if not unicodedata.combining(ch))
+    safe = "".join(ch if (ch.isascii() and ch.isalnum()) or ch in "._-" else "-"
+                   for ch in ascii_name)
+    while "--" in safe:
+        safe = safe.replace("--", "-")
+    return safe.strip("-._") or "x"
 
 
 def team_name(repo_name, prefix):
@@ -244,6 +260,15 @@ def protect_default_branch(repo, protection, linear_history, force_push):
             return False
         raise
     return True
+
+
+def pending_invitees(repo):
+    """logins holding an unaccepted invitation to the repo."""
+    try:
+        return [inv.invitee.login for inv in repo.get_pending_invitations()
+                if inv.invitee is not None]
+    except GithubException:
+        return []
 
 
 def get_team(gh, org_name, slug):

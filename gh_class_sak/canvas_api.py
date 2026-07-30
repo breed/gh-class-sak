@@ -70,5 +70,11 @@ def graphql_enrollments(canvas, course_id):
     return nodes
 
 
-def get_user_profile(canvas, user_id):
-    return canvas.get_user(user_id).get_profile(include=["links"])
+def get_user_profile(course, user_id):
+    """a user's profile (with links), reached through the course.
+
+    the user object must come from the course — /courses/:id/users/:uid is
+    open to teachers, while the account-scoped /users/:uid that
+    Canvas.get_user() fetches is admin-or-self and 404s for everyone else.
+    """
+    return course.get_user(user_id).get_profile(include=["links"])

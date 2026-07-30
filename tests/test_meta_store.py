@@ -14,8 +14,19 @@ class TestClassroomIni:
         text = ms.serialize_classroom_ini("sp26-project", "ORG/Template")
         assert ms.parse_classroom_ini(text) == {
             "prefix": "sp26-project", "template": "ORG/Template",
-            "protection": None, "linear_history": None, "force_push": None,
+            "canvas_course": None, "protection": None,
+            "linear_history": None, "force_push": None, "group_sets": {},
         }
+
+    def test_round_trip_with_canvas_course_and_group_sets(self):
+        text = ms.serialize_classroom_ini(
+            "p", canvas_course="CMPE-195A",
+            group_sets={"project": "Project Groups", "hw1": "HW Pairs"})
+        parsed = ms.parse_classroom_ini(text)
+        assert parsed["canvas_course"] == "CMPE-195A"
+        assert parsed["group_sets"] == {"project": "Project Groups",
+                                        "hw1": "HW Pairs"}
+        assert ms.serialize_classroom_ini(**parsed) == text
 
     def test_round_trip_without_template(self):
         text = ms.serialize_classroom_ini("sp26-project")
@@ -120,6 +131,28 @@ class TestMergeRows:
                                           "repo": None, "repo_id": None}])
         assert changed == []
         assert merged == self.EXISTING
+
+
+class TestIdentitySyntax:
+    def test_both_halves(self):
+        assert ms.parse_identity("joe@example.com/JoeDev") \
+            == ("joe@example.com", "JoeDev")
+
+    def test_email_only(self):
+        assert ms.parse_identity("joe@example.com/") == ("joe@example.com", None)
+
+    def test_github_only(self):
+        assert ms.parse_identity("/JoeDev") == (None, "JoeDev")
+
+    def test_legacy_entries_still_parse(self):
+        assert ms.parse_identity("joe@example.com") == ("joe@example.com", None)
+        assert ms.parse_identity("JoeDev") == (None, "JoeDev")
+
+    def test_format_round_trips(self):
+        for email, github in (("joe@example.com", "JoeDev"),
+                              ("joe@example.com", None), (None, "JoeDev")):
+            assert ms.parse_identity(ms.format_identity(email, github)) \
+                == (email, github)
 
 
 class TestJoinRepoName:

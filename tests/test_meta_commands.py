@@ -86,19 +86,35 @@ class TestMetaInit:
         assert env.org.created_repos.count(("classroom-meta", None)) == 1
         assert normalize_org_course(env)["prefix"] == PREFIX
 
-    def test_init_without_prefix_records_none(self, env):
-        result = run(env.runner, "meta", "init", ORG, "--no-dryrun")
+    def test_init_defaults_the_prefix_to_the_classroom(self, env):
+        result = run(env.runner, "meta", "init", "F26 CMPE-30", "--org", ORG,
+                     "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert "prefix=F26-CMPE-30" in result.output
+        state = ms.load_meta_classrooms(env.gh, ORG)["f26_cmpe_30"]
+        assert state["prefix"] == "F26-CMPE-30"
+
+    def test_empty_prefix_opts_out_of_the_default(self, env):
+        result = run(env.runner, "meta", "init", ORG, "--prefix", "", "--no-dryrun")
         assert result.exit_code == 0, result.output
         assert "prefix=-" in result.output
         assert normalize_org_course(env)["prefix"] is None
 
-    def test_init_never_infers_a_prefix_from_repo_names(self, env):
-        # the old model inferred a shared prefix from org repos; the prefix is
-        # now only ever what --prefix or an existing classroom.ini says
-        env.org._repos += [FakeRepo(ORG, "x-a"), FakeRepo(ORG, "x-b")]
+    def test_rerun_never_backfills_a_prefixless_classroom(self, env):
+        # migrated classrooms may embed the prefix in their assignment names;
+        # a re-init must not double them up
+        seed_meta(env, course=core.normalize_course_name(ORG), prefix=None)
         result = run(env.runner, "meta", "init", ORG, "--no-dryrun")
         assert result.exit_code == 0, result.output
         assert normalize_org_course(env)["prefix"] is None
+
+    def test_init_never_infers_a_prefix_from_repo_names(self, env):
+        # the old model inferred a shared prefix from org repos; the default
+        # comes from the classroom argument, never from repo names
+        env.org._repos += [FakeRepo(ORG, "x-a"), FakeRepo(ORG, "x-b")]
+        result = run(env.runner, "meta", "init", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert normalize_org_course(env)["prefix"] == ORG
 
     def test_init_creates_no_assignment_files(self, env):
         run(env.runner, "meta", "init", ORG, "--prefix", PREFIX, "--no-dryrun")
@@ -112,7 +128,18 @@ class TestMetaInit:
         result = run(env.runner, "meta", "init", "CMPE-195A", "--prefix", PREFIX,
                      "--no-dryrun")
         assert result.exit_code == 0, result.output
-        assert meta_state(env)["tas"] == ["profbeth"]
+        assert meta_state(env)["tas"] == ["beth@sjsu.edu/profbeth"]
+
+    def test_canvas_course_is_recorded_and_preserved(self, env):
+        result = run(env.runner, "meta", "init", ORG,
+                     "--canvas-course", "CMPE-195A", "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert "canvas_course=CMPE-195A" in result.output
+        assert normalize_org_course(env)["canvas_course"] == "CMPE-195A"
+
+        result = run(env.runner, "meta", "init", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert normalize_org_course(env)["canvas_course"] == "CMPE-195A"
 
     def test_rerun_preserves_repo_settings(self, env):
         seed_meta(env, course=core.normalize_course_name(ORG), protection="pr-review")
@@ -152,6 +179,57 @@ class TestMetaShow:
             < result.output.index("ASSIGNMENT project")
         assert "solo" in result.output
         assert "team-1" in result.output
+
+    def test_marks_each_students_repo_membership(self, env):
+        repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1",
+                        collaborators=[FakeNamedUser("jdoe", role_name="write")],
+                        invitations=("msmith",))
+        env.org._repos.append(repo)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["jdoe", "msmith", "lchen"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        result = run(env.runner, "meta", "show", ORG)
+        assert result.exit_code == 0, result.output
+        assert "✅jdoe,📧msmith,❌lchen" in result.output
+        assert "markers: ✅ collaborator" in result.output
+
+    def test_rows_without_a_repo_stay_unmarked(self, env):
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["jdoe"],
+             "repo": None, "repo_id": None}]})
+        result = run(env.runner, "meta", "show", ORG)
+        assert result.exit_code == 0, result.output
+        assert "jdoe" in result.output
+        assert "✅" not in result.output and "❌" not in result.output
+        assert "markers:" not in result.output
+
+    def test_tas_team_not_created_is_reported(self, env):
+        seed_meta(env, tas=["ta-one"])
+        result = run(env.runner, "meta", "show", ORG)
+        assert result.exit_code == 0, result.output
+        assert "TAS TEAM  cmpe_195a-tas (not created — run: meta apply)" \
+            in result.output
+
+    def test_tas_team_matching_the_file_is_reported(self, env):
+        from tests.fakes import FakeTeam
+        team = FakeTeam(env.org, "cmpe_195a-tas")
+        team.add_membership(FakeNamedUser("ta-one"))
+        env.org._teams[team.slug] = team
+        seed_meta(env, tas=["ta-one"])
+        result = run(env.runner, "meta", "show", ORG)
+        assert result.exit_code == 0, result.output
+        assert "TAS TEAM  cmpe_195a-tas (matches tas)" in result.output
+
+    def test_tas_team_drift_lists_missing_and_extra(self, env):
+        from tests.fakes import FakeTeam
+        team = FakeTeam(env.org, "cmpe_195a-tas")
+        team.add_membership(FakeNamedUser("old-ta"))
+        env.org._teams[team.slug] = team
+        seed_meta(env, tas=["ta-one"])
+        result = run(env.runner, "meta", "show", ORG)
+        assert result.exit_code == 0, result.output
+        assert ("TAS TEAM  cmpe_195a-tas (missing: ta-one; extra: old-ta)"
+                in result.output)
 
     def test_unset_prefix_shows_a_dash(self, env):
         seed_meta(env, prefix=None)
@@ -239,6 +317,17 @@ class TestMetaAssign:
         assert result.exit_code == 0, result.output
         assert env.gh.get_repo(f"{ORG}/{ASSIGNMENT}-team-1") is not None
 
+    def test_identity_syntax_resolves_without_lookups(self, env, tmp_path):
+        # a /githubid half needs no canvas or search round trip, even when
+        # the email half is unresolvable
+        seed_meta(env)
+        table = self.table(tmp_path, "team-1 unsearchable@x.edu/jdoe,/msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, table, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        created = env.gh.get_repo(f"{ORG}/{REPO_PREFIX}-team-1")
+        assert ("add", "jdoe", "push") in created.collab_log
+        assert ("add", "msmith", "push") in created.collab_log
+
     def test_unresolvable_email_is_a_noticeable_error(self, env, tmp_path):
         seed_meta(env)
         table = self.table(tmp_path, "team-1 nobody@nowhere.edu,msmith\n")
@@ -321,6 +410,67 @@ class TestMetaAssign:
         result = run(env.runner, "meta", "assign", ORG, table, "--no-dryrun")
         assert result.exit_code == 0, result.output
         assert meta_state(env)["protection"] == "pr-review"
+
+
+class TestMetaAssignFromCanvas:
+    @pytest.fixture
+    def canvas(self, env, config_file, fake_canvas, monkeypatch):
+        monkeypatch.setattr(core, "get_canvas", lambda: fake_canvas)
+        monkeypatch.setattr(repos_cmd, "get_canvas", lambda: fake_canvas)
+        return fake_canvas
+
+    def test_builds_a_row_for_everyone_enrolled(self, env, canvas):
+        seed_meta(env)
+        result = run(env.runner, "meta", "assign", ORG, "--from-canvas",
+                     "--assignment", "hw1", "--no-dryrun")
+        # erin has no github link anywhere, so the run flags her loudly
+        assert result.exit_code == 1
+        assert 'cannot resolve "erin@sjsu.edu/"' in result.output
+
+        rows = {row["name"]: row for row in meta_state(env)["assignments"]["hw1"]}
+        assert rows["Alice-Adams"]["students"] == ["alice@sjsu.edu/alice"]
+        assert rows["Beth-Reed"]["students"] == ["beth@sjsu.edu/profbeth"]  # staff
+        assert rows["Erin-Evans"]["students"] == ["erin@sjsu.edu/"]
+        assert rows["Alice-Adams"]["repo_id"] is not None
+        assert env.gh.get_repo(f"{ORG}/{PREFIX}-hw1-Alice-Adams") is not None
+
+    def test_group_set_makes_a_row_per_group_and_is_recorded(self, env, canvas):
+        seed_meta(env)
+        result = run(env.runner, "meta", "assign", ORG, "--from-canvas",
+                     "--assignment", "project", "--canvas-group", "Project",
+                     "--no-dryrun")
+        assert result.exit_code == 1  # erin again
+        assert "record project group set: Project" in result.output
+
+        state = meta_state(env)
+        rows = {row["name"]: row for row in state["assignments"]["project"]}
+        assert rows["Project-Group-1"]["students"] == ["alice@sjsu.edu/alice", "bob@sjsu.edu/bob"]
+        assert rows["Project-Group-2"]["students"] == ["carol@sjsu.edu/carol"]
+        assert state["group_sets"] == {"project": "Project"}
+
+    def test_requires_the_assignment_flag(self, env, canvas):
+        seed_meta(env)
+        result = run(env.runner, "meta", "assign", ORG, "--from-canvas")
+        assert result.exit_code == 2
+        assert "--assignment is required with --from-canvas" in result.output
+
+    def test_canvas_group_needs_from_canvas(self, env, canvas, tmp_path):
+        seed_meta(env)
+        table = tmp_path / "project.tsv"
+        table.write_text("team-1 msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, str(table),
+                     "--canvas-group", "Project")
+        assert result.exit_code == 2
+        assert "--canvas-group only makes sense with --from-canvas" in result.output
+
+    def test_table_and_from_canvas_are_exclusive(self, env, canvas, tmp_path):
+        seed_meta(env)
+        table = tmp_path / "project.tsv"
+        table.write_text("team-1 msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, str(table), "--from-canvas",
+                     "--assignment", "x")
+        assert result.exit_code == 2
+        assert "pass one or the other" in result.output
 
 
 class TestMetaApply:
@@ -720,7 +870,7 @@ class TestMigrateGithubClassroom:
         assert result.exit_code == 0, result.output
         assert f"would add {ORG} to [ORGS]" in result.output
         assert f"would create private {ORG}/classroom-meta" in result.output
-        assert "would record cmpe_30 tas: ta-sam" in result.output
+        assert "would record cmpe_30 tas: /ta-sam" in result.output
         assert "would record cmpe_30/hw1: jdoe, rpatel" in result.output
         assert "would record cmpe_30/project: team-1, nightowls" in result.output
         assert "would record cmpe_30: 2 assignments, 4 teams" in result.output
@@ -741,12 +891,12 @@ class TestMigrateGithubClassroom:
         rows = {row["name"]: row
                 for row in state["cmpe_195a"]["assignments"]["project"]}
         # the admin and the everywhere-collaborator TA are both excluded
-        assert rows["team-1"]["students"] == ["jdoe", "msmith"]
+        assert rows["team-1"]["students"] == ["/jdoe", "/msmith"]
         assert rows["team-1"]["repo_id"] == repos[0].id
         assert rows["nightowls"]["repo"] == repos[1].html_url
         # the TA landed in each classroom's tas file instead
-        assert state["cmpe_30"]["tas"] == ["ta-sam"]
-        assert state["cmpe_195a"]["tas"] == ["ta-sam"]
+        assert state["cmpe_30"]["tas"] == ["/ta-sam"]
+        assert state["cmpe_195a"]["tas"] == ["/ta-sam"]
 
         # the org landed in the config's [ORGS]
         assert core.configured_orgs() == [ORG]
@@ -802,8 +952,8 @@ class TestMigrateGithubClassroom:
         assert result.exit_code == 0, result.output
         state = meta_state(env, "cmpe_195a")
         rows = {row["name"]: row for row in state["assignments"]["project"]}
-        assert rows["team-1"]["students"] == ["jdoe", "msmith"]
-        assert state["tas"] == ["ta-sam"]
+        assert rows["team-1"]["students"] == ["/jdoe", "/msmith"]
+        assert state["tas"] == ["/ta-sam"]
 
     def test_naming_the_suffix_derives_the_course_prefix(self, env):
         # classroom-era repos usually carried the course in the name; naming
@@ -825,7 +975,7 @@ class TestMigrateGithubClassroom:
         assert state["prefix"] == "f26-cmpe142"
         rows = {row["name"]: row for row in state["assignments"]["assignments"]}
         assert rows["team-1"]["repo_id"] == r1.id
-        assert rows["nightowls"]["students"] == ["rpatel"]
+        assert rows["nightowls"]["students"] == ["/rpatel"]
 
     def test_renaming_an_assignment_still_strips_teams_by_repo_prefix(self, env):
         self.seed_classroom_era_repos(env)

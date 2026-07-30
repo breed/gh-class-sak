@@ -56,25 +56,36 @@ def parse_classroom_ini(text):
     return {
         "prefix": config.get("CLASSROOM", "prefix", fallback=None),
         "template": config.get("CLASSROOM", "template", fallback=None),
+        "canvas_course": config.get("CLASSROOM", "canvas_course", fallback=None),
         "protection": protection,
         "linear_history": _bool("linear_history"),
         "force_push": _bool("force_push"),
+        "group_sets": dict(config.items("GROUP_SETS"))
+        if "GROUP_SETS" in config else {},
     }
 
 
 def serialize_classroom_ini(prefix=None, template=None, protection=None,
-                            linear_history=None, force_push=None):
+                            linear_history=None, force_push=None,
+                            canvas_course=None, group_sets=None):
     lines = ["[CLASSROOM]"]
     if prefix:
         lines.append(f"prefix = {prefix}")
     if template:
         lines.append(f"template = {template}")
+    if canvas_course:
+        lines.append(f"canvas_course = {canvas_course}")
     if protection is not None:
         lines.append(f"protection = {protection}")
     if linear_history is not None:
         lines.append(f"linear_history = {str(linear_history).lower()}")
     if force_push is not None:
         lines.append(f"force_push = {str(force_push).lower()}")
+    if group_sets:
+        lines.append("")
+        lines.append("[GROUP_SETS]")
+        for assignment, group_set in group_sets.items():
+            lines.append(f"{assignment} = {group_set}")
     return "\n".join(lines) + "\n"
 
 
@@ -84,6 +95,26 @@ def effective_repo_settings(data):
     linear = data["linear_history"] if data["linear_history"] is not None else True
     force = data["force_push"] if data["force_push"] is not None else False
     return protection, linear, force
+
+
+def parse_identity(entry):
+    """(email, github) from the EMAIL/GITHUBID identity syntax.
+
+    joe@example.com/JoeDev carries both halves, joe@example.com/ only the
+    email, /JoeDev only the github id. entries without a slash are legacy:
+    an @ means an email, anything else a github id.
+    """
+    if "/" in entry:
+        email, _, github = entry.partition("/")
+        return email or None, github or None
+    if "@" in entry:
+        return entry, None
+    return None, entry
+
+
+def format_identity(email, github):
+    """the EMAIL/GITHUBID identity syntax; empty halves stay empty."""
+    return f"{email or ''}/{github or ''}"
 
 
 def join_repo_name(*parts):
@@ -222,7 +253,8 @@ def list_classrooms(checkout):
 
 
 def save_classroom(checkout, classroom, prefix=None, template=None, *, protection=None,
-                   linear_history=None, force_push=None, tas=None, assignments=None):
+                   linear_history=None, force_push=None, canvas_course=None,
+                   group_sets=None, tas=None, assignments=None):
     """write the classroom files; only the pieces passed are (re)written.
 
     assignments maps name -> rows; only the named <name>.tsv files are
@@ -234,7 +266,9 @@ def save_classroom(checkout, classroom, prefix=None, template=None, *, protectio
     with open(os.path.join(path, "classroom.ini"), "w") as f:
         f.write(serialize_classroom_ini(prefix, template, protection=protection,
                                         linear_history=linear_history,
-                                        force_push=force_push))
+                                        force_push=force_push,
+                                        canvas_course=canvas_course,
+                                        group_sets=group_sets))
     if tas is not None:
         with open(os.path.join(path, "tas"), "w") as f:
             f.write(serialize_tas(tas))

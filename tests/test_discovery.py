@@ -3,6 +3,7 @@ import pytest
 from gh_class_sak import core
 from gh_class_sak.github_api import (
     find_assignment_repos,
+    github_safe_name,
     infer_assignment_prefixes,
     team_name,
 )
@@ -46,6 +47,23 @@ class TestInferAssignmentPrefixes:
 
     def test_empty_input(self):
         assert infer_assignment_prefixes([]) == []
+
+
+class TestGithubSafeName:
+    def test_spaces_become_dashes(self):
+        assert github_safe_name("Alice Adams") == "Alice-Adams"
+
+    def test_accents_lose_their_marks(self):
+        assert github_safe_name("José Núñez") == "Jose-Nunez"
+
+    def test_invalid_runs_collapse(self):
+        assert github_safe_name("Adams, Alice") == "Adams-Alice"
+
+    def test_edges_are_trimmed(self):
+        assert github_safe_name(" (Team 1) ") == "Team-1"
+
+    def test_never_empty(self):
+        assert github_safe_name("???") == "x"
 
 
 class TestTeamName:

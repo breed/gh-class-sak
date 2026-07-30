@@ -90,18 +90,19 @@ work). Mutating commands are safe by default — they *preview* with a ⚠️ un
 `--no-dryrun`:
 
 ```console
-$ gh-class-sak meta init cs101-fall
+$ gh-class-sak meta init CS-101 --org cs101-fall
 no canvas config; seed the tas file by hand
-⚠️  would record cs101_fall: prefix=- tas=-
+⚠️  would record cs_101: prefix=CS-101 tas=-
 ```
 
-Then feed `meta assign` your team table — emails and logins mixed freely, the file's
-basename names the assignment:
+Then feed `meta assign` your team table — identities are `EMAIL/GITHUBID`, with either
+half omissible (`jane@sjsu.edu/`, `/msmith`) — and the file's basename names the
+assignment:
 
 ```
 NAME       STUDENTS
-team-1     jane@sjsu.edu,msmith
-nightowls  rpatel,tk-codes
+team-1     jane@sjsu.edu/,/msmith
+nightowls  /rpatel,/tk-codes
 ```
 
 ```bash
