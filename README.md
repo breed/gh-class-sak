@@ -79,6 +79,8 @@ Requires Python 3.9+.
 
 - **[Getting started](docs/getting-started.md)** — install, tokens, the Canvas config,
   and a first walk through a course
+- **[Migrating from GitHub Classroom](docs/migrating-from-github-classroom.md)** —
+  where Classroom's bookkeeping lives now, and the one-command import
 - **[Commands](docs/commands.md)** — the full reference: every command, every flag, and
   the classroom-meta repo
 

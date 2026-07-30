@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.0.1
+
+- fix: assignment repos are matched by leading prefix only. The old substring
+  fallback meant a prefixless classroom's `assignments` tsv matched every
+  `…-assignments-…` repo in the org, listing other classes' repos under their full
+  names. Repos that don't carry the `prefix-assignment` naming are still found through
+  their recorded ids — which also means a freshly migrated, prefixless classroom now
+  lists exactly its recorded repos, with the right team names
+- fix: when the classroom argument pins a classroom (`repos list 30 assf`), the
+  no-matching-assignment error now lists only that classroom's assignments instead of
+  every classroom in the org
+- `migrate-github-classroom` now derives the course repo prefix from your answers:
+  when every assignment's name is a `-`-suffix of the repo-name prefix it was inferred
+  from (repos `cmpe30-hw1-*`, assignment named `hw1`), the shared head (`cmpe30`) is
+  recorded as the new classroom's `prefix` — so `prefix-assignment` keeps spelling the
+  real repo names and future repos follow the org's existing naming
+- migration team names are now always the repo name minus the *inferred* repo prefix,
+  so renaming an assignment at the prompt no longer leaves full repo names in the NAME
+  column
+- new doc: [Migrating from GitHub Classroom](docs/migrating-from-github-classroom.md) —
+  where Classroom's bookkeeping lives in the classroom-meta repo, the import
+  walkthrough, and the finish-the-job checklist. Linked from the README; the
+  getting-started page now points there instead of inlining the migration
+
 ## v1.0.0
 
 The release that replaces GitHub Classroom — and the first one on PyPI since v0.2.1,

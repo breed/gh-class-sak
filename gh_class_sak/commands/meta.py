@@ -58,6 +58,24 @@ def _check_assignment_name(name):
         sys.exit(2)
 
 
+def _derived_course_prefix(entries):
+    """the course repo prefix implied by the chosen assignment names.
+
+    when every assignment's name is a '-'-suffix of the repo-name prefix it
+    was inferred from, the shared leftover head is the course prefix: repos
+    cmpe30-hw1-* with the assignment named hw1 leave cmpe30, and then
+    prefix + assignment still spells the real repo names. None when the
+    entries disagree or carry no signal.
+    """
+    heads = set()
+    for chosen, inferred, _repos in entries:
+        if chosen != inferred and inferred.endswith("-" + chosen):
+            heads.add(inferred[:-len(chosen) - 1])
+        else:
+            return None
+    return heads.pop() if len(heads) == 1 else None
+
+
 def _perform(dryrun, message, fn, actions):
     """the --dryrun convention: preview with ⚠️, or do it and say so."""
     actions.append(message)
@@ -592,7 +610,7 @@ def migrate_github_classroom(org, dryrun):
              f" {', '.join(sorted(unmatched))}")
 
     # ask where each inferred assignment belongs before previewing anything
-    plan = []  # (classroom_dir, assignment_name, repos)
+    plan = []  # (classroom_dir, chosen_name, inferred_prefix, repos)
     for prefix in inferred:
         teams = ", ".join(team_name(r.name, prefix) for r in grouped[prefix])
         info(f'{prefix}: {len(grouped[prefix])} repos ({teams})')
@@ -603,7 +621,8 @@ def migrate_github_classroom(org, dryrun):
             continue
         name = click.prompt(f'  assignment name for "{prefix}"', default=prefix)
         _check_assignment_name(name)
-        plan.append((normalize_course_name(course.strip()), name, grouped[prefix]))
+        plan.append((normalize_course_name(course.strip()), name, prefix,
+                     grouped[prefix]))
     if not plan:
         output("nothing to do")
         return
@@ -623,16 +642,23 @@ def migrate_github_classroom(org, dryrun):
                  _create_meta, actions)
 
     by_dir = {}
-    for classroom_dir, name, assignment_repos in plan:
-        by_dir.setdefault(classroom_dir, []).append((name, assignment_repos))
+    for classroom_dir, name, inferred_prefix, assignment_repos in plan:
+        by_dir.setdefault(classroom_dir, []).append(
+            (name, inferred_prefix, assignment_repos))
 
-    writes = []  # (classroom_dir, existing, assignments, tas, changed)
+    writes = []  # (classroom_dir, existing, prefix, assignments, tas, changed)
     for classroom_dir, entries in by_dir.items():
         existing = _load_classroom(checkout, classroom_dir) if checkout else None
         assignments = dict(existing["assignments"]) if existing else {}
 
+        course_prefix = existing["prefix"] if existing \
+            else _derived_course_prefix(entries)
+        if existing is None and course_prefix:
+            _perform(dryrun, f"record {classroom_dir} prefix: {course_prefix}",
+                     lambda: None, actions)
+
         members_of = {}
-        for _name, assignment_repos in entries:
+        for _name, _inferred, assignment_repos in entries:
             for repo in assignment_repos:
                 if repo.full_name not in members_of:
                     members, _admins = split_collaborators(repo)
@@ -651,18 +677,22 @@ def migrate_github_classroom(org, dryrun):
         tas += new_tas
 
         changed_any = bool(new_tas)
-        for name, assignment_repos in entries:
+        for name, inferred_prefix, assignment_repos in entries:
             incoming = []
             for repo in assignment_repos:
                 students = [login for login in members_of[repo.full_name]
                             if login not in tas_detected]
-                incoming.append({"name": team_name(repo.name, name),
+                # the team is the repo name minus the repo-name prefix the
+                # assignment was inferred from, whatever the assignment is
+                # called now
+                incoming.append({"name": team_name(repo.name, inferred_prefix),
                                  "students": students,
                                  "repo": None, "repo_id": None})
             merged, changed = ms.merge_rows(assignments.get(name, []), incoming)
             # adopt each scanned repo's url and permanent id, but never
             # clobber a recorded one
-            by_name = {team_name(r.name, name): r for r in assignment_repos}
+            by_name = {team_name(r.name, inferred_prefix): r
+                       for r in assignment_repos}
             for row in merged:
                 if row["repo_id"] is None and row["name"] in by_name:
                     row["repo"] = by_name[row["name"]].html_url
@@ -674,20 +704,21 @@ def migrate_github_classroom(org, dryrun):
                 changed_any = True
                 _perform(dryrun, f"record {classroom_dir}/{name}:"
                          f" {', '.join(changed)}", lambda: None, actions)
-        writes.append((classroom_dir, existing, assignments, tas, changed_any))
+        writes.append((classroom_dir, existing, course_prefix, assignments, tas,
+                       changed_any))
 
     wrote = False
-    for classroom_dir, existing, assignments, tas, changed in writes:
+    for classroom_dir, existing, course_prefix, assignments, tas, changed in writes:
         if not changed and existing is not None:
             continue
         wrote = True
         settings = _ini_settings(existing) if existing else {}
 
         def _write(classroom_dir=classroom_dir, existing=existing,
-                   assignments=assignments, tas=tas, settings=settings):
+                   course_prefix=course_prefix, assignments=assignments,
+                   tas=tas, settings=settings):
             checkout_now = ms.meta_checkout_dir(org)
-            ms.save_classroom(checkout_now, classroom_dir,
-                              existing["prefix"] if existing else None,
+            ms.save_classroom(checkout_now, classroom_dir, course_prefix,
                               existing["template"] if existing else None,
                               tas=tas, assignments=assignments, **settings)
         _perform(dryrun, f"record {classroom_dir}: {len(assignments)} assignments,"

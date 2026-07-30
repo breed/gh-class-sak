@@ -555,6 +555,39 @@ class TestMetaDiscovery:
         assert result.exit_code == 0, result.output
         assert "alice" in result.output
 
+    def test_recorded_rows_scope_a_prefixless_assignment(self, env, tmp_path,
+                                                         monkeypatch):
+        # migrated classrooms may have no prefix, so nothing starts with the
+        # bare assignment name — the recorded ids must scope the listing, not
+        # a substring match that drags in other classes' repos
+        r142 = FakeRepo(ORG, "f26-cmpe142-assignments-alice")
+        r30 = FakeRepo(ORG, "s26-cmpe30-assignments-team-9")
+        env.org._repos += [r142, r30]
+        seed_meta(env, course="f26_cmpe_142", prefix=None, assignments={
+            "assignments": [{"name": "alice", "students": [],
+                             "repo": r142.html_url, "repo_id": r142.id}]})
+        seed_meta(env, course="s26_cmpe_30", prefix=None, assignments={
+            "assignments": [{"name": "team-9", "students": [],
+                             "repo": r30.html_url, "repo_id": r30.id}]})
+        orgs_config(tmp_path, monkeypatch, ORG)
+        result = run(env.runner, "repos", "list", "30", "assignments")
+        assert result.exit_code == 0, result.output
+        body = [ln.strip() for ln in result.output.splitlines() if ln.strip()]
+        assert body == ["TEAM", "team-9"]
+
+    def test_no_match_error_lists_only_the_named_classroom(self, env, tmp_path,
+                                                           monkeypatch):
+        seed_meta(env, course="cmpe_195a", assignments={"project": []})
+        seed_meta(env, course="cmpe_195b", prefix="sp26-cmpe-195b",
+                  assignments={"secret-hw": []})
+        orgs_config(tmp_path, monkeypatch, ORG)
+        result = run(env.runner, "repos", "list", "195A", "zzz")
+        assert result.exit_code == 2
+        assert "cmpe_195a: project" in result.output
+        # the classroom argument pinned cmpe_195a; the other classroom's
+        # assignments are none of this error's business
+        assert "secret-hw" not in result.output
+
     def test_ambiguous_assignment_across_classrooms_exits_2(self, env):
         seed_meta(env, course="cmpe_195a", assignments={ASSIGNMENT: []})
         seed_meta(env, course="cmpe_195b", prefix="sp26-cmpe-195b",
@@ -771,6 +804,39 @@ class TestMigrateGithubClassroom:
         rows = {row["name"]: row for row in state["assignments"]["project"]}
         assert rows["team-1"]["students"] == ["jdoe", "msmith"]
         assert state["tas"] == ["ta-sam"]
+
+    def test_naming_the_suffix_derives_the_course_prefix(self, env):
+        # classroom-era repos usually carried the course in the name; naming
+        # the assignment "assignments" leaves f26-cmpe142 as the course prefix
+        r1 = FakeRepo(ORG, "f26-cmpe142-assignments-team-1", collaborators=[
+            FakeNamedUser("jdoe", role_name="write")])
+        r2 = FakeRepo(ORG, "f26-cmpe142-assignments-nightowls", collaborators=[
+            FakeNamedUser("rpatel", role_name="write")])
+        env.org._repos += [r1, r2]
+        answers = "F26-CMPE-142\nassignments\n"
+
+        preview = self.migrate(env, input=answers)
+        assert preview.exit_code == 0, preview.output
+        assert "would record f26_cmpe_142 prefix: f26-cmpe142" in preview.output
+
+        result = self.migrate(env, "--no-dryrun", input=answers)
+        assert result.exit_code == 0, result.output
+        state = ms.load_meta_classrooms(env.gh, ORG)["f26_cmpe_142"]
+        assert state["prefix"] == "f26-cmpe142"
+        rows = {row["name"]: row for row in state["assignments"]["assignments"]}
+        assert rows["team-1"]["repo_id"] == r1.id
+        assert rows["nightowls"]["students"] == ["rpatel"]
+
+    def test_renaming_an_assignment_still_strips_teams_by_repo_prefix(self, env):
+        self.seed_classroom_era_repos(env)
+        result = self.migrate(env, "--no-dryrun", input="CS-101\nhomework\n\n")
+        assert result.exit_code == 0, result.output
+        state = ms.load_meta_classrooms(env.gh, ORG)["cs_101"]
+        # "homework" is not a suffix of "hw1", so no prefix is derived —
+        # but the teams still come from stripping the hw1- repo prefix
+        assert state["prefix"] is None
+        names = [row["name"] for row in state["assignments"]["homework"]]
+        assert sorted(names) == ["jdoe", "rpatel"]
 
     def test_org_without_assignment_shaped_repos_exits_2(self, env):
         result = self.migrate(env, input="")

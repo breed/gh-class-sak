@@ -130,6 +130,8 @@ def resolve_assignment_repos(classroom, assignment):
     if not candidates:
         error(f'no assignment matching "{assignment}" in "{org}". assignments are:')
         for classroom_dir, data in sorted(meta_classrooms.items()):
+            if classroom_key and classroom_dir != classroom_key:
+                continue  # the classroom argument pinned one; list only its
             for name in data["assignments"]:
                 error(f"    {classroom_dir}: {name}")
         sys.exit(2)

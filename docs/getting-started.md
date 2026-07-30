@@ -114,14 +114,9 @@ tracked. From then on, `meta apply` reconciles everything: missing repos, studen
 the classroom's TA team, and branch protection. Run it twice — the second pass prints
 `nothing to do`.
 
-Coming from GitHub Classroom? One command imports an org Classroom left behind —
-it infers the assignments from the repo names, asks which course each one belongs to,
-and records every repo with its collaborators and permanent id (preview first, as
-always; the org is added to your `[ORGS]` if it isn't there yet):
-
-```bash
-gh-class-sak migrate-github-classroom cs101-fall
-```
+Coming from GitHub Classroom? One command imports an org Classroom left behind — see
+[Migrating from GitHub Classroom](migrating-from-github-classroom.md) for where
+Classroom's bookkeeping lives now and the full walkthrough.
 
 ## Browse the course
 

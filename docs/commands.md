@@ -43,6 +43,12 @@ of a classroom's repos (Classroom set TAs up exactly like that) is left out of t
 `meta apply` gives it team read and revokes the leftover per-repo write. Re-running the
 migration also repairs rows imported before this detection existed.
 
+The course repo prefix is derived from your answers: when every assignment's name is a
+`-`-suffix of the repo-name prefix it was inferred from (repos `cmpe30-hw1-*`, assignment
+`hw1`), the shared head (`cmpe30`) is recorded as the classroom's `prefix` — so
+`prefix-assignment` keeps spelling the real repo names and future repos follow the same
+naming.
+
 ```
 gh-class-sak migrate-github-classroom ORG [--dryrun/--no-dryrun]
 ```
@@ -52,6 +58,9 @@ if needed). Like every mutating command it previews by default — the questions
 first, then the plan prints as `would …` lines. Re-importing **never clobbers** a
 recorded repo; rows merge like `meta assign`, so running it again after Classroom's
 sunset picked up stragglers only adds what's new.
+
+The [migration guide](migrating-from-github-classroom.md) walks through the whole move,
+including what to do after the import.
 
 ## classrooms
 

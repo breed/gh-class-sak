@@ -68,10 +68,11 @@ class TestFindAssignmentRepos:
         assert [t for t, _ in find_assignment_repos(repos, "project")] == \
             ["team-12", "red-team"]
 
-    def test_falls_back_to_substring_match(self):
+    def test_no_substring_matching(self):
+        # "project" buried mid-name belongs to some other classroom's prefix;
+        # only a recorded id may claim it
         repos = [repo("sp26-project-team-12"), repo("hw1-a")]
-        found = find_assignment_repos(repos, "project")
-        assert [r.name for _, r in found] == ["sp26-project-team-12"]
+        assert find_assignment_repos(repos, "project") == []
 
     def test_returns_empty_when_nothing_matches(self):
         assert find_assignment_repos([repo("hw1-a")], "final") == []

@@ -37,15 +37,16 @@ def team_name(repo_name, prefix):
 
 
 def find_assignment_repos(repos, prefix):
-    """select the repos belonging to an assignment, as [(team, repo)].
+    """select the repos whose names carry an assignment's prefix, as
+    [(team, repo)].
 
-    prefers a leading-prefix match; falls back to a substring match so a
-    partial assignment name still resolves.
+    a leading-prefix match only: the caller resolved the assignment against
+    the classroom-meta first, so the prefix is exact — a looser match would
+    drag in other classrooms' repos. repos named differently are still found
+    through their recorded ids.
     """
     lowered = prefix.lower()
     matched = [r for r in repos if r.name.lower().startswith(lowered)]
-    if not matched:
-        matched = [r for r in repos if lowered in r.name.lower()]
     return [(team_name(r.name, prefix), r) for r in matched]
 
 
