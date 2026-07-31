@@ -142,7 +142,7 @@ class TestReposList:
 class TestReposMembers:
     def test_extracts_authors_from_commit_history(self, cli, no_config):
         out = lines(run(cli, "repos", "members", ORG, "project"))
-        assert columns(out[0]) == ["REPO", "GITHUB_ID", "NAME", "EMAIL"]
+        assert columns(out[0]) == ["TEAM", "GITHUB_ID", "NAME", "EMAIL"]
         rows = [columns(ln) for ln in out[1:]]
         assert ["team-12", "alice", "Alice Adams", "alice@sjsu.edu"] in rows
         assert ["red-team", "carol", "Carol Chen", "carol@sjsu.edu"] in rows

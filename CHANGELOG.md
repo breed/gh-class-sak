@@ -2,6 +2,50 @@
 
 ## v1.0.2
 
+- fix: an unresolved identity never triggers revocation. `meta apply` used to
+  reconcile a row's collaborators against whatever subset of its students happened to
+  resolve, so a transient failure (a removed Canvas profile link, a search rate limit)
+  could revoke a real student's write access. Rows with unresolved identities now
+  leave collaborators untouched — loudly — and the run still exits 1
+- fix: assignment prefixes match at a `-` boundary, so `hw1` no longer captures
+  `hw10`'s repos (with mangled team names) in `repos list`/`repos clone`, or in the
+  set of repos `meta apply` grants the TA team read on
+- fix: repo collaborator reconcile understands pending invitations — an
+  invited-but-not-accepted student is not re-invited on every apply, and removing a
+  student from the tsv cancels their pending invitation so they can't still accept
+  and gain write. The test fakes now model GitHub's invite-on-add behavior
+- fix: a `%` in a recorded value (a url-encoded template REPO_URL, a Canvas token) is
+  data, not a parse error that bricks the file on every later load; hand-edit
+  mistakes that raise configparser's own errors degrade to a warning or a clean exit
+  instead of a traceback, and `migrate-github-classroom` no longer corrupts a config
+  whose `[ORGS]` header carries an inline comment
+- fix: GitHub lookups return "not found" only on a real 404 — a transient error exits
+  with the message instead of reading as "recorded repo is gone" or "no
+  classroom-meta repo" — and the search-api resolvers warn loudly on a rate limit
+  instead of reporting everyone past the cutoff as unresolvable
+- fix: `meta assign --from-canvas` prefers the recorded `canvas_course` over the
+  resolved directory name, matching `meta init` and `meta apply`
+- fix: `meta show` marks email-only identities by who they resolve to, so a
+  `jane@sjsu.edu/` entry with access shows ✅ instead of a false ❌ (and the
+  `TAS TEAM` line stops reporting its member as both missing and extra)
+- fix: `repos list --email/--instructors/--group` degrade gracefully with an
+  `[ORGS]`-only config (what the migration creates) instead of exiting on the
+  missing Canvas credentials
+- fix: saves rewrite only the assignments that changed, so hand-written `#` comments
+  in an untouched assignment's tsv survive an assign/apply/migrate of another
+- fix: `classrooms CLASSROOM` lists just the classroom it names, not its whole host
+  org
+- fix: `migrate-github-classroom` no longer records the entire roster as TAs when one
+  group owns every repo — when everyone is on every repo there is no staff signal,
+  so it warns and records everyone as students
+- template seeding is robust: an unreachable template fails with a clean error,
+  deletes the empty shell it created (so a re-run retries instead of adopting an
+  unseeded repo), and pushes to the repo's default branch instead of a hardcoded
+  `main`
+- `meta assign` reconciles the classroom's TA team in the same run, so repos it
+  creates are TA-readable immediately; and `--template` with `--assignment` but no
+  table records or updates a template without re-supplying the roster
+- `repos members` labels its first column `TEAM` (it always held team names)
 - two new docs: [Canvas integration](docs/canvas-integration.md) — how GitHub ids map
   to Canvas accounts, and assignments built from enrollments or group sets — and
   [The classroom-meta files](docs/classroom-meta-files.md) — the file layouts, the

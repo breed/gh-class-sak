@@ -103,9 +103,9 @@ class Classroom:
 def resolve_assignment_repos(classroom, assignment):
     """Resolve a classroom/assignment pair to the repos backing it.
 
-    Returns (Classroom, [(team, repo)]). The classroom argument is a GitHub org
-    (or a partial matching one configured in [COURSES]); it must have a
-    classroom-meta repo. The assignment argument selects an assignment tsv by
+    Returns (Classroom, [(team, repo)]). The classroom argument names a GitHub
+    org (or a classroom found through the configured [ORGS]); its org must
+    have a classroom-meta repo. The assignment argument selects an assignment tsv by
     name; its prefix-assignment join anchors the repo match and recorded repos
     are included by their numeric id, so renamed repos still appear.
     """
@@ -522,7 +522,7 @@ def repos_members(classroom, assignment):
             seen.add(key)
             rows.append([team, login or "?", name, email])
 
-    print_table(["REPO", "GITHUB_ID", "NAME", "EMAIL"], rows)
+    print_table(["TEAM", "GITHUB_ID", "NAME", "EMAIL"], rows)
 
 
 @repos.command("missing")

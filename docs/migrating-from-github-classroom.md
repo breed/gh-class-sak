@@ -73,7 +73,9 @@ re-run with `--no-dryrun`. What the import records:
   write-access collaborators, recorded as `/githubid` identities
 - **TAs detected, not imported as students** — a login with write access on *every* one
   of a classroom's repos (exactly how Classroom set staff up) goes into classroom.ini's
-  `[TAS]` section instead of the `STUDENTS` columns
+  `[TAS]` section instead of the `STUDENTS` columns; when everyone is on every repo
+  (one group owning all the repos) there is no staff signal, so the import warns and
+  records everyone as students
 - **the course repo prefix, when your names reveal it** — repos named
   `cs210-hw1-*` with the assignment named `hw1` leave `cs210` as the shared head,
   which is recorded as the classroom's `prefix`; future repos then follow the org's

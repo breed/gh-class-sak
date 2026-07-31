@@ -40,7 +40,9 @@ and **permanent id** — so every imported repo is rename-proof from day one.
 Staff are detected, not imported as students: a login with write access on **every** one
 of a classroom's repos (Classroom set TAs up exactly like that) is left out of the
 `STUDENTS` columns and recorded in classroom.ini's `[TAS]` section instead — where the next
-`meta apply` gives it team read and revokes the leftover per-repo write. Re-running the
+`meta apply` gives it team read and revokes the leftover per-repo write. When *everyone*
+is on every repo (one group owning all the repos), there is no staff signal: the
+migration warns and records everyone as students. Re-running the
 migration also repairs rows imported before this detection existed.
 
 The course repo prefix is derived from your answers: when every assignment's name is a
@@ -120,7 +122,7 @@ account show `?`.
 
 ```console
 $ gh-class-sak repos members cs101-fall project
-REPO       GITHUB_ID  NAME        EMAIL
+TEAM       GITHUB_ID  NAME        EMAIL
 team-1     jdoe       Jane Doe    jane.doe@cs101.edu
 nightowls  rpatel     Riya Patel  riya@cs101.edu
 ```
@@ -243,7 +245,8 @@ basename (`project.tsv` → `project`); `--assignment` overrides that. Emails ar
 to GitHub logins via the student's Canvas profile link, then the GitHub search API; an
 email nothing can resolve is a loud error. Under `--no-dryrun` it creates each missing
 repo (privately, from the template when `classroom.ini` names one), records the URL and
-repo id, and grants the listed students push. Re-importing an updated table changes
+repo id, grants the listed students push, and reconciles the classroom's TA team so the
+new repos are TA-readable immediately. Re-importing an updated table changes
 student lists but **never clobbers a recorded repo**.
 
 `--template REPO_URL` gives the assignment starter content: the URL is validated first
@@ -252,7 +255,8 @@ student lists but **never clobbers a recorded repo**.
 repo created for the assignment — now or by a later `meta apply` — is seeded from a
 shallow clone of it, pushed as a single fresh commit so students get the content
 without the template's history. A `[TEMPLATE]` record takes precedence over the
-classroom-wide `template` for its assignment.
+classroom-wide `template` for its assignment, and `--template` with `--assignment` but
+no table records or updates a template without re-supplying the roster.
 
 Instead of a file, `--from-canvas` builds the table from the Canvas roster
 (`--assignment` is required then, since there's no filename to name it):
@@ -340,7 +344,7 @@ one table per assignment — checked against the live org:
   collaborator, 📧 means invited but not yet accepted, ❌ means not a collaborator at
   all (rows whose repo isn't created yet stay unmarked; a legend prints whenever
   markers appear)
-- a `TAS TEAM` line compares the classroom's `<classroom>-TAs` team to the `tas` file:
+- a `TAS TEAM` line compares the classroom's `<classroom>-TAs` team to the `[TAS]` section:
   `(matches tas)`, `(not created — run: meta apply)`, or the members that are invited
   but not yet accepted, missing, or extra
 
