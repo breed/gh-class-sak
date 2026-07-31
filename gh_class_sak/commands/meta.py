@@ -373,12 +373,14 @@ def _cancel_invitation(repo, login):
             repo.remove_invitation(inv.id)
 
 
-def _reconcile_row_collaborators(gh, repo, logins, dryrun, actions):
-    """make the repo's non-admin collaborators exactly the row's students.
+def _reconcile_row_collaborators(gh, repo, logins, remove_unlisted, dryrun,
+                                 actions):
+    """grant the row's students push; handle collaborators the row doesn't list.
 
     an unaccepted invitation counts as present — re-granting would re-invite
-    on every run — and one held by someone no longer listed is cancelled, or
-    they could still accept and gain write.
+    on every run. an unlisted collaborator (or invitation) is only warned
+    about unless remove_unlisted asks for the revoke: taking a human's
+    access away is opt-in, not a side effect.
     """
     members, _admins = split_collaborators(repo)
     invited = {login.lower(): login for login in pending_invitees(repo)}
@@ -392,11 +394,19 @@ def _reconcile_row_collaborators(gh, repo, logins, dryrun, actions):
                      _grant, actions)
     for lowered, login in current.items():
         if lowered not in desired:
+            if not remove_unlisted:
+                warn(f"unlisted collaborator {login} on {repo.full_name}"
+                     " (pass --remove-unlisted-contributors to revoke)")
+                continue
             def _revoke(login=login):
                 remove_collaborator(repo, login)
             _perform(dryrun, f"revoke {login} from {repo.full_name}", _revoke, actions)
     for lowered, login in invited.items():
         if lowered not in desired:
+            if not remove_unlisted:
+                warn(f"unlisted invitation for {login} on {repo.full_name}"
+                     " (pass --remove-unlisted-contributors to cancel)")
+                continue
             def _cancel(login=login):
                 _cancel_invitation(repo, login)
             _perform(dryrun, f"cancel the invitation for {login}"
@@ -903,12 +913,18 @@ def _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe, dryrun, act
 
 @meta.command("apply")
 @click.argument("classroom")
+@click.option("--remove-unlisted-contributors", "remove_unlisted", is_flag=True,
+              default=False,
+              help="revoke collaborators (and cancel invitations) the assignment"
+                   " rows don't list; the default only warns about them")
 @dryrun_option
-def meta_apply(classroom, dryrun):
+def meta_apply(classroom, remove_unlisted, dryrun):
     """Reconcile the org with the classroom-meta repo: repos, TA teams, student access.
 
     Naming a classroom reconciles just that one; naming the org reconciles
     every classroom directory, each with its own CLASSROOM-TAs team.
+    Collaborators the rows don't list are warned about; only
+    --remove-unlisted-contributors revokes them (admins are never touched).
     """
     gh = get_github()
     org, partial = resolve_classroom(gh, classroom)
@@ -969,7 +985,8 @@ def meta_apply(classroom, dryrun):
                 warn(f"{row['name']}: leaving collaborators untouched until"
                      " every identity resolves")
             else:
-                _reconcile_row_collaborators(gh, repo, logins, dryrun, actions)
+                _reconcile_row_collaborators(gh, repo, logins, remove_unlisted,
+                                             dryrun, actions)
             # and its default branch carries the classroom's protection settings
             _reconcile_repo_protection(repo, desired, dryrun, actions)
 

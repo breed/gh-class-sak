@@ -278,7 +278,7 @@ works exactly like a file import: merge, never-clobber, dryrun first.
 Reconcile the org to match the classroom-meta repo:
 
 ```
-gh-class-sak meta apply CLASSROOM [--dryrun/--no-dryrun]
+gh-class-sak meta apply CLASSROOM [--remove-unlisted-contributors] [--dryrun/--no-dryrun]
 ```
 
 Naming a classroom reconciles just that one; naming the org reconciles every classroom
@@ -290,8 +290,10 @@ directory. For each one:
   membership matches its `[TAS]` section, added as a **read** collaborator on that classroom's
   student repos across all of its assignments — so TAs accept one org invite ever, and
   TAs of one classroom never gain access to another classroom's repos
-- every listed student has **write** on their repo; non-admin collaborators who aren't
-  listed are revoked — org admins are never touched
+- every listed student has **write** on their repo. Collaborators (and pending
+  invitations) the rows don't list are *warned about* and left in place; pass
+  `--remove-unlisted-contributors` to revoke them — org admins are never touched
+  either way
 - every recorded repo's default branch carries the classroom's protection settings
 - run it twice: the second pass prints `nothing to do`
 

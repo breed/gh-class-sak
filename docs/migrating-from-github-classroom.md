@@ -114,10 +114,12 @@ Then finish the job:
    branch protection (`protection`, `linear_history`, `force_push`) in `classroom.ini`.
 3. **Reconcile.** This creates each classroom's `<classroom>-TAs` team with read on all
    its repos, revokes the TAs' leftover per-repo write access, makes each repo's
-   collaborators exactly its row's students, and applies the protection settings:
+   collaborators exactly its row's students, and applies the protection settings.
+   The `--remove-unlisted-contributors` flag is what demotes the TAs and drops anyone
+   the rows don't list — without it, apply only warns about them:
 
    ```
-   gh-class-sak meta apply cs101-fall [--no-dryrun]
+   gh-class-sak meta apply cs101-fall --remove-unlisted-contributors [--no-dryrun]
    ```
 
    Run it twice — the second pass prints `nothing to do`.

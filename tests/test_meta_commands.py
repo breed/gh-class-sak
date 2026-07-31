@@ -770,7 +770,8 @@ class TestMetaApply:
 
     def test_dryrun_previews_the_full_reconcile(self, env):
         repo = self.setup_realized(env)
-        result = run(env.runner, "meta", "apply", ORG)
+        result = run(env.runner, "meta", "apply", ORG,
+                     "--remove-unlisted-contributors")
         assert result.exit_code == 0, result.output
         assert "would grant push to msmith" in result.output
         assert "would revoke intruder" in result.output
@@ -781,7 +782,8 @@ class TestMetaApply:
 
     def test_reconciles_and_never_touches_admins(self, env):
         repo = self.setup_realized(env)
-        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        result = run(env.runner, "meta", "apply", ORG,
+                     "--remove-unlisted-contributors", "--no-dryrun")
         assert result.exit_code == 0, result.output
 
         assert ("add", "msmith", "push") in repo.collab_log
@@ -794,10 +796,42 @@ class TestMetaApply:
 
     def test_second_apply_has_nothing_to_do(self, env):
         self.setup_realized(env)
-        run(env.runner, "meta", "apply", ORG, "--no-dryrun")
-        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        run(env.runner, "meta", "apply", ORG,
+            "--remove-unlisted-contributors", "--no-dryrun")
+        result = run(env.runner, "meta", "apply", ORG,
+                     "--remove-unlisted-contributors", "--no-dryrun")
         assert result.exit_code == 0, result.output
         assert "nothing to do" in result.output
+
+    def test_unlisted_collaborator_warns_but_stays_by_default(self, env):
+        repo = self.setup_realized(env)
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert ("remove", "intruder", None) not in repo.collab_log
+        assert f"unlisted collaborator intruder on {repo.full_name}" \
+            in result.output
+        assert "--remove-unlisted-contributors" in result.output
+
+    def test_remove_unlisted_contributors_flag_revokes(self, env):
+        repo = self.setup_realized(env)
+        result = run(env.runner, "meta", "apply", ORG,
+                     "--remove-unlisted-contributors", "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert ("remove", "intruder", None) in repo.collab_log
+
+    def test_unlisted_invitation_warns_but_stays_by_default(self, env):
+        repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1",
+                        collaborators=[FakeNamedUser("jdoe", role_name="write")],
+                        invitations=("dropout",))
+        env.org._repos.append(repo)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["/jdoe"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert ("cancel-invite", "dropout", None) not in repo.collab_log
+        assert f"unlisted invitation for dropout on {repo.full_name}" \
+            in result.output
 
     def test_unresolved_identity_never_triggers_revocation(self, env):
         # a transient resolution failure (canvas link removed, rate limit)
@@ -808,7 +842,9 @@ class TestMetaApply:
         seed_meta(env, assignments={ASSIGNMENT: [
             {"name": "team-1", "students": ["gone@nowhere.edu/", "/msmith"],
              "repo": repo.html_url, "repo_id": repo.id}]})
-        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        # the unresolved-skip must win even when removal is asked for
+        result = run(env.runner, "meta", "apply", ORG,
+                     "--remove-unlisted-contributors", "--no-dryrun")
         assert result.exit_code == 1  # the failure is still loud
         assert 'cannot resolve "gone@nowhere.edu/"' in result.output
         assert ("remove", "jdoe", None) not in repo.collab_log
@@ -948,7 +984,8 @@ class TestMetaApply:
         seed_meta(env, assignments={ASSIGNMENT: [
             {"name": "team-1", "students": ["/jdoe"],
              "repo": repo.html_url, "repo_id": repo.id}]})
-        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        result = run(env.runner, "meta", "apply", ORG,
+                     "--remove-unlisted-contributors", "--no-dryrun")
         assert result.exit_code == 0, result.output
         assert f"cancel the invitation for dropout on {repo.full_name}" \
             in result.output

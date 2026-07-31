@@ -10,6 +10,10 @@
 - fix: assignment prefixes match at a `-` boundary, so `hw1` no longer captures
   `hw10`'s repos (with mangled team names) in `repos list`/`repos clone`, or in the
   set of repos `meta apply` grants the TA team read on
+- removing people is now opt-in: `meta apply` warns about collaborators (and pending
+  invitations) the assignment rows don't list instead of revoking them; the new
+  `--remove-unlisted-contributors` flag restores the revoke. Migrations note: demoting
+  Classroom-era TAs' leftover per-repo write now needs the flag
 - fix: repo collaborator reconcile understands pending invitations — an
   invited-but-not-accepted student is not re-invited on every apply, and removing a
   student from the tsv cancels their pending invitation so they can't still accept

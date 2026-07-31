@@ -129,7 +129,9 @@ slug, so hand-created `-tas` teams match too):
   team is granted **read** on every one of the classroom's repos — across all its
   assignments — while team grants outside the classroom are revoked (the
   classroom-meta repo itself excepted). TAs who somehow hold direct per-repo write
-  (GitHub Classroom set them up that way) are demoted to the team's read access.
+  (GitHub Classroom set them up that way) are demoted to the team's read access when
+  `meta apply` runs with `--remove-unlisted-contributors`; without it their extra
+  write is only warned about.
 - **Pending invitations count as membership** — an invited TA who hasn't accepted yet
   is not re-invited, and `meta show` reports them as `invited, not yet accepted`
   rather than missing.
