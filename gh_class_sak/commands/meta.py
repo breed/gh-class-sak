@@ -1081,8 +1081,16 @@ def migrate_github_classroom(org, dryrun):
         # not a student: record it in [TAS] instead of every row
         tas_detected = []
         if len(members_of) >= 2:
-            common = set.intersection(*(set(m) for m in members_of.values()))
-            tas_detected = sorted(common)
+            sets = [set(m) for m in members_of.values()]
+            common = set.intersection(*sets)
+            if common and common == set().union(*sets):
+                # one group owning every repo: everyone is everywhere, so
+                # nothing distinguishes staff — don't empty the rosters
+                warn(f"{classroom_dir}: every collaborator has write on every"
+                     " repo; cannot tell staff from students — recording"
+                     " everyone as students")
+            else:
+                tas_detected = sorted(common)
         tas = list(existing["tas"]) if existing else []
         known_githubs = set()
         for entry in tas:

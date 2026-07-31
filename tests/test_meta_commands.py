@@ -1343,6 +1343,24 @@ class TestMigrateGithubClassroom:
         assert result.exit_code == 0, result.output
         assert "nothing to do" in result.output
 
+    def test_one_group_classroom_records_students_not_tas(self, env):
+        # one group owning every repo means everyone is on every repo —
+        # that must not read as "everyone is staff" and empty the rosters
+        group = [FakeNamedUser("jdoe", role_name="write"),
+                 FakeNamedUser("msmith", role_name="write")]
+        env.org._repos += [
+            FakeRepo(ORG, "cmpe30-hw1-nightowls", collaborators=list(group)),
+            FakeRepo(ORG, "cmpe30-project-nightowls", collaborators=list(group)),
+        ]
+        result = run(env.runner, "migrate-github-classroom", ORG, "--no-dryrun",
+                     input="CMPE-30\n\n")
+        assert result.exit_code == 0, result.output
+        assert "cannot tell staff from students" in result.output
+        state = ms.load_meta_classrooms(env.gh, ORG)["cmpe_30"]
+        assert state["tas"] == []
+        rows = {r["name"]: r for r in state["assignments"]["cmpe30"]}
+        assert rows["hw1-nightowls"]["students"] == ["/jdoe", "/msmith"]
+
     def test_never_clobbers_a_recorded_repo(self, env):
         self.seed_classroom_era_repos(env)
         seed_meta(env, course="cmpe_195a", prefix=None, tas=("ta-sam",),
