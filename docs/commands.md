@@ -44,8 +44,8 @@ of a classroom's repos (Classroom set TAs up exactly like that) is left out of t
 migration also repairs rows imported before this detection existed.
 
 The course repo prefix is derived from your answers: when every assignment's name is a
-`-`-suffix of the repo-name prefix it was inferred from (repos `cmpe30-hw1-*`, assignment
-`hw1`), the shared head (`cmpe30`) is recorded as the classroom's `prefix` — so
+`-`-suffix of the repo-name prefix it was inferred from (repos `cs210-hw1-*`, assignment
+`hw1`), the shared head (`cs210`) is recorded as the classroom's `prefix` — so
 `prefix-assignment` keeps spelling the real repo names and future repos follow the same
 naming.
 
@@ -169,14 +169,15 @@ in the clone URL, or in the checked-out `.git/config`.
 ## The classroom-meta repo
 
 All course state lives in a private repo named `classroom-meta` inside the org —
-versioned, hand-editable, and invisible to students. Every command starts from it: an org
-without one gets an error pointing at `meta init`. An org hosts a set of classrooms (two
+versioned, hand-editable, and invisible to students; the complete file-format reference
+is [The classroom-meta files](classroom-meta-files.md). Every command starts from it: an
+org without one gets an error pointing at `meta init`. An org hosts a set of classrooms (two
 Canvas sections often share one org). A classroom is a directory with a `classroom.ini`,
 and **every `.tsv` file in it is an assignment**, named by its basename:
 
 ```
 classroom-meta/
-  sp26_cmpe_195a/                  one directory per classroom
+  cs101_fall/                      one directory per classroom
     classroom.ini                  [CLASSROOM] prefix and settings; [TAS] one
                                    identity per line; [TEMPLATE] and [GROUP_SETS]
                                    one ASSIGNMENT = VALUE each
@@ -281,7 +282,7 @@ directory. For each one:
 
 - rows without a repo yet — including ones you hand-added to any assignment's tsv — get
   created
-- each classroom has its own **`<classroom>-TAs` team** (e.g. `sp26_cmpe_195a-TAs`) whose
+- each classroom has its own **`<classroom>-TAs` team** (e.g. `cs101_fall-TAs`) whose
   membership matches its `[TAS]` section, added as a **read** collaborator on that classroom's
   student repos across all of its assignments — so TAs accept one org invite ever, and
   TAs of one classroom never gain access to another classroom's repos

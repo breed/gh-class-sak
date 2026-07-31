@@ -82,6 +82,10 @@ Requires Python 3.9+.
   and a first walk through a course
 - **[Migrating from GitHub Classroom](docs/migrating-from-github-classroom.md)** —
   where Classroom's bookkeeping lives now, and the one-command import
+- **[Canvas integration](docs/canvas-integration.md)** — how GitHub ids map to Canvas
+  accounts, and assignments built from enrollments or group sets
+- **[The classroom-meta files](docs/classroom-meta-files.md)** — the file layouts and
+  formats, and how TA teams manage the TAs
 - **[Commands](docs/commands.md)** — the full reference: every command, every flag, and
   the classroom-meta repo
 

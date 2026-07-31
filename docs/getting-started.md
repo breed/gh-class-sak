@@ -61,7 +61,9 @@ all, `classrooms` lists every org here.
 
 The `[CANVAS]` section unlocks the roster features — `--group`, `--instructors`,
 `--email`, and `repos missing` — and lets `meta init` seed the TA list and `meta assign`
-resolve student emails from the course roster.
+resolve student emails from the course roster. The full story — how GitHub ids map to
+Canvas accounts, and building assignments straight from enrollments or group sets — is
+in [Canvas integration](canvas-integration.md).
 
 > ⚠️ The config file holds your Canvas API token in plain text. Keep it readable only by
 > you.

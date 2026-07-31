@@ -48,13 +48,13 @@ def seed_demo_meta(root):
     # org's existing project-* and hw1-* repos
     ms.save_classroom(str(work), DEMO_CLASSROOM, assignments={
         "project": [
-            _row("team-1", ["jdoe", "msmith"]),
-            _row("nightowls", ["rpatel", "tk-codes"]),
-            _row("team-3", ["lchen"]),
+            _row("team-1", ["/jdoe", "/msmith"]),
+            _row("nightowls", ["/rpatel", "/tk-codes"]),
+            _row("team-3", ["/lchen"]),
         ],
         "hw1": [
-            _row("jdoe", ["jdoe"]),
-            _row("rpatel", ["rpatel"]),
+            _row("jdoe", ["/jdoe"]),
+            _row("rpatel", ["/rpatel"]),
         ],
     })
     ms.commit_and_push(str(work), "seed")

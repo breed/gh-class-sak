@@ -34,7 +34,8 @@ classroom-meta/
 
 The commands are the interface to that state: `meta assign` imports team tables,
 `meta apply` reconciles the org to match the files, and `classrooms` / `repos …` read
-them for discovery. The full details are in the
+them for discovery. The file formats are documented in
+[The classroom-meta files](classroom-meta-files.md), and the commands in the
 [commands reference](commands.md#the-classroom-meta-repo).
 
 ## The import, in one command
@@ -74,7 +75,7 @@ re-run with `--no-dryrun`. What the import records:
   of a classroom's repos (exactly how Classroom set staff up) goes into classroom.ini's
   `[TAS]` section instead of the `STUDENTS` columns
 - **the course repo prefix, when your names reveal it** — repos named
-  `cmpe30-hw1-*` with the assignment named `hw1` leave `cmpe30` as the shared head,
+  `cs210-hw1-*` with the assignment named `hw1` leave `cs210` as the shared head,
   which is recorded as the classroom's `prefix`; future repos then follow the org's
   existing naming automatically
 - **your config updated** — the org is added to `[ORGS]`, and the config file is

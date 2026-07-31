@@ -2,6 +2,12 @@
 
 ## v1.0.2
 
+- two new docs: [Canvas integration](docs/canvas-integration.md) — how GitHub ids map
+  to Canvas accounts, and assignments built from enrollments or group sets — and
+  [The classroom-meta files](docs/classroom-meta-files.md) — the file layouts, the
+  formats, and how TA teams manage the TAs. Both linked from the README; the demo
+  course's recorded rows now use the identity syntax, so `meta show`'s documented
+  output teaches it
 - the TAs moved into `classroom.ini`: a `[TAS]` section, one identity per line,
   replaces the standalone `tas` file. Legacy files are still read, and the next save
   migrates them into the ini and removes the file

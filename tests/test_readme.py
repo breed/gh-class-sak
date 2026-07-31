@@ -92,6 +92,12 @@ def test_documented_output_matches_the_cli(demo_cli, page, args, expected):
 
 
 def test_docs_have_no_real_student_data():
-    """the docs must use the invented cs101-fall course, not a live org."""
+    """the docs must use the invented cs101-fall world — never the live org,
+    courses, or people it stands in for."""
+    real_markers = ("sjsu-reed", "cmpe", "khalil", "estell", "kammce")
     for page in DOC_PAGES:
-        assert "SJSU-CMPE-195" not in page.read_text(encoding="utf-8"), page.name
+        text = page.read_text(encoding="utf-8").lower()
+        for marker in real_markers:
+            assert marker not in text, (
+                f"{page.name} leaks real-world marker {marker!r}"
+            )
