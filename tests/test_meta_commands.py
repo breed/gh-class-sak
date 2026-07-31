@@ -230,6 +230,17 @@ class TestMetaShow:
         assert result.exit_code == 0, result.output
         assert "TAS TEAM  cmpe_195a-TAs (matches tas)" in result.output
 
+    def test_tas_team_pending_invite_is_reported_as_invited(self, env):
+        from tests.fakes import FakeTeam
+        team = FakeTeam(env.org, "cmpe_195a-TAs")
+        team._invitations["kammce"] = FakeNamedUser("kammce")
+        env.org._teams[team.slug] = team
+        seed_meta(env, tas=["/kammce"])
+        result = run(env.runner, "meta", "show", ORG)
+        assert result.exit_code == 0, result.output
+        assert ("TAS TEAM  cmpe_195a-TAs (invited, not yet accepted: /kammce)"
+                in result.output)
+
     def test_tas_team_drift_lists_missing_and_extra(self, env):
         from tests.fakes import FakeTeam
         team = FakeTeam(env.org, "cmpe_195a-tas")
@@ -654,6 +665,18 @@ class TestMetaApply:
         grants = [entry for entry in team.log
                   if entry == ("grant", repo.full_name, "pull")]
         assert len(grants) == 1
+
+    def test_pending_invitations_count_as_members(self, env):
+        # an invited-but-not-accepted TA must not be re-invited every apply
+        from tests.fakes import FakeTeam
+        team = FakeTeam(env.org, "cmpe_195a-TAs")
+        team._invitations["ta-one"] = FakeNamedUser("ta-one")
+        env.org._teams[team.slug] = team
+        seed_meta(env, tas=("/ta-one",))
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert "nothing to do" in result.output
+        assert ("add-member", "ta-one") not in team.log
 
     def test_naming_a_classroom_applies_only_that_classroom(self, env, tmp_path,
                                                             monkeypatch):

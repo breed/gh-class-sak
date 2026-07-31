@@ -331,7 +331,8 @@ one table per assignment — checked against the live org:
   all (rows whose repo isn't created yet stay unmarked; a legend prints whenever
   markers appear)
 - a `TAS TEAM` line compares the classroom's `<classroom>-TAs` team to the `tas` file:
-  `(matches tas)`, `(not created — run: meta apply)`, or the missing and extra members
+  `(matches tas)`, `(not created — run: meta apply)`, or the members that are invited
+  but not yet accepted, missing, or extra
 
 Once repos are recorded, `repos list`, `repos members`, `repos missing`, and `repos clone`
 all include them by id — so a renamed repo shows up under its original team name instead

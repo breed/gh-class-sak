@@ -271,6 +271,18 @@ def pending_invitees(repo):
         return []
 
 
+def team_pending_invitations(team):
+    """users invited to the team who haven't accepted yet.
+
+    github's team membership API counts them as neither member nor absent,
+    so callers must treat them as present or they re-invite forever.
+    """
+    try:
+        return list(team.invitations())
+    except (GithubException, AttributeError, TypeError):
+        return []
+
+
 def get_team(gh, org_name, slug):
     """a team in the org by slug, or None when it doesn't exist."""
     try:

@@ -2,6 +2,10 @@
 
 ## v1.0.1
 
+- fix: pending team invitations count as membership. An invited-but-not-accepted TA
+  used to be re-invited on every `meta init`/`meta apply` and reported by `meta show`
+  as missing; the reconcile now settles to `nothing to do`, and `meta show`'s
+  `TAS TEAM` line reports them as `invited, not yet accepted`
 - fix: `meta apply CLASSROOM` reconciles only the named classroom; it used to treat the
   argument purely as an org selector and reconcile every classroom in the org. Naming
   the org still reconciles them all

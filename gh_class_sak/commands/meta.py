@@ -50,6 +50,7 @@ from gh_class_sak.github_api import (
     resolve_email_to_username,
     split_collaborators,
     team_name,
+    team_pending_invitations,
 )
 
 REPO_SETTING_KEYS = ("protection", "linear_history", "force_push")
@@ -487,16 +488,21 @@ def _tas_team_line(gh, org, classroom_dir, configured_tas):
     if team is None:
         return f"TAS TEAM  {name} (not created — run: meta apply)"
     members = {m.login.lower() for m in team.get_members()}
+    pending = {u.login.lower() for u in team_pending_invitations(team)}
     configured = {}
     for entry in configured_tas:
         _email, github = ms.parse_identity(entry)
         configured[(github or entry).lower()] = entry
     missing = sorted(entry for key, entry in configured.items()
-                     if key not in members)
-    extra = sorted(members - set(configured))
-    if not missing and not extra:
+                     if key not in members and key not in pending)
+    invited = sorted(entry for key, entry in configured.items()
+                     if key in pending)
+    extra = sorted((members | pending) - set(configured))
+    if not missing and not invited and not extra:
         return f"TAS TEAM  {name} (matches tas)"
     parts = []
+    if invited:
+        parts.append("invited, not yet accepted: " + ", ".join(invited))
     if missing:
         parts.append("missing: " + ", ".join(missing))
     if extra:
@@ -760,7 +766,12 @@ def _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe, dryrun, act
         _perform(dryrun, f'create team "{name}" in {org}', _create_team, actions)
         team = made_team.get("team")
 
-    current_members = {m.login.lower(): m for m in team.get_members()} if team else {}
+    current_members = {}
+    if team is not None:
+        current_members = {m.login.lower(): m for m in team.get_members()}
+        # invited-but-not-accepted counts as present, or we re-invite forever
+        for user in team_pending_invitations(team):
+            current_members.setdefault(user.login.lower(), user)
     desired_members = {login.lower(): login for login in ta_logins}
     for lowered, login in desired_members.items():
         if lowered not in current_members:

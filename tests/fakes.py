@@ -141,11 +141,15 @@ class FakeTeam:
         self.slug = name.lower().replace(" ", "-")
         self._org = org
         self._members = {}
+        self._invitations = {}
         self._repos = {}
         self.log = []
 
     def get_members(self):
         return list(self._members.values())
+
+    def invitations(self):
+        return list(self._invitations.values())
 
     def add_membership(self, member, role=None):
         self.log.append(("add-member", member.login))
@@ -154,6 +158,7 @@ class FakeTeam:
     def remove_membership(self, member):
         self.log.append(("remove-member", member.login))
         self._members.pop(member.login, None)
+        self._invitations.pop(member.login, None)
 
     def get_repos(self):
         return [repo for repo, _perm in self._repos.values()]
