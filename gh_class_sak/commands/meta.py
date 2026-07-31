@@ -4,6 +4,7 @@ import shutil
 import sys
 
 import click
+from git import GitCommandError
 
 from gh_class_sak import meta_store as ms
 from gh_class_sak.commands.repos import (
@@ -282,14 +283,15 @@ def _realize_classroom(gh, org, data, resolve, dryrun, actions):
     """create/adopt the repo for every row that has none, and grant push.
 
     covers every assignment in the classroom. mutates rows in place under
-    --no-dryrun. returns (changed assignment names, unresolved) — callers
-    save exactly the named tsvs, so untouched files (and their hand
+    --no-dryrun. returns (changed assignment names, unresolved, failures) —
+    callers save exactly the named tsvs, so untouched files (and their hand
     comments) are never rewritten.
     """
     template = _template_repo(gh, data)
     desired = ms.effective_repo_settings(data)
     changed = set()
     all_unresolved = []
+    failures = []
     for assignment, rows in data["assignments"].items():
         content_url = data["templates"].get(assignment)
         for row in rows:
@@ -314,15 +316,34 @@ def _realize_classroom(gh, org, data, resolve, dryrun, actions):
                     source = f" from {content_url}"
                     def _create(repo_name=repo_name, made=made,
                                 content_url=content_url):
-                        made["repo"] = create_org_repo(gh, org, repo_name)
-                        push_template(content_url, made["repo"].clone_url,
-                                      get_token())
+                        created = create_org_repo(gh, org, repo_name)
+                        try:
+                            push_template(content_url, created.clone_url,
+                                          get_token(),
+                                          branch=created.default_branch
+                                          or "main")
+                        except GitCommandError:
+                            # adopting the empty shell on a re-run would
+                            # leave the repo permanently unseeded
+                            created.delete()
+                            raise RuntimeError(
+                                f"seeding {org}/{repo_name} from"
+                                f' "{content_url}" failed; the empty repo'
+                                " was deleted so a re-run can retry"
+                            ) from None
+                        made["repo"] = created
                 else:
                     source = f" from {template.full_name}" if template else ""
                     def _create(repo_name=repo_name, made=made):
                         made["repo"] = create_org_repo(gh, org, repo_name,
                                                        template=template)
-                _perform(dryrun, f"create private {org}/{repo_name}{source}", _create, actions)
+                try:
+                    _perform(dryrun, f"create private {org}/{repo_name}{source}",
+                             _create, actions)
+                except RuntimeError as exc:
+                    error(str(exc))
+                    failures.append(repo_name)
+                    continue
                 if desired != UNPROTECTED:
                     if template is not None or content_url:
                         def _protect(made=made):
@@ -343,7 +364,7 @@ def _realize_classroom(gh, org, data, resolve, dryrun, actions):
                 row["repo"] = made["repo"].html_url
                 row["repo_id"] = made["repo"].id
                 changed.add(assignment)
-    return changed, all_unresolved
+    return changed, all_unresolved, failures
 
 
 def _cancel_invitation(repo, login):
@@ -803,7 +824,8 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
                  lambda: None, actions)
 
     resolve = _make_resolver(gh, org, course)
-    changed, unresolved = _realize_classroom(gh, org, data, resolve, dryrun, actions)
+    changed, unresolved, failures = _realize_classroom(gh, org, data, resolve,
+                                                       dryrun, actions)
     unresolved = unresolvable + unresolved
 
     # repos created here must be TA-readable now, not after the next apply
@@ -828,7 +850,7 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
 
     if not actions:
         output("nothing to do")
-    if unresolved:
+    if unresolved or failures:
         sys.exit(1)
 
 
@@ -901,6 +923,7 @@ def meta_apply(classroom, dryrun):
 
     actions = []
     any_unresolved = []
+    any_failures = []
     all_repos = list_org_repos(gh, org)
     by_id = {r.id: r for r in all_repos}
 
@@ -910,8 +933,11 @@ def meta_apply(classroom, dryrun):
         desired = ms.effective_repo_settings(data)
 
         # 1. realize rows that don't have a repo yet (hand-added ones included)
-        changed, unresolved = _realize_classroom(gh, org, data, resolve, dryrun, actions)
+        changed, unresolved, failures = _realize_classroom(gh, org, data,
+                                                           resolve, dryrun,
+                                                           actions)
         any_unresolved.extend(unresolved)
+        any_failures.extend(failures)
         if changed:
             ms.save_classroom(checkout, classroom_dir, data["prefix"], data["template"],
                               tas=data["tas"],
@@ -956,7 +982,7 @@ def meta_apply(classroom, dryrun):
         ms.commit_and_push(checkout, "apply", get_token())
     if not actions:
         output("nothing to do")
-    if any_unresolved:
+    if any_unresolved or any_failures:
         sys.exit(1)
 
 

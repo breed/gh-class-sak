@@ -465,6 +465,36 @@ class TestMetaAssign:
         assert "README.md" in pushed.git.ls_tree("main", name_only=True)
         assert len(list(pushed.iter_commits("main"))) == 1
 
+    def test_template_seeds_the_orgs_default_branch(self, env, tmp_path):
+        # an org whose default branch isn't main must get its content there,
+        # or the immediate branch protection lands on a branch that exists
+        env.org.default_branch = "trunk"
+        starter = self.make_template_origin(tmp_path)
+        seed_meta(env)
+        table = self.table(tmp_path, "team-1 /msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, table,
+                     "--template", starter, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        pushed = GitRepo(str(env.root / f"{REPO_PREFIX}-team-1.git"))
+        assert "README.md" in pushed.git.ls_tree("trunk", name_only=True)
+
+    def test_unreachable_template_fails_clean_and_rolls_back(self, env, tmp_path):
+        # recorded template gone by apply time: no traceback, and the empty
+        # shell is deleted so a re-run can retry instead of adopting it
+        seed_meta(env, templates={ASSIGNMENT: str(tmp_path / "vanished")},
+                  assignments={ASSIGNMENT: [
+                      {"name": "team-1", "students": [],
+                       "repo": None, "repo_id": None}]})
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 1, result.output
+        assert result.exception is None \
+            or isinstance(result.exception, SystemExit), result.exception
+        assert "seeding" in result.output
+        shells = [r for r in env.org.get_repos()
+                  if r.name == f"{REPO_PREFIX}-team-1"]
+        assert shells and shells[0].deleted
+        assert meta_state(env)["assignments"][ASSIGNMENT][0]["repo_id"] is None
+
     def test_template_dryrun_previews_and_pushes_nothing(self, env, tmp_path):
         starter = self.make_template_origin(tmp_path)
         seed_meta(env)

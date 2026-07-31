@@ -1,3 +1,4 @@
+import atexit
 import base64
 import os
 import shutil
@@ -48,14 +49,19 @@ def push_template(template_url, dest_url, token=None, branch="main"):
     source = _template_sources.get(template_url)
     if source is None:
         workdir = tempfile.mkdtemp(prefix="gh-class-sak-template-")
+        atexit.register(shutil.rmtree, workdir, ignore_errors=True)
         checkout = os.path.join(workdir, "content")
-        Repo.clone_from(template_url, checkout, depth=1, env=auth_env(token))
-        shutil.rmtree(os.path.join(checkout, ".git"))
-        source = Repo.init(checkout)
-        source.git.add("-A")
-        actor = Actor("gh-class-sak", "gh-class-sak@localhost")
-        source.index.commit(f"template from {template_url}",
-                            author=actor, committer=actor)
+        try:
+            Repo.clone_from(template_url, checkout, depth=1, env=auth_env(token))
+            shutil.rmtree(os.path.join(checkout, ".git"))
+            source = Repo.init(checkout)
+            source.git.add("-A")
+            actor = Actor("gh-class-sak", "gh-class-sak@localhost")
+            source.index.commit(f"template from {template_url}",
+                                author=actor, committer=actor)
+        except BaseException:
+            shutil.rmtree(workdir, ignore_errors=True)
+            raise
         _template_sources[template_url] = source
     with source.git.custom_environment(**auth_env(token)):
         source.git.push(dest_url, f"HEAD:refs/heads/{branch}")

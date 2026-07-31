@@ -206,6 +206,8 @@ class FakeOrg:
         # when set, created repos get a real bare git origin under this dir,
         # so code that clones them works offline
         self.local_git_root = local_git_root
+        # the org setting new repos inherit as their default branch
+        self.default_branch = "main"
 
     def get_repos(self):
         return list(self._repos)
@@ -213,7 +215,7 @@ class FakeOrg:
     def _new_repo(self, name, private):
         import os
 
-        repo = FakeRepo(self.login, name)
+        repo = FakeRepo(self.login, name, default_branch=self.default_branch)
         repo.private = private
         if self.local_git_root:
             from git import Repo as GitRepo
