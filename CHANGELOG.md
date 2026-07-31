@@ -2,6 +2,13 @@
 
 ## v1.0.2
 
+- fix: every GitPython repo handle is closed deterministically — on Windows an open
+  handle pins files inside the classroom-meta checkout, breaking cleanup
+- the `meta apply` sync contract is now specified precisely in the commands
+  reference: the four passes, what a run writes back, what it never does, and the
+  exit codes
+- the test suite no longer sees ambient credentials, so a test that would reach the
+  real token fails at the desk instead of only on CI
 - fix: an unresolved identity never triggers revocation. `meta apply` used to
   reconcile a row's collaborators against whatever subset of its students happened to
   resolve, so a transient failure (a removed Canvas profile link, a search rate limit)
