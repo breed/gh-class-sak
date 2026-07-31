@@ -37,7 +37,6 @@ from gh_class_sak.github_api import (
     list_commit_authors,
     list_org_repos,
     resolve_email_to_username,
-    resolve_name_to_username,
     split_collaborators,
 )
 from gh_class_sak.meta_store import join_repo_name, load_meta_classrooms
@@ -257,15 +256,17 @@ def _github_from_canvas_profiles(course, people):
 
 
 def _github_from_search(gh, people):
-    """For anyone still unresolved, search GitHub by email then by name."""
+    """For anyone still unresolved, search GitHub by email.
+
+    Never by display name: two people can share one, and a github id that
+    ends up granting repo access must not come from a lookalike match.
+    """
     for person in people.values():
         if person.get("github"):
             continue
         github = None
         if person.get("email"):
             github = resolve_email_to_username(gh, person["email"])
-        if not github and person.get("name"):
-            github = resolve_name_to_username(gh, person["name"])
         person["github"] = github
         if not github:
             warn(f"could not resolve github id for {person['name']}")

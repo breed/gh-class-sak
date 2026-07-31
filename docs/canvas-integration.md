@@ -33,8 +33,10 @@ Resolution runs in a chain, stopping at the first hit:
    lookup at all.
 2. **The Canvas profile.** The enrollment's profile is fetched (through the course —
    teachers may not read profiles account-wide) and searched for a GitHub link.
-3. **The GitHub search API.** By email, then by display name — this only works when
-   the student's GitHub account exposes them.
+3. **The GitHub search API.** By email only — and only when the student's GitHub
+   account exposes it. Display names are deliberately never used to *resolve* an id:
+   two people can share a name, and an id that ends up granting repo access must not
+   come from a lookalike match.
 
 Anything still unresolved is a loud, red error naming the person, and the command exits
 nonzero — silent gaps would surface weeks later as a student who never had access.

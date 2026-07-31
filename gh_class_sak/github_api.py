@@ -177,10 +177,6 @@ def resolve_email_to_username(gh, email):
     return _search_one(gh, f"{email} in:email", email)
 
 
-def resolve_name_to_username(gh, name):
-    return _search_one(gh, f"fullname:{name}", name)
-
-
 def add_collaborator(repo, username, permission="push"):
     return repo.add_to_collaborators(username, permission)
 

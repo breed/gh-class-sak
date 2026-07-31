@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.0.3
+
+- a display name is never used to resolve a GitHub id: the search fallback for a
+  person whose Canvas profile has no GitHub link is now email-only. Two people can
+  share a name, and an id that ends up granting repo access must not come from a
+  lookalike match. (Name matching still powers the read-only reports — group and
+  instructor columns, `repos missing` — where a wrong guess can't grant anything)
+
 ## v1.0.2
 
 - fix: every GitPython repo handle is closed deterministically — on Windows an open
