@@ -795,13 +795,16 @@ def _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe, dryrun, act
 def meta_apply(classroom, dryrun):
     """Reconcile the org with the classroom-meta repo: repos, TA teams, student access.
 
-    Every classroom directory in the classroom-meta repo is reconciled, each
-    with its own tas-CLASSROOM team.
+    Naming a classroom reconciles just that one; naming the org reconciles
+    every classroom directory, each with its own CLASSROOM-TAs team.
     """
     gh = get_github()
-    org, _partial = resolve_classroom(gh, classroom)
+    org, partial = resolve_classroom(gh, classroom)
     _repo, checkout = _open_meta(gh, org)
-    classroom_dirs = ms.list_classrooms(checkout)
+    if partial:
+        classroom_dirs = [_resolve_classroom_dir(checkout, partial, classroom)]
+    else:
+        classroom_dirs = ms.list_classrooms(checkout)
     if not classroom_dirs:
         error("the classroom-meta repo has no classrooms. run: meta init")
         sys.exit(2)

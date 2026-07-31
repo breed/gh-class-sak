@@ -2,6 +2,9 @@
 
 ## v1.0.1
 
+- fix: `meta apply CLASSROOM` reconciles only the named classroom; it used to treat the
+  argument purely as an org selector and reconcile every classroom in the org. Naming
+  the org still reconciles them all
 - `meta init` now creates the classroom's TA team right away — members from the `tas`
   entries, read access to the classroom's current repos — instead of leaving that to
   the first `meta apply`. The team's display name is `CLASSROOM-TAs` (GitHub slugs it

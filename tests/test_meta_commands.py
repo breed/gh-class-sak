@@ -655,6 +655,29 @@ class TestMetaApply:
                   if entry == ("grant", repo.full_name, "pull")]
         assert len(grants) == 1
 
+    def test_naming_a_classroom_applies_only_that_classroom(self, env, tmp_path,
+                                                            monkeypatch):
+        repo_a = FakeRepo(ORG, f"{REPO_PREFIX}-team-1", collaborators=[])
+        repo_b = FakeRepo(ORG, "sp26-cmpe-195b-project-team-9", collaborators=[])
+        env.org._repos += [repo_a, repo_b]
+        seed_meta(env, course="cmpe_195a", prefix=PREFIX, tas=["ta-ana"],
+                  assignments={ASSIGNMENT: [
+                      {"name": "team-1", "students": [],
+                       "repo": repo_a.html_url, "repo_id": repo_a.id}]})
+        seed_meta(env, course="cmpe_195b", prefix="sp26-cmpe-195b",
+                  tas=["ta-bob"],
+                  assignments={ASSIGNMENT: [
+                      {"name": "team-9", "students": [],
+                       "repo": repo_b.html_url, "repo_id": repo_b.id}]})
+        orgs_config(tmp_path, monkeypatch, ORG)
+
+        result = run(env.runner, "meta", "apply", "195A", "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert env.org.get_team_by_slug("cmpe_195a-tas") is not None
+        # the other classroom was never touched
+        assert "cmpe_195b-tas" not in env.org._teams
+        assert "cmpe_195b" not in result.output
+
     def test_each_classroom_gets_its_own_tas_team(self, env):
         # two classrooms in one org: TAs of one never gain access to the other
         repo_a = FakeRepo(ORG, f"{REPO_PREFIX}-team-1", collaborators=[])

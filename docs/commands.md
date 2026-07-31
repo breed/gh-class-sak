@@ -267,7 +267,8 @@ Reconcile the org to match the classroom-meta repo:
 gh-class-sak meta apply CLASSROOM [--dryrun/--no-dryrun]
 ```
 
-Every classroom directory in the classroom-meta repo is reconciled:
+Naming a classroom reconciles just that one; naming the org reconciles every classroom
+directory. For each one:
 
 - rows without a repo yet — including ones you hand-added to any assignment's tsv — get
   created
