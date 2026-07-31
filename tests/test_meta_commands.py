@@ -478,6 +478,33 @@ class TestMetaAssign:
         assert env.org.created_repos == []
         assert meta_state(env)["templates"] == {}
 
+    def hand_comment_hw1(self, env, text="# graded through week 3"):
+        """append a hand-written comment to the seeded hw1.tsv and push it."""
+        bare = env.root / "classroom-meta.git"
+        work = ms.checkout_meta(str(bare), "hand-edit")
+        with open(os.path.join(work, COURSE, "hw1.tsv"), "a") as f:
+            f.write(text + "\n")
+        ms.commit_and_push(work, "hand comment")
+        return text
+
+    def test_assigning_one_assignment_never_rewrites_another(self, env, tmp_path):
+        # the tool's serializer drops comments, so an untouched
+        # assignment's tsv must never be rewritten
+        repo = FakeRepo(ORG, f"{PREFIX}-hw1-solo")
+        env.org._repos.append(repo)
+        seed_meta(env, assignments={"hw1": [
+            {"name": "solo", "students": ["/msmith"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        comment = self.hand_comment_hw1(env)
+
+        table = self.table(tmp_path, "team-1 /msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, table, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+
+        verify = ms.checkout_meta(str(env.root / "classroom-meta.git"), "verify")
+        with open(os.path.join(verify, COURSE, "hw1.tsv")) as f:
+            assert comment in f.read()
+
     def test_template_alone_records_without_a_table(self, env, tmp_path):
         # updating an assignment's template must not demand the roster again
         starter = self.make_template_origin(tmp_path)
@@ -765,6 +792,30 @@ class TestMetaApply:
         created = env.gh.get_repo(f"{ORG}/{REPO_PREFIX}-late-team")
         assert ("add", "msmith", "push") in created.collab_log
         assert meta_state(env)["assignments"][ASSIGNMENT][0]["repo_id"] == created.id
+
+    def test_apply_rewrites_only_the_assignments_it_changed(self, env):
+        # realizing project's row must not rewrite hw1.tsv (and eat its
+        # hand comments)
+        done = FakeRepo(ORG, f"{PREFIX}-hw1-solo")
+        env.org._repos.append(done)
+        seed_meta(env, assignments={
+            "hw1": [{"name": "solo", "students": ["/msmith"],
+                     "repo": done.html_url, "repo_id": done.id}],
+            ASSIGNMENT: [{"name": "late-team", "students": ["/msmith"],
+                          "repo": None, "repo_id": None}]})
+        bare = env.root / "classroom-meta.git"
+        work = ms.checkout_meta(str(bare), "hand-edit")
+        with open(os.path.join(work, COURSE, "hw1.tsv"), "a") as f:
+            f.write("# graded\n")
+        ms.commit_and_push(work, "hand comment")
+
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        verify = ms.checkout_meta(str(bare), "verify")
+        with open(os.path.join(verify, COURSE, "hw1.tsv")) as f:
+            assert "# graded" in f.read()
+        # the realized row was still recorded
+        assert meta_state(env)["assignments"][ASSIGNMENT][0]["repo_id"] is not None
 
     def test_two_assignments_realize_union_and_span_the_tas_team(self, env):
         recorded = FakeRepo(ORG, f"{REPO_PREFIX}-team-1", collaborators=[])

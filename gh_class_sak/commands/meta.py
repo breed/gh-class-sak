@@ -282,11 +282,13 @@ def _realize_classroom(gh, org, data, resolve, dryrun, actions):
     """create/adopt the repo for every row that has none, and grant push.
 
     covers every assignment in the classroom. mutates rows in place under
-    --no-dryrun. returns (changed, unresolved).
+    --no-dryrun. returns (changed assignment names, unresolved) — callers
+    save exactly the named tsvs, so untouched files (and their hand
+    comments) are never rewritten.
     """
     template = _template_repo(gh, data)
     desired = ms.effective_repo_settings(data)
-    changed = False
+    changed = set()
     all_unresolved = []
     for assignment, rows in data["assignments"].items():
         content_url = data["templates"].get(assignment)
@@ -340,7 +342,7 @@ def _realize_classroom(gh, org, data, resolve, dryrun, actions):
             if not dryrun:
                 row["repo"] = made["repo"].html_url
                 row["repo_id"] = made["repo"].id
-                changed = True
+                changed.add(assignment)
     return changed, all_unresolved
 
 
@@ -813,10 +815,14 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
         _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe,
                             dryrun, actions)
 
-    if not dryrun and (changed or changed_names or group_set_changed
-                       or template_changed):
+    to_save = set(changed)
+    if changed_names:
+        to_save.add(name)
+    if not dryrun and (to_save or group_set_changed or template_changed):
         ms.save_classroom(checkout, classroom_dir, data["prefix"], data["template"],
-                          tas=data["tas"], assignments=data["assignments"],
+                          tas=data["tas"],
+                          assignments={n: data["assignments"][n]
+                                       for n in sorted(to_save)},
                           **_ini_settings(data))
         ms.commit_and_push(checkout, f"assign {classroom_dir}/{name}", get_token())
 
@@ -908,7 +914,9 @@ def meta_apply(classroom, dryrun):
         any_unresolved.extend(unresolved)
         if changed:
             ms.save_classroom(checkout, classroom_dir, data["prefix"], data["template"],
-                              tas=data["tas"], assignments=data["assignments"],
+                              tas=data["tas"],
+                              assignments={n: data["assignments"][n]
+                                           for n in sorted(changed)},
                               **_ini_settings(data))
 
         # the classroom's repos: per-assignment prefix matches ∪ recorded ids
@@ -1063,6 +1071,7 @@ def migrate_github_classroom(org, dryrun):
         tas += new_tas
 
         changed_any = bool(new_tas)
+        changed_assignments = set()
         for name, inferred_prefix, assignment_repos in entries:
             incoming = []
             for repo in assignment_repos:
@@ -1089,13 +1098,19 @@ def migrate_github_classroom(org, dryrun):
             assignments[name] = merged
             if changed:
                 changed_any = True
+                changed_assignments.add(name)
                 _perform(dryrun, f"record {classroom_dir}/{name}:"
                          f" {', '.join(changed)}", lambda: None, actions)
-        writes.append((classroom_dir, existing, course_prefix, assignments, tas,
-                       changed_any))
+        # a new classroom materializes every planned tsv; an existing one
+        # only rewrites the assignments that actually changed, so untouched
+        # files keep their hand edits
+        write_names = set(assignments) if existing is None else changed_assignments
+        writes.append((classroom_dir, existing, course_prefix, assignments,
+                       write_names, tas, changed_any))
 
     wrote = False
-    for classroom_dir, existing, course_prefix, assignments, tas, changed in writes:
+    for classroom_dir, existing, course_prefix, assignments, write_names, tas, \
+            changed in writes:
         if not changed and existing is not None:
             continue
         wrote = True
@@ -1103,11 +1118,14 @@ def migrate_github_classroom(org, dryrun):
 
         def _write(classroom_dir=classroom_dir, existing=existing,
                    course_prefix=course_prefix, assignments=assignments,
-                   tas=tas, settings=settings):
+                   write_names=write_names, tas=tas, settings=settings):
             checkout_now = ms.meta_checkout_dir(org)
             ms.save_classroom(checkout_now, classroom_dir, course_prefix,
                               existing["template"] if existing else None,
-                              tas=tas, assignments=assignments, **settings)
+                              tas=tas,
+                              assignments={n: assignments[n]
+                                           for n in sorted(write_names)},
+                              **settings)
         _perform(dryrun, f"record {classroom_dir}: {len(assignments)} assignments,"
                  f" {sum(len(rows) for rows in assignments.values())} teams",
                  _write, actions)
