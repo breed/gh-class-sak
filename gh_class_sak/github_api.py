@@ -2,7 +2,7 @@ import sys
 import unicodedata
 from collections import Counter
 
-from github import GithubException
+from github import GithubException, RateLimitExceededException
 
 from gh_class_sak.core import error, warn
 
@@ -52,6 +52,17 @@ def team_name(repo_name, prefix):
     return repo_name
 
 
+def matches_prefix(name, prefix):
+    """the name is exactly the prefix, or extends it at a "-" boundary.
+
+    the boundary matters: assignment hw1's prefix must not capture hw10's
+    repos.
+    """
+    lowered = prefix.lower()
+    named = name.lower()
+    return named == lowered or named.startswith(lowered + "-")
+
+
 def find_assignment_repos(repos, prefix):
     """select the repos whose names carry an assignment's prefix, as
     [(team, repo)].
@@ -61,8 +72,7 @@ def find_assignment_repos(repos, prefix):
     drag in other classrooms' repos. repos named differently are still found
     through their recorded ids.
     """
-    lowered = prefix.lower()
-    matched = [r for r in repos if r.name.lower().startswith(lowered)]
+    matched = [r for r in repos if matches_prefix(r.name, prefix)]
     return [(team_name(r.name, prefix), r) for r in matched]
 
 
@@ -147,24 +157,28 @@ def list_commit_authors(repo):
     return authors
 
 
-def resolve_email_to_username(gh, email):
+def _search_one(gh, query, subject):
+    """the single search hit, or None. a rate limit warns loudly: the search
+    api allows ~30 requests a minute, and hitting the cap must not read as
+    "nothing matched" for everyone after the cutoff."""
     try:
-        results = gh.search_users(f"{email} in:email")
+        results = gh.search_users(query)
         if results.totalCount == 1:
             return results[0].login
+    except RateLimitExceededException:
+        warn(f'github search rate limit hit while resolving "{subject}";'
+             " wait a minute and re-run")
     except GithubException:
         pass
     return None
+
+
+def resolve_email_to_username(gh, email):
+    return _search_one(gh, f"{email} in:email", email)
 
 
 def resolve_name_to_username(gh, name):
-    try:
-        results = gh.search_users(f"fullname:{name}")
-        if results.totalCount == 1:
-            return results[0].login
-    except GithubException:
-        pass
-    return None
+    return _search_one(gh, f"fullname:{name}", name)
 
 
 def add_collaborator(repo, username, permission="push"):
@@ -175,20 +189,31 @@ def remove_collaborator(repo, username):
     return repo.remove_from_collaborators(username)
 
 
+def _none_on_404(exc, what):
+    """the shared lookup contract: 404 is None, anything else is an error."""
+    if exc.status == 404:
+        return None
+    error(f"github error looking up {what}: {_exc_message(exc)}")
+    sys.exit(2)
+
+
 def get_org_repo(gh, org_name, repo_name):
-    """a repo in the org, or None when it doesn't exist."""
+    """a repo in the org, or None when it doesn't exist (404 only)."""
     try:
         return gh.get_repo(f"{org_name}/{repo_name}")
-    except GithubException:
-        return None
+    except GithubException as exc:
+        return _none_on_404(exc, f"{org_name}/{repo_name}")
 
 
 def get_repo_by_id(gh, repo_id):
-    """a repo by its permanent numeric id — survives renames. None if gone."""
+    """a repo by its permanent numeric id — survives renames.
+
+    None means 404: the repo is gone. a transient failure exits instead, so
+    it can never read as "recorded repo is gone"."""
     try:
         return gh.get_repo(int(repo_id))
-    except GithubException:
-        return None
+    except GithubException as exc:
+        return _none_on_404(exc, f"repo id {repo_id}")
 
 
 def create_org_repo(gh, org_name, repo_name, template=None, auto_init=False):
@@ -284,11 +309,11 @@ def team_pending_invitations(team):
 
 
 def get_team(gh, org_name, slug):
-    """a team in the org by slug, or None when it doesn't exist."""
+    """a team in the org by slug, or None when it doesn't exist (404 only)."""
     try:
         return get_org(gh, org_name).get_team_by_slug(slug)
-    except GithubException:
-        return None
+    except GithubException as exc:
+        return _none_on_404(exc, f"team {org_name}/{slug}")
 
 
 def create_team(gh, org_name, name):

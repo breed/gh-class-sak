@@ -3,8 +3,12 @@ import pytest
 from gh_class_sak import core
 from gh_class_sak.github_api import (
     find_assignment_repos,
+    get_org_repo,
+    get_repo_by_id,
+    get_team,
     github_safe_name,
     infer_assignment_prefixes,
+    resolve_email_to_username,
     team_name,
 )
 from tests.fakes import FakeGithub, FakeOrg, FakeRepo
@@ -14,6 +18,55 @@ ORG = "SJSU-CMPE-195"
 
 def repo(name):
     return FakeRepo(ORG, name)
+
+
+class TestGithubLookupErrors:
+    """None means "does not exist" (404); anything else must surface."""
+
+    class Boom:
+        def __init__(self, status=500):
+            from github import GithubException
+            self.exc = GithubException(status, {"message": "boom"}, None)
+
+        def get_repo(self, _):
+            raise self.exc
+
+        def get_organization(self, _):
+            raise self.exc
+
+    def test_get_repo_by_id_returns_none_on_404(self):
+        gh = FakeGithub(orgs=[FakeOrg(ORG)])
+        assert get_repo_by_id(gh, 424242) is None
+
+    def test_get_repo_by_id_exits_on_a_transient_error(self, capsys):
+        # a 500 must not read as "recorded repo is gone"
+        with pytest.raises(SystemExit) as exc:
+            get_repo_by_id(self.Boom(), 424242)
+        assert exc.value.code == 2
+        assert "boom" in capsys.readouterr().err
+
+    def test_get_org_repo_exits_on_a_transient_error(self, capsys):
+        with pytest.raises(SystemExit) as exc:
+            get_org_repo(self.Boom(), ORG, "classroom-meta")
+        assert exc.value.code == 2
+
+    def test_get_team_exits_on_a_transient_error(self, capsys):
+        with pytest.raises(SystemExit) as exc:
+            get_team(self.Boom(), ORG, "cs101-tas")
+        assert exc.value.code == 2
+
+
+class TestSearchRateLimit:
+    def test_rate_limit_warns_instead_of_reading_as_no_match(self, capsys):
+        from github import RateLimitExceededException
+
+        class Limited:
+            def search_users(self, _query):
+                raise RateLimitExceededException(
+                    403, {"message": "API rate limit exceeded"}, None)
+
+        assert resolve_email_to_username(Limited(), "jane@sjsu.edu") is None
+        assert "rate limit" in capsys.readouterr().err
 
 
 class TestInferAssignmentPrefixes:
@@ -94,6 +147,13 @@ class TestFindAssignmentRepos:
 
     def test_returns_empty_when_nothing_matches(self):
         assert find_assignment_repos([repo("hw1-a")], "final") == []
+
+    def test_prefix_match_stops_at_a_dash_boundary(self):
+        # hw1 must not capture hw10's repos (and mangle their team names)
+        repos = [repo("cs101-hw1-alice"), repo("cs101-hw10-bob")]
+        found = find_assignment_repos(repos, "cs101-hw1")
+        assert [(team, r.name) for team, r in found] == \
+            [("alice", "cs101-hw1-alice")]
 
 
 class TestMatchOrg:

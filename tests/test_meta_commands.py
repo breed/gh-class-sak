@@ -701,6 +701,18 @@ class TestMetaApply:
         assert ("grant", created.full_name, "pull") in team.log
         assert ("grant", recorded.full_name, "pull") in team.log
 
+    def test_universe_stops_at_a_dash_boundary(self, env):
+        # assignment hw1's prefix join must not pull an hw10 repo into the
+        # TA team's scope
+        other = FakeRepo(ORG, f"{PREFIX}-hw10-bob", collaborators=[])
+        env.org._repos.append(other)
+        seed_meta(env, tas=["ta-one"], assignments={"hw1": [
+            {"name": "solo", "students": [], "repo": None, "repo_id": None}]})
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        team = env.org.get_team_by_slug("cmpe_195a-tas")
+        assert ("grant", other.full_name, "pull") not in team.log
+
     def test_universe_dedups_a_repo_recorded_twice(self, env):
         repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1", collaborators=[])
         env.org._repos.append(repo)

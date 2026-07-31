@@ -44,6 +44,7 @@ from gh_class_sak.github_api import (
     github_safe_name,
     infer_assignment_prefixes,
     list_org_repos,
+    matches_prefix,
     pending_invitees,
     protect_default_branch,
     read_default_branch_protection,
@@ -193,9 +194,9 @@ def _classroom_universe(gh, org, data, all_repos, by_id):
     """the classroom's repos: per-assignment prefix matches ∪ recorded ids."""
     universe = {}
     for assignment in data["assignments"]:
-        joined = ms.join_repo_name(data["prefix"], assignment).lower()
+        joined = ms.join_repo_name(data["prefix"], assignment)
         for r in all_repos:
-            if r.name.lower().startswith(joined):
+            if matches_prefix(r.name, joined):
                 universe[r.full_name] = r
     for rows in data["assignments"].values():
         for row in rows:
@@ -869,9 +870,9 @@ def meta_apply(classroom, dryrun):
         # the classroom's repos: per-assignment prefix matches ∪ recorded ids
         universe = {}
         for assignment in data["assignments"]:
-            joined = ms.join_repo_name(data["prefix"], assignment).lower()
+            joined = ms.join_repo_name(data["prefix"], assignment)
             for r in all_repos:
-                if r.name.lower().startswith(joined):
+                if matches_prefix(r.name, joined):
                     universe[r.full_name] = r
         recorded = [row for rows in data["assignments"].values()
                     for row in rows if row["repo_id"] is not None]
