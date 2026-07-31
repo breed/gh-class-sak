@@ -673,6 +673,20 @@ class TestMetaApply:
         assert result.exit_code == 0, result.output
         assert "nothing to do" in result.output
 
+    def test_unresolved_identity_never_triggers_revocation(self, env):
+        # a transient resolution failure (canvas link removed, rate limit)
+        # must not shrink the desired list and kick a real student off
+        repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1", collaborators=[
+            FakeNamedUser("jdoe", role_name="write")])
+        env.org._repos.append(repo)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["gone@nowhere.edu/", "/msmith"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 1  # the failure is still loud
+        assert 'cannot resolve "gone@nowhere.edu/"' in result.output
+        assert ("remove", "jdoe", None) not in repo.collab_log
+
     def test_realizes_hand_added_rows(self, env):
         seed_meta(env, assignments={ASSIGNMENT: [
             {"name": "late-team", "students": ["msmith"],

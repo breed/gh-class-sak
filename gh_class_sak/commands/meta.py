@@ -885,7 +885,13 @@ def meta_apply(classroom, dryrun):
             # 2. students on a realized row are exactly its push collaborators
             logins, unresolved = _resolve_row_students(row, resolve)
             any_unresolved.extend(unresolved)
-            _reconcile_row_collaborators(gh, repo, logins, dryrun, actions)
+            if unresolved:
+                # a shrunken list must never masquerade as the full roster:
+                # reconciling with it would revoke a real student's access
+                warn(f"{row['name']}: leaving collaborators untouched until"
+                     " every identity resolves")
+            else:
+                _reconcile_row_collaborators(gh, repo, logins, dryrun, actions)
             # and its default branch carries the classroom's protection settings
             _reconcile_repo_protection(repo, desired, dryrun, actions)
 
