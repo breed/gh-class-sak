@@ -449,6 +449,35 @@ class TestMetaAssign:
         assert env.org.created_repos == []
         assert meta_state(env)["templates"] == {}
 
+    def test_template_alone_records_without_a_table(self, env, tmp_path):
+        # updating an assignment's template must not demand the roster again
+        starter = self.make_template_origin(tmp_path)
+        seed_meta(env)
+        result = run(env.runner, "meta", "assign", ORG,
+                     "--assignment", ASSIGNMENT, "--template", starter,
+                     "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert meta_state(env)["templates"] == {ASSIGNMENT: starter}
+
+    def test_template_alone_still_needs_an_assignment_name(self, env, tmp_path):
+        starter = self.make_template_origin(tmp_path)
+        seed_meta(env)
+        result = run(env.runner, "meta", "assign", ORG, "--template", starter)
+        assert result.exit_code == 2
+        assert "--assignment" in result.output
+
+    def test_assign_grants_the_tas_team_on_new_repos(self, env, tmp_path):
+        # repos created by assign must be TA-readable immediately, not
+        # only after the next apply
+        seed_meta(env, tas=["/ta-one"])
+        table = self.table(tmp_path, "team-1 /msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, table, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        team = env.org.get_team_by_slug("cmpe_195a-tas")
+        assert team is not None
+        created = env.gh.get_repo(f"{ORG}/{REPO_PREFIX}-team-1")
+        assert ("grant", created.full_name, "pull") in team.log
+
     def test_identity_syntax_resolves_without_lookups(self, env, tmp_path):
         # a /githubid half needs no canvas or search round trip, even when
         # the email half is unresolvable
@@ -602,6 +631,16 @@ class TestMetaAssignFromCanvas:
         run(env.runner, "meta", "assign", ORG, "--from-canvas",
             "--assignment", "hw2", "--no-dryrun")
         assert "fetching canvas profiles" not in labels
+
+    def test_recorded_canvas_course_beats_the_directory_name(self, env, canvas):
+        # the dir name is a legacy alias here; canvas_course is the truth
+        seed_meta(env, course="legacy_195a", canvas_course="CMPE-195A")
+        result = run(env.runner, "meta", "assign", "legacy", "--from-canvas",
+                     "--assignment", "hw1", "--no-dryrun")
+        assert result.exit_code == 1  # erin's unresolvable email, as ever
+        rows = {r["name"] for r in
+                meta_state(env, course="legacy_195a")["assignments"]["hw1"]}
+        assert "Alice-Adams" in rows
 
     def test_requires_the_assignment_flag(self, env, canvas):
         seed_meta(env)

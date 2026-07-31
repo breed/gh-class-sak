@@ -208,6 +208,20 @@ def _classroom_universe(gh, org, data, all_repos, by_id):
     return universe
 
 
+def _resolve_tas(tas, resolve, unresolved):
+    """unique TA logins; each unresolvable entry errors into unresolved."""
+    logins = []
+    for entry in tas:
+        login = resolve(entry)
+        if login:
+            if login not in logins:
+                logins.append(login)
+        else:
+            error(f'cannot resolve TA "{entry}" to a github id')
+            unresolved.append(entry)
+    return logins
+
+
 def _resolve_row_students(row, resolve):
     """resolved logins for a row; noticeable error per unresolvable email."""
     logins = []
@@ -473,16 +487,8 @@ def meta_init(classroom, org, prefix, template, canvas_course, dryrun):
     # the classroom's TA team exists from day one, with read access to
     # whatever repos the classroom already has (usually none yet)
     resolve = _make_resolver(gh, org, canvas_course or classroom_dir)
-    ta_logins = []
     unresolved = []
-    for entry in tas:
-        login = resolve(entry)
-        if login:
-            if login not in ta_logins:
-                ta_logins.append(login)
-        else:
-            error(f'cannot resolve TA "{entry}" to a github id')
-            unresolved.append(entry)
+    ta_logins = _resolve_tas(tas, resolve, unresolved)
     universe = {}
     if existing and existing["assignments"]:
         all_repos = list_org_repos(gh, org)
@@ -725,8 +731,12 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
     if from_canvas and table_file is not None:
         error("--from-canvas replaces the table file; pass one or the other")
         sys.exit(2)
-    if not from_canvas and table_file is None:
-        error("pass a table file, or --from-canvas to build one from the roster")
+    if not from_canvas and table_file is None and not template_url:
+        error("pass a table file, --from-canvas to build one from the roster,"
+              " or --template to record a template alone")
+        sys.exit(2)
+    if table_file is None and not from_canvas and not assignment:
+        error("--assignment is required to record a template without a table")
         sys.exit(2)
     if canvas_group and not from_canvas:
         error("--canvas-group only makes sense with --from-canvas")
@@ -744,7 +754,8 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
     classroom_dir = _resolve_classroom_dir(checkout, partial, classroom)
     data = _load_classroom(checkout, classroom_dir)
 
-    if assignment is None and table_file.name in ("-", "<stdin>"):
+    if assignment is None and table_file is not None \
+            and table_file.name in ("-", "<stdin>"):
         error("--assignment is required when the table comes from stdin")
         sys.exit(2)
     name = assignment or os.path.splitext(os.path.basename(table_file.name))[0]
@@ -763,7 +774,9 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
             data["templates"] = {**data["templates"], name: template_url}
             _perform(dryrun, f"record {name} template: {template_url}",
                      lambda: None, actions)
-    course = partial or data["canvas_course"] or classroom_dir
+    # the recorded canvas course beats the directory name, exactly as it
+    # does for meta init and meta apply
+    course = data["canvas_course"] or classroom_dir
     if from_canvas:
         incoming = _rows_from_canvas(Classroom(org, course), canvas_group,
                                      unresolvable)
@@ -772,8 +785,10 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
             data["group_sets"] = {**data["group_sets"], name: canvas_group}
             _perform(dryrun, f"record {name} group set: {canvas_group}",
                      lambda: None, actions)
-    else:
+    elif table_file is not None:
         incoming = ms.parse_students_tsv(table_file.read())
+    else:
+        incoming = []  # template-only: no roster changes
 
     merged, changed_names = ms.merge_rows(data["assignments"].get(name, []), incoming)
     data["assignments"][name] = merged
@@ -786,6 +801,15 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
     resolve = _make_resolver(gh, org, course)
     changed, unresolved = _realize_classroom(gh, org, data, resolve, dryrun, actions)
     unresolved = unresolvable + unresolved
+
+    # repos created here must be TA-readable now, not after the next apply
+    if data["tas"]:
+        ta_logins = _resolve_tas(data["tas"], resolve, unresolved)
+        all_repos = list_org_repos(gh, org)
+        by_id = {r.id: r for r in all_repos}
+        universe = _classroom_universe(gh, org, data, all_repos, by_id)
+        _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe,
+                            dryrun, actions)
 
     if not dryrun and (changed or changed_names or group_set_changed
                        or template_changed):
@@ -914,15 +938,7 @@ def meta_apply(classroom, dryrun):
             _reconcile_repo_protection(repo, desired, dryrun, actions)
 
         # 3. the classroom's TA team reads exactly the classroom's repos
-        ta_logins = []
-        for entry in data["tas"]:
-            login = resolve(entry)
-            if login:
-                if login not in ta_logins:
-                    ta_logins.append(login)
-            else:
-                error(f'cannot resolve TA "{entry}" to a github id')
-                any_unresolved.append(entry)
+        ta_logins = _resolve_tas(data["tas"], resolve, any_unresolved)
         _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe,
                             dryrun, actions)
 
