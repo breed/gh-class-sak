@@ -14,8 +14,9 @@ hand-editable, diffable, and invisible to students:
 ```
 classroom-meta/
   cs_101/                          one directory per classroom
-    classroom.ini                  [CLASSROOM] optional prefix, template, repo settings
-    tas                            one EMAIL/GITHUBID identity per line
+    classroom.ini                  [CLASSROOM] prefix and settings; [TAS] one
+                                   identity per line; [TEMPLATE] per-assignment
+                                   starter repos
     hw1.tsv                        one file per assignment: NAME  STUDENTS  REPO  REPO_ID
     project.tsv
 ```
@@ -27,7 +28,7 @@ classroom-meta/
 | which student/team owns which repo | the tsv rows: `NAME  STUDENTS  REPO  REPO_ID` |
 | repos surviving a rename | `REPO_ID` — GitHub's permanent numeric id, recorded per row |
 | the roster | the `STUDENTS` columns (plus Canvas, via the config, for names and emails) |
-| TA access everywhere | the `tas` file — realized as a `<classroom>-TAs` team with read access |
+| TA access everywhere | classroom.ini's `[TAS]` section — realized as a `<classroom>-TAs` team with read access |
 | starter code | `classroom.ini`: `template = OWNER/NAME`, used when repos are created |
 | repo protection | `classroom.ini`: `protection`, `linear_history`, `force_push` |
 
@@ -70,8 +71,8 @@ re-run with `--no-dryrun`. What the import records:
 - **collaborators as the students** — each row's `STUDENTS` column is the repo's
   write-access collaborators, recorded as `/githubid` identities
 - **TAs detected, not imported as students** — a login with write access on *every* one
-  of a classroom's repos (exactly how Classroom set staff up) goes into the `tas` file
-  instead of the `STUDENTS` columns
+  of a classroom's repos (exactly how Classroom set staff up) goes into classroom.ini's
+  `[TAS]` section instead of the `STUDENTS` columns
 - **the course repo prefix, when your names reveal it** — repos named
   `cmpe30-hw1-*` with the assignment named `hw1` leave `cmpe30` as the shared head,
   which is recorded as the classroom's `prefix`; future repos then follow the org's
@@ -104,8 +105,8 @@ team-3     lchen(Lin Chen)
 Then finish the job:
 
 1. **Review the imported files.** Clone the `classroom-meta` repo (or read it on
-   GitHub): check the tsv rows, and add anyone the TA detection couldn't see to the
-   `tas` file — it only detects staff who had write on every repo.
+   GitHub): check the tsv rows, and add anyone the TA detection couldn't see to
+   classroom.ini's `[TAS]` section — it only detects staff who had write on every repo.
 2. **Add classroom settings** you want going forward: a `template` for new repos, and
    branch protection (`protection`, `linear_history`, `force_push`) in `classroom.ini`.
 3. **Reconcile.** This creates each classroom's `<classroom>-TAs` team with read on all

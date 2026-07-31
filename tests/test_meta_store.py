@@ -15,8 +15,19 @@ class TestClassroomIni:
         assert ms.parse_classroom_ini(text) == {
             "prefix": "sp26-project", "template": "ORG/Template",
             "canvas_course": None, "protection": None,
-            "linear_history": None, "force_push": None, "group_sets": {},
+            "linear_history": None, "force_push": None,
+            "tas": [], "templates": {}, "group_sets": {},
         }
+
+    def test_round_trip_with_tas_and_templates(self):
+        text = ms.serialize_classroom_ini(
+            "p", tas=["khalil.estell@sjsu.edu/kammce", "/breed"],
+            templates={"hw1": "https://github.com/org/hw1-starter.git"})
+        parsed = ms.parse_classroom_ini(text)
+        assert parsed["tas"] == ["khalil.estell@sjsu.edu/kammce", "/breed"]
+        assert parsed["templates"] == {
+            "hw1": "https://github.com/org/hw1-starter.git"}
+        assert ms.serialize_classroom_ini(**parsed) == text
 
     def test_round_trip_with_canvas_course_and_group_sets(self):
         text = ms.serialize_classroom_ini(
@@ -75,9 +86,9 @@ class TestTas:
         text = "# graders\nta-one\n\ngrader@sjsu.edu  # resolves later\n"
         assert ms.parse_tas(text) == ["ta-one", "grader@sjsu.edu"]
 
-    def test_round_trip(self):
-        entries = ["ta-one", "grader@sjsu.edu"]
-        assert ms.parse_tas(ms.serialize_tas(entries)) == entries
+    def test_identity_entries_parse(self):
+        text = "khalil.estell@sjsu.edu/kammce\n/breed\n"
+        assert ms.parse_tas(text) == ["khalil.estell@sjsu.edu/kammce", "/breed"]
 
 
 class TestStudentsTsv:
@@ -220,6 +231,24 @@ class TestGitPlumbing:
         checkout = ms.checkout_meta(str(bare_origin), ORG)
         ms.save_classroom(checkout, "cs101", "p")
         assert ms.load_classroom(checkout, "cs101")["assignments"] == {}
+
+    def test_legacy_tas_file_still_reads(self, bare_origin, checkout_root):
+        checkout = ms.checkout_meta(str(bare_origin), ORG)
+        ms.save_classroom(checkout, "cs101", "p")
+        with open(os.path.join(checkout, "cs101", "tas"), "w") as f:
+            f.write("/kammce\n")
+        assert ms.load_classroom(checkout, "cs101")["tas"] == ["/kammce"]
+
+    def test_save_moves_the_tas_into_the_ini(self, bare_origin, checkout_root):
+        checkout = ms.checkout_meta(str(bare_origin), ORG)
+        ms.save_classroom(checkout, "cs101", "p")
+        legacy = os.path.join(checkout, "cs101", "tas")
+        with open(legacy, "w") as f:
+            f.write("/kammce\n")
+        data = ms.load_classroom(checkout, "cs101")
+        ms.save_classroom(checkout, "cs101", "p", tas=data["tas"])
+        assert not os.path.exists(legacy)
+        assert ms.load_classroom(checkout, "cs101")["tas"] == ["/kammce"]
 
     def test_students_tsv_is_just_an_assignment_named_students(self, bare_origin,
                                                                checkout_root):

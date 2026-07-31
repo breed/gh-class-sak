@@ -39,7 +39,7 @@ and **permanent id** — so every imported repo is rename-proof from day one.
 
 Staff are detected, not imported as students: a login with write access on **every** one
 of a classroom's repos (Classroom set TAs up exactly like that) is left out of the
-`STUDENTS` columns and recorded in the classroom's `tas` file instead — where the next
+`STUDENTS` columns and recorded in classroom.ini's `[TAS]` section instead — where the next
 `meta apply` gives it team read and revokes the leftover per-repo write. Re-running the
 migration also repairs rows imported before this detection existed.
 
@@ -177,8 +177,9 @@ and **every `.tsv` file in it is an assignment**, named by its basename:
 ```
 classroom-meta/
   sp26_cmpe_195a/                  one directory per classroom
-    classroom.ini                  [CLASSROOM] optional prefix, template, repo settings
-    tas                            one EMAIL/GITHUBID identity per line
+    classroom.ini                  [CLASSROOM] prefix and settings; [TAS] one
+                                   identity per line; [TEMPLATE] and [GROUP_SETS]
+                                   one ASSIGNMENT = VALUE each
     hw1.tsv                        one file per assignment: NAME  STUDENTS  REPO  REPO_ID
     project.tsv
 ```
@@ -202,7 +203,7 @@ ever resolve classrooms that already exist. The org comes from `--org` (matched
 partially against `[ORGS]`), from the single configured org, or — with no config — from
 the argument itself; with several orgs configured and no `--org`, it's an error.
 
-With a Canvas config, the `tas` file is seeded from the course's TA and
+With a Canvas config, the `[TAS]` section is seeded from the course's TA and
 teacher enrollments. `--prefix` defaults to the classroom argument itself (made
 repo-name safe), so a new classroom's repos are namespaced by its course name; pass
 `--prefix ""` to record none. Existing classrooms keep their recorded prefix — a
@@ -217,7 +218,7 @@ default; in an org with no classroom-meta repo yet, a
 ```console
 $ gh-class-sak meta init CS-101 --org cs101-fall
 ⚠️  dry run: no changes will be made. add --no-dryrun to apply
-no canvas config; seed the tas file by hand
+no canvas config; seed the [TAS] section by hand
 ⚠️  would record cs_101: prefix=CS-101 tas=-
 ⚠️  would create team "cs_101-TAs" in cs101-fall
 ```
@@ -243,6 +244,14 @@ email nothing can resolve is a loud error. Under `--no-dryrun` it creates each m
 repo (privately, from the template when `classroom.ini` names one), records the URL and
 repo id, and grants the listed students push. Re-importing an updated table changes
 student lists but **never clobbers a recorded repo**.
+
+`--template REPO_URL` gives the assignment starter content: the URL is validated first
+(`git ls-remote`; an unreachable repo is an error before anything happens), recorded in
+`classroom.ini`'s `[TEMPLATE]` section as `ASSIGNMENT = REPO_URL`, and every **new**
+repo created for the assignment — now or by a later `meta apply` — is seeded from a
+shallow clone of it, pushed as a single fresh commit so students get the content
+without the template's history. A `[TEMPLATE]` record takes precedence over the
+classroom-wide `template` for its assignment.
 
 Instead of a file, `--from-canvas` builds the table from the Canvas roster
 (`--assignment` is required then, since there's no filename to name it):
@@ -273,7 +282,7 @@ directory. For each one:
 - rows without a repo yet — including ones you hand-added to any assignment's tsv — get
   created
 - each classroom has its own **`<classroom>-TAs` team** (e.g. `sp26_cmpe_195a-TAs`) whose
-  membership matches its `tas` file, added as a **read** collaborator on that classroom's
+  membership matches its `[TAS]` section, added as a **read** collaborator on that classroom's
   student repos across all of its assignments — so TAs accept one org invite ever, and
   TAs of one classroom never gain access to another classroom's repos
 - every listed student has **write** on their repo; non-admin collaborators who aren't

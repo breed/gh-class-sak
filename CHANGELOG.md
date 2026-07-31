@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.0.2
+
+- the TAs moved into `classroom.ini`: a `[TAS]` section, one identity per line,
+  replaces the standalone `tas` file. Legacy files are still read, and the next save
+  migrates them into the ini and removes the file
+- `classroom.ini` gains a `[TEMPLATE]` section — one `ASSIGNMENT = REPO_URL` record
+  each — and `meta assign --template REPO_URL` populates it: the URL is validated with
+  `git ls-remote` first, and every new repo created for the assignment is seeded from a
+  shallow clone of it, pushed as a single fresh commit (content, not history). The
+  record also drives repos realized later by `meta apply`, and takes precedence over
+  the classroom-wide `template` for its assignment
+
 ## v1.0.1
 
 - fix: pending team invitations count as membership. An invited-but-not-accepted TA

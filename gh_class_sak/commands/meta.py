@@ -32,6 +32,7 @@ from gh_class_sak.core import (
     warn,
     would,
 )
+from gh_class_sak.git_ops import push_template, remote_exists
 from gh_class_sak.github_api import (
     UNPROTECTED,
     add_collaborator,
@@ -152,7 +153,7 @@ def _load_classroom(checkout, classroom):
 def _ini_settings(data):
     """a classroom's raw classroom.ini keys, for passing back through
     save_classroom."""
-    keys = REPO_SETTING_KEYS + ("canvas_course", "group_sets")
+    keys = REPO_SETTING_KEYS + ("canvas_course", "templates", "group_sets")
     return {key: data[key] for key in keys}
 
 
@@ -273,6 +274,7 @@ def _realize_classroom(gh, org, data, resolve, dryrun, actions):
     changed = False
     all_unresolved = []
     for assignment, rows in data["assignments"].items():
+        content_url = data["templates"].get(assignment)
         for row in rows:
             if row["repo_id"] is not None:
                 continue
@@ -289,12 +291,23 @@ def _realize_classroom(gh, org, data, resolve, dryrun, actions):
                          _adopt, actions)
                 _reconcile_repo_protection(existing, desired, dryrun, actions)
             else:
-                source = f" from {template.full_name}" if template else ""
-                def _create(repo_name=repo_name, made=made):
-                    made["repo"] = create_org_repo(gh, org, repo_name, template=template)
+                if content_url:
+                    # the assignment's [TEMPLATE] record: its content, as a
+                    # single fresh commit, seeds the new repo
+                    source = f" from {content_url}"
+                    def _create(repo_name=repo_name, made=made,
+                                content_url=content_url):
+                        made["repo"] = create_org_repo(gh, org, repo_name)
+                        push_template(content_url, made["repo"].clone_url,
+                                      get_token())
+                else:
+                    source = f" from {template.full_name}" if template else ""
+                    def _create(repo_name=repo_name, made=made):
+                        made["repo"] = create_org_repo(gh, org, repo_name,
+                                                       template=template)
                 _perform(dryrun, f"create private {org}/{repo_name}{source}", _create, actions)
                 if desired != UNPROTECTED:
-                    if template is not None:
+                    if template is not None or content_url:
                         def _protect(made=made):
                             protect_default_branch(made["repo"], *desired)
                         _perform(dryrun, f"protect default branch on {org}/{repo_name}"
@@ -413,7 +426,7 @@ def meta_init(classroom, org, prefix, template, canvas_course, dryrun):
             if github:
                 known_githubs.add(github.lower())
     elif not tas:
-        warn("no canvas config; seed the tas file by hand")
+        warn("no canvas config; seed the [TAS] section by hand")
 
     actions = []
     if meta_repo is None:
@@ -482,7 +495,7 @@ def _mark_students(row, repo):
 
 
 def _tas_team_line(gh, org, classroom_dir, configured_tas):
-    """how the classroom's tas team compares to the configured tas file."""
+    """how the classroom's tas team compares to the configured [TAS] section."""
     name = tas_team_name(classroom_dir)
     team = get_team(gh, org, tas_team_slug(classroom_dir))
     if team is None:
@@ -683,8 +696,12 @@ def _rows_from_canvas(room, canvas_group, unresolvable):
               help="build the table from the canvas roster instead of a file")
 @click.option("--canvas-group", default=None,
               help="with --from-canvas: one row per group in this canvas group set")
+@click.option("--template", "template_url", default=None,
+              help="REPO_URL whose content seeds this assignment's new repos;"
+                   " recorded in classroom.ini [TEMPLATE]")
 @dryrun_option
-def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group, dryrun):
+def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
+                template_url, dryrun):
     """Import a NAME + STUDENTS table as an assignment and create its repos."""
     if from_canvas and table_file is not None:
         error("--from-canvas replaces the table file; pass one or the other")
@@ -717,6 +734,16 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group, dr
     actions = []
     unresolvable = []
     group_set_changed = False
+    template_changed = False
+    if template_url:
+        if not remote_exists(template_url, get_token()):
+            error(f'template repo "{template_url}" is not a reachable git repo')
+            sys.exit(2)
+        if data["templates"].get(name) != template_url:
+            template_changed = True
+            data["templates"] = {**data["templates"], name: template_url}
+            _perform(dryrun, f"record {name} template: {template_url}",
+                     lambda: None, actions)
     course = partial or data["canvas_course"] or classroom_dir
     if from_canvas:
         incoming = _rows_from_canvas(Classroom(org, course), canvas_group,
@@ -741,7 +768,8 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group, dr
     changed, unresolved = _realize_classroom(gh, org, data, resolve, dryrun, actions)
     unresolved = unresolvable + unresolved
 
-    if not dryrun and (changed or changed_names or group_set_changed):
+    if not dryrun and (changed or changed_names or group_set_changed
+                       or template_changed):
         ms.save_classroom(checkout, classroom_dir, data["prefix"], data["template"],
                           tas=data["tas"], assignments=data["assignments"],
                           **_ini_settings(data))
@@ -973,7 +1001,7 @@ def migrate_github_classroom(org, dryrun):
                 members, _admins = split_collaborators(repo)
                 members_of[repo.full_name] = [m.login for m in members]
         # a login with write on every one of the classroom's repos is staff,
-        # not a student: record it in the tas file instead of every row
+        # not a student: record it in [TAS] instead of every row
         tas_detected = []
         if len(members_of) >= 2:
             common = set.intersection(*(set(m) for m in members_of.values()))

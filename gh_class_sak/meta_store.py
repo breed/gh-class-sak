@@ -4,8 +4,9 @@ an org hosts a set of classrooms; each is a directory (named by the
 normalized canvas course partial) whose classroom.ini marks it as one.
 every *.tsv file in the directory is an assignment, named by its stem:
 
-    sp26_cmpe_195a/classroom.ini   [CLASSROOM] optional prefix / template / settings
-    sp26_cmpe_195a/tas             one github login or email per line
+    sp26_cmpe_195a/classroom.ini   [CLASSROOM] prefix / settings, [TAS] one
+                                   identity per line, [TEMPLATE] and
+                                   [GROUP_SETS] one ASSIGNMENT = VALUE each
     sp26_cmpe_195a/hw1.tsv         NAME  STUDENTS  REPO  REPO_ID
     sp26_cmpe_195a/project.tsv
 
@@ -38,7 +39,7 @@ def parse_classroom_ini(text):
     raises ValueError on a protection value outside PROTECTION_VALUES or a
     boolean that isn't true/false.
     """
-    config = ConfigParser()
+    config = ConfigParser(allow_no_value=True)
     config.optionxform = str
     config.read_string(text)
 
@@ -60,6 +61,9 @@ def parse_classroom_ini(text):
         "protection": protection,
         "linear_history": _bool("linear_history"),
         "force_push": _bool("force_push"),
+        "tas": list(config.options("TAS")) if "TAS" in config else [],
+        "templates": dict(config.items("TEMPLATE"))
+        if "TEMPLATE" in config else {},
         "group_sets": dict(config.items("GROUP_SETS"))
         if "GROUP_SETS" in config else {},
     }
@@ -67,7 +71,8 @@ def parse_classroom_ini(text):
 
 def serialize_classroom_ini(prefix=None, template=None, protection=None,
                             linear_history=None, force_push=None,
-                            canvas_course=None, group_sets=None):
+                            canvas_course=None, tas=None, templates=None,
+                            group_sets=None):
     lines = ["[CLASSROOM]"]
     if prefix:
         lines.append(f"prefix = {prefix}")
@@ -81,6 +86,15 @@ def serialize_classroom_ini(prefix=None, template=None, protection=None,
         lines.append(f"linear_history = {str(linear_history).lower()}")
     if force_push is not None:
         lines.append(f"force_push = {str(force_push).lower()}")
+    if tas:
+        lines.append("")
+        lines.append("[TAS]")
+        lines.extend(tas)
+    if templates:
+        lines.append("")
+        lines.append("[TEMPLATE]")
+        for assignment, repo_url in templates.items():
+            lines.append(f"{assignment} = {repo_url}")
     if group_sets:
         lines.append("")
         lines.append("[GROUP_SETS]")
@@ -136,10 +150,6 @@ def parse_tas(text):
         if entry:
             entries.append(entry)
     return entries
-
-
-def serialize_tas(entries):
-    return "".join(f"{entry}\n" for entry in entries)
 
 
 # --- students.tsv ---------------------------------------------------------
@@ -228,11 +238,13 @@ def load_classroom(checkout, classroom):
         return None
     with open(ini) as f:
         data = parse_classroom_ini(f.read())
-    data["tas"] = []
-    tas_path = os.path.join(path, "tas")
-    if os.path.exists(tas_path):
-        with open(tas_path) as f:
-            data["tas"] = parse_tas(f.read())
+    if not data["tas"]:
+        # pre-[TAS] classrooms kept the tas in their own file; the next
+        # save moves them into classroom.ini and removes the file
+        tas_path = os.path.join(path, "tas")
+        if os.path.exists(tas_path):
+            with open(tas_path) as f:
+                data["tas"] = parse_tas(f.read())
     data["assignments"] = {}
     for entry in sorted(os.listdir(path)):
         if entry.startswith(".") or not entry.endswith(".tsv"):
@@ -254,12 +266,14 @@ def list_classrooms(checkout):
 
 def save_classroom(checkout, classroom, prefix=None, template=None, *, protection=None,
                    linear_history=None, force_push=None, canvas_course=None,
-                   group_sets=None, tas=None, assignments=None):
-    """write the classroom files; only the pieces passed are (re)written.
+                   tas=None, templates=None, group_sets=None, assignments=None):
+    """write the classroom files; classroom.ini carries everything but the
+    assignment tsvs.
 
     assignments maps name -> rows; only the named <name>.tsv files are
     written, and none are ever deleted — removing an assignment is a hand
-    `git rm` in the checkout.
+    `git rm` in the checkout. a legacy standalone `tas` file is removed:
+    the tas live in classroom.ini's [TAS] section now.
     """
     path = classroom_dir(checkout, classroom)
     os.makedirs(path, exist_ok=True)
@@ -268,10 +282,11 @@ def save_classroom(checkout, classroom, prefix=None, template=None, *, protectio
                                         linear_history=linear_history,
                                         force_push=force_push,
                                         canvas_course=canvas_course,
+                                        tas=tas, templates=templates,
                                         group_sets=group_sets))
-    if tas is not None:
-        with open(os.path.join(path, "tas"), "w") as f:
-            f.write(serialize_tas(tas))
+    legacy_tas = os.path.join(path, "tas")
+    if os.path.exists(legacy_tas):
+        os.remove(legacy_tas)
     for name, rows in (assignments or {}).items():
         with open(os.path.join(path, f"{name}.tsv"), "w") as f:
             f.write(serialize_students_tsv(rows))

@@ -400,6 +400,54 @@ class TestMetaAssign:
         assert result.exit_code == 0, result.output
         assert env.gh.get_repo(f"{ORG}/{ASSIGNMENT}-team-1") is not None
 
+    def make_template_origin(self, tmp_path):
+        """a real local git repo standing in for a template REPO_URL."""
+        origin = tmp_path / "starter"
+        origin.mkdir()
+        source = GitRepo.init(origin)
+        (origin / "README.md").write_text("starter content\n")
+        source.index.add(["README.md"])
+        source.index.commit("starter")
+        return str(origin)
+
+    def test_template_must_be_a_reachable_repo(self, env, tmp_path):
+        seed_meta(env)
+        table = self.table(tmp_path, "team-1 msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, table,
+                     "--template", str(tmp_path / "no-such-repo"))
+        assert result.exit_code == 2
+        assert "not a reachable git repo" in result.output
+        assert meta_state(env)["templates"] == {}
+
+    def test_template_is_recorded_and_seeds_new_repos(self, env, tmp_path):
+        starter = self.make_template_origin(tmp_path)
+        seed_meta(env)
+        table = self.table(tmp_path, "team-1 msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, table,
+                     "--template", starter, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert f"record {ASSIGNMENT} template: {starter}" in result.output
+        assert meta_state(env)["templates"] == {ASSIGNMENT: starter}
+
+        # the created repo's origin holds the template's content, as one commit
+        bare = env.root / f"{REPO_PREFIX}-team-1.git"
+        pushed = GitRepo(str(bare))
+        assert "README.md" in pushed.git.ls_tree("main", name_only=True)
+        assert len(list(pushed.iter_commits("main"))) == 1
+
+    def test_template_dryrun_previews_and_pushes_nothing(self, env, tmp_path):
+        starter = self.make_template_origin(tmp_path)
+        seed_meta(env)
+        table = self.table(tmp_path, "team-1 msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, table,
+                     "--template", starter)
+        assert result.exit_code == 0, result.output
+        assert f"would record {ASSIGNMENT} template: {starter}" in result.output
+        assert f"would create private {ORG}/{REPO_PREFIX}-team-1 from {starter}" \
+            in result.output
+        assert env.org.created_repos == []
+        assert meta_state(env)["templates"] == {}
+
     def test_identity_syntax_resolves_without_lookups(self, env, tmp_path):
         # a /githubid half needs no canvas or search round trip, even when
         # the email half is unresolvable

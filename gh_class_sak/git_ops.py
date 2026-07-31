@@ -1,7 +1,9 @@
 import base64
 import os
+import shutil
+import tempfile
 
-from git import GitCommandError, Repo
+from git import Actor, Git, GitCommandError, Repo
 
 
 def auth_env(token):
@@ -20,6 +22,43 @@ def auth_env(token):
         "GIT_CONFIG_VALUE_0": f"Authorization: Basic {basic}",
         "GIT_TERMINAL_PROMPT": "0",
     }
+
+
+def remote_exists(url, token=None):
+    """whether url is a reachable git repo, checked with ls-remote."""
+    git = Git()
+    try:
+        with git.custom_environment(**auth_env(token)):
+            git.ls_remote(url)
+        return True
+    except GitCommandError:
+        return False
+
+
+_template_sources = {}
+
+
+def push_template(template_url, dest_url, token=None, branch="main"):
+    """populate an empty repo with a template's current content.
+
+    the template is shallow-cloned once per session, and its files become a
+    single fresh commit — repos get the content, not the history — pushed as
+    BRANCH to dest_url.
+    """
+    source = _template_sources.get(template_url)
+    if source is None:
+        workdir = tempfile.mkdtemp(prefix="gh-class-sak-template-")
+        checkout = os.path.join(workdir, "content")
+        Repo.clone_from(template_url, checkout, depth=1, env=auth_env(token))
+        shutil.rmtree(os.path.join(checkout, ".git"))
+        source = Repo.init(checkout)
+        source.git.add("-A")
+        actor = Actor("gh-class-sak", "gh-class-sak@localhost")
+        source.index.commit(f"template from {template_url}",
+                            author=actor, committer=actor)
+        _template_sources[template_url] = source
+    with source.git.custom_environment(**auth_env(token)):
+        source.git.push(dest_url, f"HEAD:refs/heads/{branch}")
 
 
 def clone_or_update(clone_url, dest, token=None):
