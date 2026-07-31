@@ -185,6 +185,23 @@ class TestLoadConfig:
         assert "url = u" in text
         assert core.configured_orgs() == ["second-org", "first-org"]
 
+    def test_percent_in_a_canvas_token_is_literal(self, tmp_path, monkeypatch):
+        # interpolation must be off: api tokens can contain %
+        path = tmp_path / "cfg.ini"
+        path.write_text("[CANVAS]\nurl = u\ntoken = abc%def\n")
+        monkeypatch.setattr(core, "config_ini", str(path))
+        assert core.load_config().get("CANVAS", "token") == "abc%def"
+
+    def test_add_org_handles_an_orgs_header_with_a_comment(
+            self, tmp_path, monkeypatch):
+        # configparser accepts trailing text after the ], so the header
+        # match must too — or a second [ORGS] section corrupts the file
+        path = tmp_path / "cfg.ini"
+        path.write_text("[ORGS]  # my orgs\nfirst-org\n")
+        monkeypatch.setattr(core, "config_ini", str(path))
+        core.add_org_to_config("second-org")
+        assert core.configured_orgs() == ["second-org", "first-org"]
+
     def test_add_org_appends_the_section_to_a_canvas_only_config(
             self, tmp_path, monkeypatch):
         path = tmp_path / "cfg.ini"

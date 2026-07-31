@@ -153,7 +153,8 @@ def load_config(required=True):
         error("create it with an [ORGS] section (one github org per line)"
               " and, for the canvas features, a [CANVAS] section")
         sys.exit(1)
-    config = ConfigParser(allow_no_value=True)
+    # interpolation off: canvas tokens can contain %
+    config = ConfigParser(allow_no_value=True, interpolation=None)
     config.optionxform = str  # preserve key case
     try:
         config.read(config_ini)
@@ -225,9 +226,12 @@ def add_org_to_config(org):
         with open(config_ini) as f:
             text = f.read()
     lines = text.splitlines()
-    stripped = [line.strip() for line in lines]
-    if "[ORGS]" in stripped:
-        lines.insert(stripped.index("[ORGS]") + 1, org)
+    # configparser accepts trailing text after the ] ("[ORGS]  # my orgs"),
+    # so the header match must too, or we append a duplicate section
+    header = next((i for i, line in enumerate(lines)
+                   if line.strip().startswith("[ORGS]")), None)
+    if header is not None:
+        lines.insert(header + 1, org)
         text = "\n".join(lines) + "\n"
     else:
         if text and not text.endswith("\n"):

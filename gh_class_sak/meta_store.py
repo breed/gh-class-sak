@@ -19,6 +19,7 @@ git; the git plumbing at the bottom reuses git_ops.
 
 import os
 from configparser import ConfigParser
+from configparser import Error as ConfigParserError
 
 import click
 
@@ -39,7 +40,9 @@ def parse_classroom_ini(text):
     raises ValueError on a protection value outside PROTECTION_VALUES or a
     boolean that isn't true/false.
     """
-    config = ConfigParser(allow_no_value=True)
+    # interpolation off: a % in a value (a url-encoded template REPO_URL,
+    # say) is data, or every later load of the file raises
+    config = ConfigParser(allow_no_value=True, interpolation=None)
     config.optionxform = str
     config.read_string(text)
 
@@ -332,7 +335,7 @@ def load_meta_classrooms(gh, org, token=None):
     for classroom in list_classrooms(checkout):
         try:
             classrooms[classroom] = load_classroom(checkout, classroom)
-        except ValueError as exc:
+        except (ValueError, ConfigParserError) as exc:
             warn(f"ignoring classroom {classroom} in the classroom-meta repo: {exc}")
     return classrooms
 

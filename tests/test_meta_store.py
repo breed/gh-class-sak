@@ -57,6 +57,15 @@ class TestClassroomIni:
         text = "[CLASSROOM]\nprefix = p\n"
         assert ms.serialize_classroom_ini(**ms.parse_classroom_ini(text)) == text
 
+    def test_percent_signs_are_literal(self):
+        # ConfigParser interpolation must be off: a % in a recorded value
+        # (say a url-encoded template REPO_URL) is data, not a syntax error
+        url = "https://github.com/org/starter%20kit.git"
+        text = ms.serialize_classroom_ini("p", templates={"hw1": url})
+        parsed = ms.parse_classroom_ini(text)
+        assert parsed["templates"] == {"hw1": url}
+        assert ms.serialize_classroom_ini(**parsed) == text
+
     def test_serialize_without_prefix_omits_the_line(self):
         text = ms.serialize_classroom_ini()
         assert text == "[CLASSROOM]\n"
@@ -302,6 +311,24 @@ class TestLoadMetaCourses:
         os.makedirs(bad)
         with open(os.path.join(bad, "classroom.ini"), "w") as f:
             f.write("[CLASSROOM]\nprefix = p\nprotection = review\n")
+        ms.commit_and_push(seed, "seed")
+
+        meta_repo = FakeRepo(ORG, "classroom-meta", clone_url=str(bare_origin))
+        gh = FakeGithub(orgs=[FakeOrg(ORG, [meta_repo])])
+        classrooms = ms.load_meta_classrooms(gh, ORG)
+        assert list(classrooms) == ["cs101"]
+        assert "cs210" in capsys.readouterr().err
+
+    def test_hand_edit_parse_errors_are_skipped_with_a_warning(
+            self, bare_origin, checkout_root, capsys):
+        # configparser raises its own error hierarchy (not ValueError) on a
+        # pasted duplicate line; a hand-edit must degrade, never traceback
+        seed = ms.checkout_meta(str(bare_origin), "seeding")
+        ms.save_classroom(seed, "cs101", "prefix-a")
+        bad = os.path.join(seed, "cs210")
+        os.makedirs(bad)
+        with open(os.path.join(bad, "classroom.ini"), "w") as f:
+            f.write("[CLASSROOM]\nprefix = p\n[TAS]\n/ta-alice\n/ta-alice\n")
         ms.commit_and_push(seed, "seed")
 
         meta_repo = FakeRepo(ORG, "classroom-meta", clone_url=str(bare_origin))

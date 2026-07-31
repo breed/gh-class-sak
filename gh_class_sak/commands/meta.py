@@ -145,7 +145,7 @@ def _load_classroom(checkout, classroom):
     """load_classroom, exiting with the message when classroom.ini is invalid."""
     try:
         return ms.load_classroom(checkout, classroom)
-    except ValueError as exc:
+    except (ValueError, ms.ConfigParserError) as exc:
         error(f"{classroom}/classroom.ini: {exc}")
         sys.exit(2)
 
