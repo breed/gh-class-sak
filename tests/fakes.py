@@ -74,8 +74,13 @@ class FakeBranch:
             kwargs.get("allow_force_pushes", False))
 
 
+_invitation_id_counter = [0]
+
+
 class FakeInvitation:
     def __init__(self, login):
+        _invitation_id_counter[0] += 1
+        self.id = _invitation_id_counter[0]
         self.invitee = FakeNamedUser(login)
 
 
@@ -120,14 +125,30 @@ class FakeRepo:
         self.collab_log.append(("add", login, permission))
         role = "admin" if permission == "admin" else \
             ("read" if permission == "pull" else "write")
-        self._collaborators = [c for c in self._collaborators if c.login != login]
-        self._collaborators.append(
-            FakeNamedUser(login, role_name=role, admin=permission == "admin"))
+        if any(c.login == login for c in self._collaborators):
+            # updating an existing collaborator's permission applies directly
+            self._collaborators = [c for c in self._collaborators
+                                   if c.login != login]
+            self._collaborators.append(
+                FakeNamedUser(login, role_name=role, admin=permission == "admin"))
+            return
+        # like github: a non-collaborator gets a pending invitation, not
+        # access — they are a member only after accepting
+        self._invitations = [i for i in self._invitations
+                             if i.invitee.login != login]
+        self._invitations.append(FakeInvitation(login))
 
     def remove_from_collaborators(self, collaborator):
         login = getattr(collaborator, "login", collaborator)
         self.collab_log.append(("remove", login, None))
         self._collaborators = [c for c in self._collaborators if c.login != login]
+
+    def remove_invitation(self, invitation_id):
+        stale = [i for i in self._invitations if i.id == invitation_id]
+        for inv in stale:
+            self.collab_log.append(("cancel-invite", inv.invitee.login, None))
+        self._invitations = [i for i in self._invitations
+                             if i.id != invitation_id]
 
     def get_commits(self):
         if self._commits_raise:
@@ -153,7 +174,10 @@ class FakeTeam:
 
     def add_membership(self, member, role=None):
         self.log.append(("add-member", member.login))
-        self._members[member.login] = member
+        if member.login in self._members:
+            return
+        # like github: adding a non-org-member creates a pending invitation
+        self._invitations[member.login] = member
 
     def remove_membership(self, member):
         self.log.append(("remove-member", member.login))

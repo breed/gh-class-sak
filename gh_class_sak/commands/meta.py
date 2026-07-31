@@ -330,13 +330,25 @@ def _realize_classroom(gh, org, data, resolve, dryrun, actions):
     return changed, all_unresolved
 
 
+def _cancel_invitation(repo, login):
+    for inv in repo.get_pending_invitations():
+        if inv.invitee is not None and inv.invitee.login.lower() == login.lower():
+            repo.remove_invitation(inv.id)
+
+
 def _reconcile_row_collaborators(gh, repo, logins, dryrun, actions):
-    """make the repo's non-admin collaborators exactly the row's students."""
+    """make the repo's non-admin collaborators exactly the row's students.
+
+    an unaccepted invitation counts as present — re-granting would re-invite
+    on every run — and one held by someone no longer listed is cancelled, or
+    they could still accept and gain write.
+    """
     members, _admins = split_collaborators(repo)
+    invited = {login.lower(): login for login in pending_invitees(repo)}
     desired = {login.lower(): login for login in logins}
     current = {m.login.lower(): m.login for m in members}
     for lowered, login in desired.items():
-        if lowered not in current:
+        if lowered not in current and lowered not in invited:
             def _grant(login=login):
                 add_collaborator(repo, login, "push")
             _perform(dryrun, f"grant push to {login} on {repo.full_name}",
@@ -346,6 +358,12 @@ def _reconcile_row_collaborators(gh, repo, logins, dryrun, actions):
             def _revoke(login=login):
                 remove_collaborator(repo, login)
             _perform(dryrun, f"revoke {login} from {repo.full_name}", _revoke, actions)
+    for lowered, login in invited.items():
+        if lowered not in desired:
+            def _cancel(login=login):
+                _cancel_invitation(repo, login)
+            _perform(dryrun, f"cancel the invitation for {login}"
+                     f" on {repo.full_name}", _cancel, actions)
 
 
 @gh_class_sak.group()

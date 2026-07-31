@@ -138,7 +138,8 @@ class TestMetaInit:
         assert result.exit_code == 0, result.output
         assert 'create team "cmpe_195a-TAs"' in result.output
         team = env.org.get_team_by_slug("cmpe_195a-tas")
-        assert [m.login for m in team.get_members()] == ["profbeth"]
+        # like github: the added TA holds an invitation until they accept
+        assert [u.login for u in team.invitations()] == ["profbeth"]
 
     def test_canvas_course_is_recorded_and_preserved(self, env):
         result = run(env.runner, "meta", "init", ORG,
@@ -223,7 +224,7 @@ class TestMetaShow:
     def test_tas_team_matching_the_file_is_reported(self, env):
         from tests.fakes import FakeTeam
         team = FakeTeam(env.org, "cmpe_195a-tas")
-        team.add_membership(FakeNamedUser("ta-one"))
+        team._members["ta-one"] = FakeNamedUser("ta-one")  # accepted member
         env.org._teams[team.slug] = team
         seed_meta(env, tas=["ta-one"])
         result = run(env.runner, "meta", "show", ORG)
@@ -663,7 +664,7 @@ class TestMetaApply:
         assert not any(login == "prof" for _op, login, _p in repo.collab_log)
 
         team = env.org.get_team_by_slug("cmpe_195a-tas")
-        assert [m.login for m in team.get_members()] == ["ta-one"]
+        assert [u.login for u in team.invitations()] == ["ta-one"]
         assert ("grant", repo.full_name, "pull") in team.log
 
     def test_second_apply_has_nothing_to_do(self, env):
@@ -740,6 +741,37 @@ class TestMetaApply:
                   if entry == ("grant", repo.full_name, "pull")]
         assert len(grants) == 1
 
+    def test_pending_repo_invitation_counts_as_present(self, env):
+        # an invited-but-not-accepted student must not be re-invited on
+        # every apply — "run it twice → nothing to do" has to hold
+        repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1", invitations=("msmith",))
+        env.org._repos.append(repo)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["/msmith"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert "nothing to do" in result.output
+        assert repo.collab_log == []
+
+    def test_removing_a_student_cancels_their_pending_invitation(self, env):
+        # an uncancelled invitation is a door left open: the removed
+        # student could still accept and gain write
+        repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1",
+                        collaborators=[FakeNamedUser("jdoe", role_name="write")],
+                        invitations=("dropout",))
+        env.org._repos.append(repo)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["/jdoe"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert f"cancel the invitation for dropout on {repo.full_name}" \
+            in result.output
+        assert ("cancel-invite", "dropout", None) in repo.collab_log
+        assert repo.get_pending_invitations() == []
+
     def test_pending_invitations_count_as_members(self, env):
         # an invited-but-not-accepted TA must not be re-invited every apply
         from tests.fakes import FakeTeam
@@ -796,8 +828,8 @@ class TestMetaApply:
 
         team_a = env.org.get_team_by_slug("cmpe_195a-tas")
         team_b = env.org.get_team_by_slug("cmpe_195b-tas")
-        assert [m.login for m in team_a.get_members()] == ["ta-ana"]
-        assert [m.login for m in team_b.get_members()] == ["ta-bob"]
+        assert [u.login for u in team_a.invitations()] == ["ta-ana"]
+        assert [u.login for u in team_b.invitations()] == ["ta-bob"]
         assert ("grant", repo_a.full_name, "pull") in team_a.log
         assert ("grant", repo_b.full_name, "pull") not in team_a.log
         assert ("grant", repo_b.full_name, "pull") in team_b.log
