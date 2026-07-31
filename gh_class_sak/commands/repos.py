@@ -22,7 +22,7 @@ from gh_class_sak.core import (
     get_github,
     get_token,
     gh_class_sak,
-    load_config,
+    has_canvas_config,
     normalize_course_name,
     output,
     progress,
@@ -398,8 +398,10 @@ def repos_list(classroom, assignment, repo, members, show_instructors, show_name
     gh = get_github()
     room, found = resolve_assignment_repos(classroom, assignment)
 
-    # resolve the Canvas course once if any Canvas feature is needed
-    need_canvas = (group_category or show_instructors or show_email) and load_config(False)
+    # resolve the Canvas course once if any Canvas feature is usable —
+    # an [ORGS]-only config degrades like no config at all
+    need_canvas = (group_category or show_instructors or show_email) \
+        and has_canvas_config()
     canvas_ctx = resolve_canvas_course(room) if need_canvas else None
 
     groups_data = None

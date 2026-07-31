@@ -102,6 +102,23 @@ class TestReposList:
         # alice's commit email is real; bob's is noreply so canvas wins
         assert columns(out[1])[1] == "alice(alice@sjsu.edu),bob(bob@sjsu.edu)"
 
+    def test_email_degrades_on_an_orgs_only_config(self, cli, tmp_path,
+                                                   monkeypatch):
+        # an [ORGS]-only config — exactly what migrate creates — must behave
+        # like no config at all: emails come from commit history, no exit 1
+        from gh_class_sak import core
+        path = tmp_path / "gh-class-sak.ini"
+        path.write_text(f"[ORGS]\n{ORG}\n")
+        monkeypatch.setattr(core, "config_ini", str(path))
+        # without a [CANVAS] section the canvas client must never be built
+        # (live, it would exit 1 on the missing credentials)
+        def boom():
+            raise AssertionError("canvas consulted without a [CANVAS] section")
+        monkeypatch.setattr(repos_cmd, "get_canvas", boom)
+        out = lines(run(cli, "repos", "list", ORG, "project",
+                        "--members", "--email"))
+        assert "alice(alice@sjsu.edu)" in out[1]
+
     def test_errors_when_no_assignment_matches(self, cli, no_config):
         result = run(cli, "repos", "list", ORG, "final")
         assert result.exit_code == 2
