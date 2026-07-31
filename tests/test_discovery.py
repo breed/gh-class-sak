@@ -188,8 +188,10 @@ class TestResolveClassroomOrg:
     def test_falls_through_to_a_literal_org_with_no_config(self, no_config):
         assert core.resolve_classroom(None, "some-other-org") == ("some-other-org", None)
 
-    def test_falls_through_when_nothing_matches(self, config_file):
-        # neither an org nor a classroom dir (the org has no classroom-meta)
+    def test_falls_through_when_nothing_matches(self, config_file, monkeypatch):
+        # neither an org nor a classroom dir (the org has no classroom-meta).
+        # the dir search asks for a token, which tests never really have
+        monkeypatch.setattr(core, "get_token", lambda: None)
         gh = FakeGithub(orgs=[FakeOrg(ORG)])
         assert core.resolve_classroom(gh, "unrelated-org") == ("unrelated-org", None)
 

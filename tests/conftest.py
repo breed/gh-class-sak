@@ -27,6 +27,19 @@ def _fresh_profile_cache():
     yield
 
 
+@pytest.fixture(autouse=True)
+def _no_ambient_credentials(monkeypatch):
+    """tests must behave identically on a dev machine and a bare CI runner.
+
+    a test that reaches the real get_token() would pass wherever `gh auth
+    token` happens to work and exit 1 everywhere else — this makes every
+    environment look like the bare one, so such a test fails at the desk
+    instead of on CI."""
+    monkeypatch.setattr(core, "probe_token", lambda: (None, None))
+    monkeypatch.setattr(core, "_token", None)
+    yield
+
+
 def _user(login, name=None, email=None, admin=False):
     return FakeNamedUser(login, name=name, email=email,
                          role_name="admin" if admin else "write", admin=admin)
