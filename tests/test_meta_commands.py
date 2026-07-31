@@ -204,6 +204,35 @@ class TestMetaShow:
         assert "✅jdoe,📧msmith,❌lchen" in result.output
         assert "markers: ✅ collaborator" in result.output
 
+    def test_email_only_identity_marks_by_its_resolved_login(
+            self, env, config_file, fake_canvas, monkeypatch):
+        # the marker must compare the resolved login, not the identity
+        # string — an email-only student with access is a ✅, not a ❌
+        monkeypatch.setattr(core, "get_canvas", lambda: fake_canvas)
+        monkeypatch.setattr(repos_cmd, "get_canvas", lambda: fake_canvas)
+        repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1",
+                        collaborators=[FakeNamedUser("alice", role_name="write")])
+        env.org._repos.append(repo)
+        seed_meta(env, canvas_course="CMPE-195A", assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["alice@sjsu.edu/"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        result = run(env.runner, "meta", "show", "CMPE-195A")
+        assert result.exit_code == 0, result.output
+        assert "✅alice@sjsu.edu/" in result.output
+
+    def test_tas_team_matches_an_email_only_identity(
+            self, env, config_file, fake_canvas, monkeypatch):
+        monkeypatch.setattr(core, "get_canvas", lambda: fake_canvas)
+        monkeypatch.setattr(repos_cmd, "get_canvas", lambda: fake_canvas)
+        from tests.fakes import FakeTeam
+        team = FakeTeam(env.org, "cmpe_195a-tas")
+        team._members["profbeth"] = FakeNamedUser("profbeth")
+        env.org._teams[team.slug] = team
+        seed_meta(env, canvas_course="CMPE-195A", tas=["beth@sjsu.edu/"])
+        result = run(env.runner, "meta", "show", "CMPE-195A")
+        assert result.exit_code == 0, result.output
+        assert "TAS TEAM  cmpe_195a-TAs (matches tas)" in result.output
+
     def test_rows_without_a_repo_stay_unmarked(self, env):
         seed_meta(env, assignments={ASSIGNMENT: [
             {"name": "team-1", "students": ["jdoe"],

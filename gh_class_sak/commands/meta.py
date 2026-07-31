@@ -499,17 +499,19 @@ def meta_init(classroom, org, prefix, template, canvas_course, dryrun):
         sys.exit(1)
 
 
-def _mark_students(row, repo):
+def _mark_students(row, repo, resolve):
     """the row's students, each marked with its live repo membership:
-    ✅ collaborator, 📧 invited but not yet accepted, ❌ neither."""
+    ✅ collaborator, 📧 invited but not yet accepted, ❌ neither.
+
+    identities are resolved to logins first, so an email-only entry is
+    checked by who it means, not by its literal spelling."""
     if repo is None:
         return ",".join(row["students"]) or ms.EMPTY
     collaborators = {c.login.lower() for c in repo.get_collaborators()}
     invited = {login.lower() for login in pending_invitees(repo)}
     cells = []
     for student in row["students"]:
-        _email, github = ms.parse_identity(student)
-        lowered = (github or student).lower()
+        lowered = (resolve(student) or student).lower()
         if lowered in collaborators:
             cells.append(f"\N{WHITE HEAVY CHECK MARK}{student}")
         elif lowered in invited:
@@ -519,7 +521,7 @@ def _mark_students(row, repo):
     return ",".join(cells) or ms.EMPTY
 
 
-def _tas_team_line(gh, org, classroom_dir, configured_tas):
+def _tas_team_line(gh, org, classroom_dir, configured_tas, resolve):
     """how the classroom's tas team compares to the configured [TAS] section."""
     name = tas_team_name(classroom_dir)
     team = get_team(gh, org, tas_team_slug(classroom_dir))
@@ -529,8 +531,7 @@ def _tas_team_line(gh, org, classroom_dir, configured_tas):
     pending = {u.login.lower() for u in team_pending_invitations(team)}
     configured = {}
     for entry in configured_tas:
-        _email, github = ms.parse_identity(entry)
-        configured[(github or entry).lower()] = entry
+        configured[(resolve(entry) or entry).lower()] = entry
     missing = sorted(entry for key, entry in configured.items()
                      if key not in members and key not in pending)
     invited = sorted(entry for key, entry in configured.items()
@@ -559,12 +560,13 @@ def meta_show(classroom):
     data = _load_classroom(checkout, classroom_dir)
 
     protection, linear_history, force_push = ms.effective_repo_settings(data)
+    resolve = _make_resolver(gh, org, data["canvas_course"] or classroom_dir)
     output(f"CLASSROOM {classroom_dir}")
     output(f"PREFIX    {data['prefix'] or '-'}")
     if data["template"]:
         output(f"TEMPLATE  {data['template']}")
     output(f"TAS       {','.join(data['tas']) or '-'}")
-    output(_tas_team_line(gh, org, classroom_dir, data["tas"]))
+    output(_tas_team_line(gh, org, classroom_dir, data["tas"], resolve))
     output(f"SETTINGS  protection={protection}"
            f" linear_history={str(linear_history).lower()}"
            f" force_push={str(force_push).lower()}")
@@ -583,7 +585,7 @@ def meta_show(classroom):
                 if repo is None:
                     warn(f"recorded repo for {row['name']}"
                          f" (id {row['repo_id']}) is gone")
-            students = _mark_students(row, repo)
+            students = _mark_students(row, repo, resolve)
             marked = marked or students != (",".join(row["students"]) or ms.EMPTY)
             table.append([row["name"], students,
                           row["repo"] or ms.EMPTY,
