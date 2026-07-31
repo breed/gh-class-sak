@@ -296,12 +296,14 @@ class FakeCourse:
         self.name = name
         self._categories = list(categories)
         self._canvas = None  # wired up by FakeCanvas
+        self.profile_requests = []
 
     def get_group_categories(self):
         return list(self._categories)
 
     def get_user(self, user_id):
         # the course-scoped user lookup teachers are allowed
+        self.profile_requests.append(str(user_id))
         return _FakeCanvasProfileHolder(
             self._canvas._profiles.get(str(user_id), {}))
 

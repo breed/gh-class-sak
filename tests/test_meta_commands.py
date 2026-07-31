@@ -130,6 +130,16 @@ class TestMetaInit:
         assert result.exit_code == 0, result.output
         assert meta_state(env)["tas"] == ["beth@sjsu.edu/profbeth"]
 
+    def test_init_creates_the_tas_team_with_members(self, env, config_file,
+                                                    fake_canvas, monkeypatch):
+        monkeypatch.setattr(core, "get_canvas", lambda: fake_canvas)
+        monkeypatch.setattr(repos_cmd, "get_canvas", lambda: fake_canvas)
+        result = run(env.runner, "meta", "init", "CMPE-195A", "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert 'create team "cmpe_195a-TAs"' in result.output
+        team = env.org.get_team_by_slug("cmpe_195a-tas")
+        assert [m.login for m in team.get_members()] == ["profbeth"]
+
     def test_canvas_course_is_recorded_and_preserved(self, env):
         result = run(env.runner, "meta", "init", ORG,
                      "--canvas-course", "CMPE-195A", "--no-dryrun")
@@ -207,7 +217,7 @@ class TestMetaShow:
         seed_meta(env, tas=["ta-one"])
         result = run(env.runner, "meta", "show", ORG)
         assert result.exit_code == 0, result.output
-        assert "TAS TEAM  cmpe_195a-tas (not created — run: meta apply)" \
+        assert "TAS TEAM  cmpe_195a-TAs (not created — run: meta apply)" \
             in result.output
 
     def test_tas_team_matching_the_file_is_reported(self, env):
@@ -218,7 +228,7 @@ class TestMetaShow:
         seed_meta(env, tas=["ta-one"])
         result = run(env.runner, "meta", "show", ORG)
         assert result.exit_code == 0, result.output
-        assert "TAS TEAM  cmpe_195a-tas (matches tas)" in result.output
+        assert "TAS TEAM  cmpe_195a-TAs (matches tas)" in result.output
 
     def test_tas_team_drift_lists_missing_and_extra(self, env):
         from tests.fakes import FakeTeam
@@ -228,7 +238,7 @@ class TestMetaShow:
         seed_meta(env, tas=["ta-one"])
         result = run(env.runner, "meta", "show", ORG)
         assert result.exit_code == 0, result.output
-        assert ("TAS TEAM  cmpe_195a-tas (missing: ta-one; extra: old-ta)"
+        assert ("TAS TEAM  cmpe_195a-TAs (missing: ta-one; extra: old-ta)"
                 in result.output)
 
     def test_unset_prefix_shows_a_dash(self, env):
@@ -510,6 +520,29 @@ class TestMetaAssignFromCanvas:
         assert rows["Project-Group-2"]["students"] == ["carol@sjsu.edu/carol"]
         assert state["group_sets"] == {"project": "Project"}
 
+    def test_profiles_fetch_at_most_once_per_session(self, env, canvas):
+        # the roster is consulted twice (rows, then the email resolver);
+        # each person's profile must still be fetched only once
+        seed_meta(env)
+        run(env.runner, "meta", "assign", ORG, "--from-canvas",
+            "--assignment", "hw1", "--no-dryrun")
+        requests = canvas._courses[0].profile_requests
+        assert len(requests) == len(set(requests)), requests
+
+    def test_cached_profiles_skip_the_progress_bar(self, env, canvas, monkeypatch):
+        seed_meta(env)
+        run(env.runner, "meta", "assign", ORG, "--from-canvas",
+            "--assignment", "hw1", "--no-dryrun")  # populates the cache
+
+        labels = []
+        real = repos_cmd.progress
+        monkeypatch.setattr(
+            repos_cmd, "progress",
+            lambda items, label, **kw: labels.append(label) or real(items, label, **kw))
+        run(env.runner, "meta", "assign", ORG, "--from-canvas",
+            "--assignment", "hw2", "--no-dryrun")
+        assert "fetching canvas profiles" not in labels
+
     def test_requires_the_assignment_flag(self, env, canvas):
         seed_meta(env)
         result = run(env.runner, "meta", "assign", ORG, "--from-canvas")
@@ -556,9 +589,9 @@ class TestMetaApply:
         assert result.exit_code == 0, result.output
         assert "would grant push to msmith" in result.output
         assert "would revoke intruder" in result.output
-        assert 'would create team "cmpe_195a-tas"' in result.output
-        assert 'would add ta-one to team "cmpe_195a-tas"' in result.output
-        assert f'would grant team "cmpe_195a-tas" pull on {repo.full_name}' in result.output
+        assert 'would create team "cmpe_195a-TAs"' in result.output
+        assert 'would add ta-one to team "cmpe_195a-TAs"' in result.output
+        assert f'would grant team "cmpe_195a-TAs" pull on {repo.full_name}' in result.output
         assert repo.collab_log == []
 
     def test_reconciles_and_never_touches_admins(self, env):

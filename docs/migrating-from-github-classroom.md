@@ -27,7 +27,7 @@ classroom-meta/
 | which student/team owns which repo | the tsv rows: `NAME  STUDENTS  REPO  REPO_ID` |
 | repos surviving a rename | `REPO_ID` — GitHub's permanent numeric id, recorded per row |
 | the roster | the `STUDENTS` columns (plus Canvas, via the config, for names and emails) |
-| TA access everywhere | the `tas` file — realized as a `<classroom>-tas` team with read access |
+| TA access everywhere | the `tas` file — realized as a `<classroom>-TAs` team with read access |
 | starter code | `classroom.ini`: `template = OWNER/NAME`, used when repos are created |
 | repo protection | `classroom.ini`: `protection`, `linear_history`, `force_push` |
 
@@ -108,7 +108,7 @@ Then finish the job:
    `tas` file — it only detects staff who had write on every repo.
 2. **Add classroom settings** you want going forward: a `template` for new repos, and
    branch protection (`protection`, `linear_history`, `force_push`) in `classroom.ini`.
-3. **Reconcile.** This creates each classroom's `<classroom>-tas` team with read on all
+3. **Reconcile.** This creates each classroom's `<classroom>-TAs` team with read on all
    its repos, revokes the TAs' leftover per-repo write access, makes each repo's
    collaborators exactly its row's students, and applies the protection settings:
 

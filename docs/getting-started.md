@@ -94,6 +94,7 @@ $ gh-class-sak meta init CS-101 --org cs101-fall
 ⚠️  dry run: no changes will be made. add --no-dryrun to apply
 no canvas config; seed the tas file by hand
 ⚠️  would record cs_101: prefix=CS-101 tas=-
+⚠️  would create team "cs_101-TAs" in cs101-fall
 ```
 
 Then feed `meta assign` your team table — identities are `EMAIL/GITHUBID`, with either

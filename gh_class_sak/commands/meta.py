@@ -27,6 +27,7 @@ from gh_class_sak.core import (
     match_org,
     normalize_course_name,
     output,
+    progress,
     resolve_classroom,
     warn,
     would,
@@ -55,8 +56,13 @@ REPO_SETTING_KEYS = ("protection", "linear_history", "force_push")
 
 
 def tas_team_name(classroom_dir):
-    """each classroom gets its own COURSENAME-tas team, so TAs of one
+    """each classroom gets its own CLASSROOM-TAs team, so TAs of one
     classroom in an org don't gain access to another classroom's repos."""
+    return f"{classroom_dir}-TAs"
+
+
+def tas_team_slug(classroom_dir):
+    """github slugifies the display name to lowercase; lookups need this."""
     return f"{classroom_dir}-tas"
 
 
@@ -179,6 +185,24 @@ def _make_resolver(gh, org, course_partial):
         return cache[entry]
 
     return resolve
+
+
+def _classroom_universe(gh, org, data, all_repos, by_id):
+    """the classroom's repos: per-assignment prefix matches ∪ recorded ids."""
+    universe = {}
+    for assignment in data["assignments"]:
+        joined = ms.join_repo_name(data["prefix"], assignment).lower()
+        for r in all_repos:
+            if r.name.lower().startswith(joined):
+                universe[r.full_name] = r
+    for rows in data["assignments"].values():
+        for row in rows:
+            if row["repo_id"] is None:
+                continue
+            repo = by_id.get(row["repo_id"]) or get_repo_by_id(gh, row["repo_id"])
+            if repo is not None:
+                universe[repo.full_name] = repo
+    return universe
 
 
 def _resolve_row_students(row, resolve):
@@ -413,6 +437,28 @@ def meta_init(classroom, org, prefix, template, canvas_course, dryrun):
              + f" tas={','.join(tas) or '-'}",
              _write, actions)
 
+    # the classroom's TA team exists from day one, with read access to
+    # whatever repos the classroom already has (usually none yet)
+    resolve = _make_resolver(gh, org, canvas_course or classroom_dir)
+    ta_logins = []
+    unresolved = []
+    for entry in tas:
+        login = resolve(entry)
+        if login:
+            if login not in ta_logins:
+                ta_logins.append(login)
+        else:
+            error(f'cannot resolve TA "{entry}" to a github id')
+            unresolved.append(entry)
+    universe = {}
+    if existing and existing["assignments"]:
+        all_repos = list_org_repos(gh, org)
+        by_id = {r.id: r for r in all_repos}
+        universe = _classroom_universe(gh, org, existing, all_repos, by_id)
+    _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe, dryrun, actions)
+    if unresolved:
+        sys.exit(1)
+
 
 def _mark_students(row, repo):
     """the row's students, each marked with its live repo membership:
@@ -437,7 +483,7 @@ def _mark_students(row, repo):
 def _tas_team_line(gh, org, classroom_dir, configured_tas):
     """how the classroom's tas team compares to the configured tas file."""
     name = tas_team_name(classroom_dir)
-    team = get_team(gh, org, name)
+    team = get_team(gh, org, tas_team_slug(classroom_dir))
     if team is None:
         return f"TAS TEAM  {name} (not created — run: meta apply)"
     members = {m.login.lower() for m in team.get_members()}
@@ -486,7 +532,7 @@ def meta_show(classroom):
     marked = False
     for name, rows in data["assignments"].items():
         table = []
-        for row in rows:
+        for row in progress(rows, f"checking {name}"):
             repo = None
             if row["repo_id"] is not None:
                 repo = by_id.get(row["repo_id"]) or get_repo_by_id(gh, row["repo_id"])
@@ -706,7 +752,7 @@ def _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe, dryrun, act
     the classroom's repos. unrelated team-repo grants are left alone only
     for the meta repo itself."""
     name = tas_team_name(classroom_dir)
-    team = get_team(gh, org, name)
+    team = get_team(gh, org, tas_team_slug(classroom_dir))
     made_team = {}
     if team is None:
         def _create_team():
@@ -785,21 +831,20 @@ def meta_apply(classroom, dryrun):
             for r in all_repos:
                 if r.name.lower().startswith(joined):
                     universe[r.full_name] = r
-        for rows in data["assignments"].values():
-            for row in rows:
-                if row["repo_id"] is None:
-                    continue
-                repo = by_id.get(row["repo_id"]) or get_repo_by_id(gh, row["repo_id"])
-                if repo is None:
-                    warn(f"recorded repo for {row['name']} (id {row['repo_id']}) is gone")
-                    continue
-                universe[repo.full_name] = repo
-                # 2. students on a realized row are exactly its push collaborators
-                logins, unresolved = _resolve_row_students(row, resolve)
-                any_unresolved.extend(unresolved)
-                _reconcile_row_collaborators(gh, repo, logins, dryrun, actions)
-                # and its default branch carries the classroom's protection settings
-                _reconcile_repo_protection(repo, desired, dryrun, actions)
+        recorded = [row for rows in data["assignments"].values()
+                    for row in rows if row["repo_id"] is not None]
+        for row in progress(recorded, f"checking {classroom_dir}"):
+            repo = by_id.get(row["repo_id"]) or get_repo_by_id(gh, row["repo_id"])
+            if repo is None:
+                warn(f"recorded repo for {row['name']} (id {row['repo_id']}) is gone")
+                continue
+            universe[repo.full_name] = repo
+            # 2. students on a realized row are exactly its push collaborators
+            logins, unresolved = _resolve_row_students(row, resolve)
+            any_unresolved.extend(unresolved)
+            _reconcile_row_collaborators(gh, repo, logins, dryrun, actions)
+            # and its default branch carries the classroom's protection settings
+            _reconcile_repo_protection(repo, desired, dryrun, actions)
 
         # 3. the classroom's TA team reads exactly the classroom's repos
         ta_logins = []
@@ -908,11 +953,11 @@ def migrate_github_classroom(org, dryrun):
                      lambda: None, actions)
 
         members_of = {}
-        for _name, _inferred, assignment_repos in entries:
-            for repo in assignment_repos:
-                if repo.full_name not in members_of:
-                    members, _admins = split_collaborators(repo)
-                    members_of[repo.full_name] = [m.login for m in members]
+        scan = [repo for _name, _inferred, repos_ in entries for repo in repos_]
+        for repo in progress(scan, f"reading collaborators for {classroom_dir}"):
+            if repo.full_name not in members_of:
+                members, _admins = split_collaborators(repo)
+                members_of[repo.full_name] = [m.login for m in members]
         # a login with write on every one of the classroom's repos is staff,
         # not a student: record it in the tas file instead of every row
         tas_detected = []

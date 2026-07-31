@@ -2,6 +2,17 @@
 
 ## v1.0.1
 
+- `meta init` now creates the classroom's TA team right away — members from the `tas`
+  entries, read access to the classroom's current repos — instead of leaving that to
+  the first `meta apply`. The team's display name is `CLASSROOM-TAs` (GitHub slugs it
+  to the same lowercase slug as before, so existing teams keep matching)
+- canvas profiles are cached for the session: a roster consulted twice in one run
+  (building rows, then resolving emails) fetches each profile exactly once, and a pass
+  served entirely from the cache skips its progress bar instead of flashing one
+- slow operations show a progress bar (with position and ETA) on stderr: fetching
+  canvas profiles, repo members and commit history in `repos list`/`repos members`,
+  `meta apply`'s per-repo checks, `meta show`'s membership checks, and the migration's
+  collaborator scan. Terminals only — pipes and scripts see nothing
 - every dry run now announces itself before anything else:
   `⚠️  dry run: no changes will be made. add --no-dryrun to apply` — so a preview can
   never be mistaken for the real thing

@@ -19,6 +19,14 @@ from tests.fakes import (
 ORG = "SJSU-CMPE-195"
 
 
+@pytest.fixture(autouse=True)
+def _fresh_profile_cache():
+    """the profile cache is per-session; each test is its own session."""
+    from gh_class_sak import canvas_api
+    canvas_api._profile_cache.clear()
+    yield
+
+
 def _user(login, name=None, email=None, admin=False):
     return FakeNamedUser(login, name=name, email=email,
                          role_name="admin" if admin else "write", admin=admin)

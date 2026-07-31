@@ -70,11 +70,26 @@ def graphql_enrollments(canvas, course_id):
     return nodes
 
 
+_profile_cache = {}
+
+
+def profile_cached(user_id):
+    """whether the session already holds this user's profile."""
+    return user_id in _profile_cache
+
+
 def get_user_profile(course, user_id):
     """a user's profile (with links), reached through the course.
 
     the user object must come from the course — /courses/:id/users/:uid is
     open to teachers, while the account-scoped /users/:uid that
     Canvas.get_user() fetches is admin-or-self and 404s for everyone else.
+
+    cached for the session: a roster consulted twice (rows, then email
+    resolution) fetches each profile once. canvas user ids are global, so
+    the cache keys on the id alone.
     """
-    return course.get_user(user_id).get_profile(include=["links"])
+    if user_id not in _profile_cache:
+        _profile_cache[user_id] = \
+            course.get_user(user_id).get_profile(include=["links"])
+    return _profile_cache[user_id]

@@ -81,6 +81,20 @@ def would(message):
     output(f"\N{WARNING SIGN}\N{VARIATION SELECTOR-16}  {message}")
 
 
+def progress(items, label, length=None):
+    """iterate items behind a stderr progress bar for slow loops.
+
+    a plain passthrough when stderr is not a terminal, so pipes, the doc
+    fences, and the test suite see nothing at all.
+    """
+    if not _interactive():
+        yield from items
+        return
+    with click.progressbar(items, length=length, label=label,
+                           file=sys.stderr, show_pos=True) as bar:
+        yield from bar
+
+
 def _announce_dryrun(ctx, param, value):
     """the first thing a previewing command says is that it is previewing."""
     if value:

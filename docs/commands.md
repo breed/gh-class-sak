@@ -208,7 +208,9 @@ repo-name safe), so a new classroom's repos are namespaced by its course name; p
 `--prefix ""` to record none. Existing classrooms keep their recorded prefix — a
 re-init never backfills one. `--canvas-course NAME` records the Canvas
 course's name in `classroom.ini`, and the Canvas lookups use it from then on (otherwise
-they match on the classroom directory name). Like every mutating command, it previews by
+they match on the classroom directory name). The classroom's `<classroom>-TAs` team is
+created right away, with the TAs as members and read access to whatever repos the
+classroom already has — usually none yet. Like every mutating command, it previews by
 default; in an org with no classroom-meta repo yet, a
 `would create private ORG/classroom-meta` line comes first:
 
@@ -217,6 +219,7 @@ $ gh-class-sak meta init CS-101 --org cs101-fall
 ⚠️  dry run: no changes will be made. add --no-dryrun to apply
 no canvas config; seed the tas file by hand
 ⚠️  would record cs_101: prefix=CS-101 tas=-
+⚠️  would create team "cs_101-TAs" in cs101-fall
 ```
 
 ### meta assign
@@ -268,7 +271,7 @@ Every classroom directory in the classroom-meta repo is reconciled:
 
 - rows without a repo yet — including ones you hand-added to any assignment's tsv — get
   created
-- each classroom has its own **`<classroom>-tas` team** (e.g. `sp26_cmpe_195a-tas`) whose
+- each classroom has its own **`<classroom>-TAs` team** (e.g. `sp26_cmpe_195a-TAs`) whose
   membership matches its `tas` file, added as a **read** collaborator on that classroom's
   student repos across all of its assignments — so TAs accept one org invite ever, and
   TAs of one classroom never gain access to another classroom's repos
@@ -315,7 +318,7 @@ assignments** lists them and asks you to type the **full name of one of them** �
 type-to-confirm bar rises with what's at stake. The assignments' GitHub repos survive
 by default; `--delete-repo` deletes every recorded repo too. Like every mutating
 command it previews with `would …` lines until `--no-dryrun` — the confirmation happens
-either way. The classroom's `<classroom>-tas` team is left alone.
+either way. The classroom's `<classroom>-TAs` team is left alone.
 
 ### meta show
 
@@ -326,7 +329,7 @@ one table per assignment — checked against the live org:
   collaborator, 📧 means invited but not yet accepted, ❌ means not a collaborator at
   all (rows whose repo isn't created yet stay unmarked; a legend prints whenever
   markers appear)
-- a `TAS TEAM` line compares the classroom's `<classroom>-tas` team to the `tas` file:
+- a `TAS TEAM` line compares the classroom's `<classroom>-TAs` team to the `tas` file:
   `(matches tas)`, `(not created — run: meta apply)`, or the missing and extra members
 
 Once repos are recorded, `repos list`, `repos members`, `repos missing`, and `repos clone`

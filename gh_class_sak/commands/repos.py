@@ -13,6 +13,7 @@ from gh_class_sak.canvas_api import (
     list_group_categories,
     list_group_users,
     list_groups_in_category,
+    profile_cached,
 )
 from gh_class_sak.core import (
     dryrun_option,
@@ -24,6 +25,7 @@ from gh_class_sak.core import (
     load_config,
     normalize_course_name,
     output,
+    progress,
     resolve_classroom,
     resolve_name,
     warn,
@@ -245,7 +247,12 @@ def _github_from_canvas_profiles(course, people):
             return uid, None
 
     with ThreadPoolExecutor(max_workers=8) as pool:
-        for uid, github in pool.map(_fetch, list(people)):
+        results = pool.map(_fetch, list(people))
+        # no bar for a pure replay from the session cache
+        if any(not profile_cached(uid) for uid in people):
+            results = progress(results, "fetching canvas profiles",
+                               length=len(people))
+        for uid, github in results:
             people[uid]["github"] = github
 
 
@@ -409,7 +416,7 @@ def repos_list(classroom, assignment, repo, members, show_instructors, show_name
                   or (members and show_name))
 
     rows = []
-    for team, gh_repo in found:
+    for team, gh_repo in progress(found, "fetching repo members"):
         member_users, _admins = split_collaborators(gh_repo)
 
         # extract member emails from commit history
@@ -502,7 +509,7 @@ def repos_members(classroom, assignment):
     _room, found = resolve_assignment_repos(classroom, assignment)
 
     rows = []
-    for team, gh_repo in found:
+    for team, gh_repo in progress(found, "reading commit history"):
         seen = set()
         for login, name, email in list_commit_authors(gh_repo):
             if not email or "@users.noreply.github.com" in email:
