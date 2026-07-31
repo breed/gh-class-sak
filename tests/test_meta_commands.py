@@ -823,6 +823,40 @@ class TestMetaApply:
         assert ("add", "msmith", "push") in created.collab_log
         assert meta_state(env)["assignments"][ASSIGNMENT][0]["repo_id"] == created.id
 
+    def test_apply_seeds_new_repos_from_the_assignment_template(self, env,
+                                                                tmp_path):
+        # a [TEMPLATE] record drives repos realized later by apply, not
+        # just the assign run that recorded it
+        from tests.test_git_ops import make_template
+        starter = make_template(tmp_path)
+        seed_meta(env, templates={ASSIGNMENT: starter},
+                  assignments={ASSIGNMENT: [
+                      {"name": "team-1", "students": [],
+                       "repo": None, "repo_id": None}]})
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert f"create private {ORG}/{REPO_PREFIX}-team-1 from {starter}" \
+            in result.output
+        pushed = GitRepo(str(env.root / f"{REPO_PREFIX}-team-1.git"))
+        assert "README.md" in pushed.git.ls_tree("main", name_only=True)
+        assert len(list(pushed.iter_commits("main"))) == 1
+
+    def test_assignment_template_beats_the_classroom_template(self, env,
+                                                              tmp_path):
+        from tests.test_git_ops import make_template
+        starter = make_template(tmp_path)
+        seed_meta(env, template=f"{ORG}/Template",
+                  templates={ASSIGNMENT: starter},
+                  assignments={ASSIGNMENT: [
+                      {"name": "team-1", "students": [],
+                       "repo": None, "repo_id": None}]})
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        # created plain and seeded from the URL, not from the org template
+        assert (f"{REPO_PREFIX}-team-1", None) in env.org.created_repos
+        pushed = GitRepo(str(env.root / f"{REPO_PREFIX}-team-1.git"))
+        assert "README.md" in pushed.git.ls_tree("main", name_only=True)
+
     def test_apply_rewrites_only_the_assignments_it_changed(self, env):
         # realizing project's row must not rewrite hw1.tsv (and eat its
         # hand comments)
