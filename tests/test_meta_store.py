@@ -21,10 +21,10 @@ class TestClassroomIni:
 
     def test_round_trip_with_tas_and_templates(self):
         text = ms.serialize_classroom_ini(
-            "p", tas=["khalil.estell@sjsu.edu/kammce", "/breed"],
+            "p", tas=["ta-alice@sjsu.edu/ta-alice", "/prof-lee"],
             templates={"hw1": "https://github.com/org/hw1-starter.git"})
         parsed = ms.parse_classroom_ini(text)
-        assert parsed["tas"] == ["khalil.estell@sjsu.edu/kammce", "/breed"]
+        assert parsed["tas"] == ["ta-alice@sjsu.edu/ta-alice", "/prof-lee"]
         assert parsed["templates"] == {
             "hw1": "https://github.com/org/hw1-starter.git"}
         assert ms.serialize_classroom_ini(**parsed) == text
@@ -87,8 +87,8 @@ class TestTas:
         assert ms.parse_tas(text) == ["ta-one", "grader@sjsu.edu"]
 
     def test_identity_entries_parse(self):
-        text = "khalil.estell@sjsu.edu/kammce\n/breed\n"
-        assert ms.parse_tas(text) == ["khalil.estell@sjsu.edu/kammce", "/breed"]
+        text = "ta-alice@sjsu.edu/ta-alice\n/prof-lee\n"
+        assert ms.parse_tas(text) == ["ta-alice@sjsu.edu/ta-alice", "/prof-lee"]
 
 
 class TestStudentsTsv:
@@ -236,19 +236,19 @@ class TestGitPlumbing:
         checkout = ms.checkout_meta(str(bare_origin), ORG)
         ms.save_classroom(checkout, "cs101", "p")
         with open(os.path.join(checkout, "cs101", "tas"), "w") as f:
-            f.write("/kammce\n")
-        assert ms.load_classroom(checkout, "cs101")["tas"] == ["/kammce"]
+            f.write("/ta-alice\n")
+        assert ms.load_classroom(checkout, "cs101")["tas"] == ["/ta-alice"]
 
     def test_save_moves_the_tas_into_the_ini(self, bare_origin, checkout_root):
         checkout = ms.checkout_meta(str(bare_origin), ORG)
         ms.save_classroom(checkout, "cs101", "p")
         legacy = os.path.join(checkout, "cs101", "tas")
         with open(legacy, "w") as f:
-            f.write("/kammce\n")
+            f.write("/ta-alice\n")
         data = ms.load_classroom(checkout, "cs101")
         ms.save_classroom(checkout, "cs101", "p", tas=data["tas"])
         assert not os.path.exists(legacy)
-        assert ms.load_classroom(checkout, "cs101")["tas"] == ["/kammce"]
+        assert ms.load_classroom(checkout, "cs101")["tas"] == ["/ta-alice"]
 
     def test_students_tsv_is_just_an_assignment_named_students(self, bare_origin,
                                                                checkout_root):

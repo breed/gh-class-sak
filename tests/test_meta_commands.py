@@ -233,12 +233,12 @@ class TestMetaShow:
     def test_tas_team_pending_invite_is_reported_as_invited(self, env):
         from tests.fakes import FakeTeam
         team = FakeTeam(env.org, "cmpe_195a-TAs")
-        team._invitations["kammce"] = FakeNamedUser("kammce")
+        team._invitations["ta-alice"] = FakeNamedUser("ta-alice")
         env.org._teams[team.slug] = team
-        seed_meta(env, tas=["/kammce"])
+        seed_meta(env, tas=["/ta-alice"])
         result = run(env.runner, "meta", "show", ORG)
         assert result.exit_code == 0, result.output
-        assert ("TAS TEAM  cmpe_195a-TAs (invited, not yet accepted: /kammce)"
+        assert ("TAS TEAM  cmpe_195a-TAs (invited, not yet accepted: /ta-alice)"
                 in result.output)
 
     def test_tas_team_drift_lists_missing_and_extra(self, env):
