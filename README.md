@@ -6,13 +6,13 @@ is gone.**
 [![CI](https://github.com/breed/gh-class-sak/actions/workflows/ci.yml/badge.svg)](https://github.com/breed/gh-class-sak/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/gh-class-sak)](https://pypi.org/project/gh-class-sak/)
 [![Python](https://img.shields.io/pypi/pyversions/gh-class-sak)](https://pypi.org/project/gh-class-sak/)
-[![License](https://img.shields.io/pypi/l/gh-class-sak)](LICENSE)
+[![License](https://img.shields.io/pypi/l/gh-class-sak)](https://github.com/breed/gh-class-sak/blob/main/LICENSE)
 [![Discord](https://img.shields.io/badge/discord-join%20the%20server-5865F2?logo=discord&logoColor=white)](https://discord.gg/nyfCHTZJkt)
 
 ![Terminal demo: gh-class-sak listing classrooms, showing an assignment's teams and members, and previewing a bulk clone for grading](https://raw.githubusercontent.com/breed/gh-class-sak/main/docs/demo.svg)
 
 A GitHub org hosts your **classrooms**, described by one small versioned state repo:
-[`classroom-meta`](docs/commands.md#the-classroom-meta-repo) — a directory per classroom,
+[`classroom-meta`](https://github.com/breed/gh-class-sak/blob/main/docs/commands.md#the-classroom-meta-repo) — a directory per classroom,
 a hand-editable tsv file per **assignment**, a row per **team**. Everything else is
 derived from it and the repo names:
 
@@ -56,7 +56,7 @@ Add `--no-dryrun` and it actually clones, fast-forwarding any repo you already h
 - **Canvas integration** — map orgs to Canvas courses for rosters, group matching,
   per-section instructor columns, and "who has no repo yet" reports
 - **Managed classrooms** — `meta apply` reconciles the org to the
-  [classroom-meta repo](docs/commands.md#the-classroom-meta-repo): creates private repos
+  [classroom-meta repo](https://github.com/breed/gh-class-sak/blob/main/docs/commands.md#the-classroom-meta-repo): creates private repos
   (optionally from a template), grants student, TA, and branch-protection state exactly
   as recorded — removing people is opt-in — and tracks repos by permanent id so renames
   can't hide them
@@ -80,15 +80,15 @@ Requires Python 3.9+.
 
 ## Documentation
 
-- **[Getting started](docs/getting-started.md)** — install, tokens, the Canvas config,
+- **[Getting started](https://github.com/breed/gh-class-sak/blob/main/docs/getting-started.md)** — install, tokens, the Canvas config,
   and a first walk through a course
-- **[Migrating from GitHub Classroom](docs/migrating-from-github-classroom.md)** —
+- **[Migrating from GitHub Classroom](https://github.com/breed/gh-class-sak/blob/main/docs/migrating-from-github-classroom.md)** —
   where Classroom's bookkeeping lives now, and the one-command import
-- **[Canvas integration](docs/canvas-integration.md)** — how GitHub ids map to Canvas
+- **[Canvas integration](https://github.com/breed/gh-class-sak/blob/main/docs/canvas-integration.md)** — how GitHub ids map to Canvas
   accounts, and assignments built from enrollments or group sets
-- **[The classroom-meta files](docs/classroom-meta-files.md)** — the file layouts and
+- **[The classroom-meta files](https://github.com/breed/gh-class-sak/blob/main/docs/classroom-meta-files.md)** — the file layouts and
   formats, and how TA teams manage the TAs
-- **[Commands](docs/commands.md)** — the full reference: every command, every flag, and
+- **[Commands](https://github.com/breed/gh-class-sak/blob/main/docs/commands.md)** — the full reference: every command, every flag, and
   the classroom-meta repo
 
 Every example on those pages — and above — is replayed against an invented demo course by
@@ -100,7 +100,7 @@ Questions, war stories, and quick help live on the
 [Discord server](https://discord.gg/nyfCHTZJkt) — running a course with this, or thinking
 about it? Come say hi.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). The test suite stubs out GitHub and Canvas, so you
+See [CONTRIBUTING.md](https://github.com/breed/gh-class-sak/blob/main/CONTRIBUTING.md). The test suite stubs out GitHub and Canvas, so you
 can contribute without a course, a token, or a Canvas account:
 
 ```bash
@@ -109,4 +109,4 @@ python -m venv .venv
 .venv/bin/pytest
 ```
 
-Security policy: [SECURITY.md](SECURITY.md). Please report vulnerabilities privately.
+Security policy: [SECURITY.md](https://github.com/breed/gh-class-sak/blob/main/SECURITY.md). Please report vulnerabilities privately.

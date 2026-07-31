@@ -91,6 +91,18 @@ def test_documented_output_matches_the_cli(demo_cli, page, args, expected):
     )
 
 
+def test_readme_links_are_absolute():
+    """the README ships to PyPI as the long description, where a relative
+    link resolves against pypi.org and 404s. every target must be a full
+    url (or a same-page anchor)."""
+    import re
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    targets = re.findall(r"\]\(([^)]+)\)", text)
+    relative = [t for t in targets
+                if not t.startswith(("https://", "http://", "#"))]
+    assert relative == [], f"relative links break on PyPI: {relative}"
+
+
 def test_docs_have_no_real_student_data():
     """the docs must use the invented cs101-fall world — never the live org,
     courses, or people it stands in for."""
