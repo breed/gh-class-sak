@@ -99,9 +99,13 @@ class FakeRepo:
         self._protection_403 = protection_403
         self.protection_log = []
         self._invitations = [FakeInvitation(login) for login in invitations]
+        self.deleted = False
 
     def get_pending_invitations(self):
         return list(self._invitations)
+
+    def delete(self):
+        self.deleted = True
 
     def get_branch(self, name):
         if not self._has_branch or name != self.default_branch:

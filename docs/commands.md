@@ -157,6 +157,7 @@ It writes to disk, so it previews by default and only acts with `--no-dryrun`:
 
 ```console
 $ gh-class-sak repos clone cs101-fall project --dest grading
+⚠️  dry run: no changes will be made. add --no-dryrun to apply
 ⚠️  would clone cs101-fall/project-team-1 -> grading/team-1
 ⚠️  would clone cs101-fall/project-nightowls -> grading/nightowls
 ⚠️  would clone cs101-fall/project-team-3 -> grading/team-3
@@ -213,6 +214,7 @@ default; in an org with no classroom-meta repo yet, a
 
 ```console
 $ gh-class-sak meta init CS-101 --org cs101-fall
+⚠️  dry run: no changes will be made. add --no-dryrun to apply
 no canvas config; seed the tas file by hand
 ⚠️  would record cs_101: prefix=CS-101 tas=-
 ```
@@ -298,6 +300,22 @@ moves on — and a protection write replaces the whole protection object, so han
 like required status checks don't survive it. The all-off trio (`protection = none`,
 `linear_history = false`, `force_push = true`) asks for nothing and skips the protection
 API entirely; existing protection is never removed.
+
+### meta delete
+
+Delete a classroom from the classroom-meta repo, after showing its recorded state and
+confirming:
+
+```
+gh-class-sak meta delete CLASSROOM [--delete-repo/--no-delete-repo] [--dryrun/--no-dryrun]
+```
+
+An **empty** classroom (no assignment tsvs) asks for a simple yes/no. One **with
+assignments** lists them and asks you to type the **full name of one of them** — the
+type-to-confirm bar rises with what's at stake. The assignments' GitHub repos survive
+by default; `--delete-repo` deletes every recorded repo too. Like every mutating
+command it previews with `would …` lines until `--no-dryrun` — the confirmation happens
+either way. The classroom's `<classroom>-tas` team is left alone.
 
 ### meta show
 

@@ -251,6 +251,68 @@ class TestMetaShow:
         assert "no classroom-meta repo" in result.output
 
 
+class TestMetaDelete:
+    def seed_with_repo(self, env):
+        repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1")
+        env.org._repos.append(repo)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["/jdoe"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        return repo
+
+    def test_empty_classroom_needs_a_simple_yes(self, env):
+        seed_meta(env)
+        result = run(env.runner, "meta", "delete", ORG, "--no-dryrun", input="y\n")
+        assert result.exit_code == 0, result.output
+        assert f"PREFIX    {PREFIX}" in result.output
+        assert f"delete classroom {COURSE} from {ORG}/classroom-meta" in result.output
+        assert ms.load_meta_classrooms(env.gh, ORG) == {}
+
+    def test_declining_deletes_nothing(self, env):
+        seed_meta(env)
+        result = run(env.runner, "meta", "delete", ORG, "--no-dryrun", input="n\n")
+        assert result.exit_code == 0, result.output
+        assert "nothing to do" in result.output
+        assert COURSE in ms.load_meta_classrooms(env.gh, ORG)
+
+    def test_assignments_demand_typing_one_of_their_names(self, env):
+        repo = self.seed_with_repo(env)
+        result = run(env.runner, "meta", "delete", ORG, "--no-dryrun",
+                     input=f"{ASSIGNMENT}\n")
+        assert result.exit_code == 0, result.output
+        assert f"ASSIGNMENTS {ASSIGNMENT} (1 teams)" in result.output
+        assert ms.load_meta_classrooms(env.gh, ORG) == {}
+        # the repos survive by default
+        assert repo.deleted is False
+
+    def test_a_wrong_name_aborts(self, env):
+        self.seed_with_repo(env)
+        result = run(env.runner, "meta", "delete", ORG, "--no-dryrun",
+                     input="wrong-name\n")
+        assert result.exit_code == 2
+        assert "nothing deleted" in result.output
+        assert COURSE in ms.load_meta_classrooms(env.gh, ORG)
+
+    def test_delete_repo_removes_the_recorded_repos(self, env):
+        repo = self.seed_with_repo(env)
+        result = run(env.runner, "meta", "delete", ORG, "--delete-repo",
+                     "--no-dryrun", input=f"{ASSIGNMENT}\n")
+        assert result.exit_code == 0, result.output
+        assert f"delete repo {repo.full_name}" in result.output
+        assert repo.deleted is True
+        assert ms.load_meta_classrooms(env.gh, ORG) == {}
+
+    def test_dryrun_previews_and_touches_nothing(self, env):
+        repo = self.seed_with_repo(env)
+        result = run(env.runner, "meta", "delete", ORG, "--delete-repo",
+                     input=f"{ASSIGNMENT}\n")
+        assert result.exit_code == 0, result.output
+        assert f"would delete repo {repo.full_name}" in result.output
+        assert f"would delete classroom {COURSE}" in result.output
+        assert repo.deleted is False
+        assert COURSE in ms.load_meta_classrooms(env.gh, ORG)
+
+
 class TestMetaAssign:
     def table(self, tmp_path, text, name=f"{ASSIGNMENT}.tsv"):
         path = tmp_path / name

@@ -81,8 +81,15 @@ def would(message):
     output(f"\N{WARNING SIGN}\N{VARIATION SELECTOR-16}  {message}")
 
 
+def _announce_dryrun(ctx, param, value):
+    """the first thing a previewing command says is that it is previewing."""
+    if value:
+        would("dry run: no changes will be made. add --no-dryrun to apply")
+    return value
+
+
 dryrun_option = click.option(
-    "--dryrun/--no-dryrun", default=True,
+    "--dryrun/--no-dryrun", default=True, callback=_announce_dryrun,
     help="preview changes (default); --no-dryrun applies them",
 )
 

@@ -91,6 +91,7 @@ work). Mutating commands are safe by default — they *preview* with a ⚠️ un
 
 ```console
 $ gh-class-sak meta init CS-101 --org cs101-fall
+⚠️  dry run: no changes will be made. add --no-dryrun to apply
 no canvas config; seed the tas file by hand
 ⚠️  would record cs_101: prefix=CS-101 tas=-
 ```
@@ -146,6 +147,7 @@ Pull every team's repo down for grading — like all mutating commands, a previe
 
 ```console
 $ gh-class-sak repos clone cs101-fall project --dest grading
+⚠️  dry run: no changes will be made. add --no-dryrun to apply
 ⚠️  would clone cs101-fall/project-team-1 -> grading/team-1
 ⚠️  would clone cs101-fall/project-nightowls -> grading/nightowls
 ⚠️  would clone cs101-fall/project-team-3 -> grading/team-3

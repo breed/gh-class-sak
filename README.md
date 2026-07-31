@@ -36,6 +36,7 @@ Pull every team's repo down for grading — safe by default, so this only *previ
 
 ```console
 $ gh-class-sak repos clone cs101-fall project --dest grading
+⚠️  dry run: no changes will be made. add --no-dryrun to apply
 ⚠️  would clone cs101-fall/project-team-1 -> grading/team-1
 ⚠️  would clone cs101-fall/project-nightowls -> grading/nightowls
 ⚠️  would clone cs101-fall/project-team-3 -> grading/team-3

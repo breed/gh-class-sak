@@ -2,6 +2,13 @@
 
 ## v1.0.1
 
+- every dry run now announces itself before anything else:
+  `⚠️  dry run: no changes will be made. add --no-dryrun to apply` — so a preview can
+  never be mistaken for the real thing
+- `meta delete CLASSROOM` removes a classroom from the classroom-meta repo after
+  showing its recorded state and confirming — a simple yes when it's empty, typing the
+  full name of one of its assignments when it isn't. `--delete-repo` (default:
+  `--no-delete-repo`) also deletes the recorded GitHub repos
 - `meta init` defaults a new classroom's `prefix` to the classroom argument (made
   repo-name safe) — `meta init f26-cmpe-30` records `prefix = f26-cmpe-30`, so the
   classroom's repos are namespaced by the course out of the box. `--prefix ""` opts

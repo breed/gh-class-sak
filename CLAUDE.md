@@ -21,7 +21,7 @@ a swiss army knife for managing github classrooms now the official github classr
 
 # common flags
 
-- for commands that change something, use a `--dryrun/--no-dryrun` flag pair defaulting to dryrun. the bare command just prints what would happen with a ⚠️ in front; `--no-dryrun` applies the change
+- for commands that change something, use a `--dryrun/--no-dryrun` flag pair defaulting to dryrun. the bare command just prints what would happen with a ⚠️ in front; `--no-dryrun` applies the change. a dry run announces itself first: `⚠️  dry run: no changes will be made. add --no-dryrun to apply` (implemented centrally in core.dryrun_option's callback)
 
 # how classrooms and assignments are identified
 
@@ -46,6 +46,7 @@ github classroom is gone, so nothing may call `gh classroom` or the `/classrooms
 - `meta assign CLASSROOM --from-canvas --assignment NAME [--canvas-group SET]` builds the table from canvas instead: one row per enrolled person (students, instructors, and TAs), NAME = the person's github-safe name (accents stripped, invalid chars become `-`), entry = their EMAIL/GITHUBID identity with both halves as far as canvas knows them. with `--canvas-group`, one row per group in that canvas group set, and the set's name is recorded per assignment in classroom.ini `[GROUP_SETS]`
 - `meta apply` reconciles reality to the meta for every classroom and assignment: creates missing repos (privately, from the template when set), each classroom's TAs go into a `COURSENAME-tas` team added as a read collaborator on that classroom's student repos across all its assignments, students get write on their repos, unlisted non-admin collaborators are revoked. admins are never touched
 - `meta apply`/`meta assign` put the effective repo settings on each repo's default branch. a repo created without a template has no branch yet, so its protection lands on the next `meta apply` after the first push. the all-off trio (none/false/true) skips the protection API entirely and existing protection is never removed; free org plans can't protect private repos (warn, don't fail); a protection write replaces hand-set extras like status checks
+- `meta delete CLASSROOM [--delete-repo]` shows the classroom's recorded info then confirms: a simple yes for an empty classroom, typing the full name of one of its assignments otherwise. removes the classroom directory from classroom-meta; `--delete-repo` (default off) also deletes the recorded github repos. the tas team is left alone. standard dryrun pair, confirmation prompts run in both modes
 - `meta show` checks the recorded state against the live org: each student is marked ✅ (collaborator), 📧 (invited, not accepted), or ❌ (not a collaborator) — rows without a repo stay unmarked — and a TAS TEAM line reports whether the `<classroom>-tas` team matches the tas file (missing/extra members listed)
 - discovery honors recorded REPO_IDs, so renamed repos stay tracked; the repos ASSIGNMENT argument selects an assignment tsv by case-insensitive substring, exact name wins over substring hits, and a name matching in several classrooms is an error
 

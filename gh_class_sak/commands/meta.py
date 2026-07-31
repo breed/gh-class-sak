@@ -1,5 +1,6 @@
 import os
 import re
+import shutil
 import sys
 
 import click
@@ -505,6 +506,74 @@ def meta_show(classroom):
         output("markers: \N{WHITE HEAVY CHECK MARK} collaborator"
                "   \N{E-MAIL SYMBOL} invited, not yet accepted"
                "   \N{CROSS MARK} not a collaborator")
+
+
+@meta.command("delete")
+@click.argument("classroom")
+@click.option("--delete-repo/--no-delete-repo", default=False,
+              help="also delete the assignments' github repos (default: keep them)")
+@dryrun_option
+def meta_delete(classroom, delete_repo, dryrun):
+    """Delete a classroom from the classroom-meta repo, after confirmation.
+
+    An empty classroom asks for a simple yes; one with assignments asks you
+    to type the full name of one of them. The github repos survive unless
+    --delete-repo says otherwise.
+    """
+    gh = get_github()
+    org, partial = resolve_classroom(gh, classroom)
+    _repo, checkout = _open_meta(gh, org)
+    classroom_dir = _resolve_classroom_dir(checkout, partial, classroom)
+    data = _load_classroom(checkout, classroom_dir)
+
+    protection, linear_history, force_push = ms.effective_repo_settings(data)
+    output(f"CLASSROOM {classroom_dir}")
+    output(f"PREFIX    {data['prefix'] or '-'}")
+    if data["template"]:
+        output(f"TEMPLATE  {data['template']}")
+    if data["canvas_course"]:
+        output(f"CANVAS    {data['canvas_course']}")
+    output(f"TAS       {','.join(data['tas']) or '-'}")
+    output(f"SETTINGS  protection={protection}"
+           f" linear_history={str(linear_history).lower()}"
+           f" force_push={str(force_push).lower()}")
+
+    if data["assignments"]:
+        output("ASSIGNMENTS " + ", ".join(
+            f"{name} ({len(rows)} teams)"
+            for name, rows in data["assignments"].items()))
+        answer = click.prompt(
+            "type the full name of one of the assignments to confirm deletion")
+        if answer not in data["assignments"]:
+            error(f'"{answer}" is not one of the assignments; nothing deleted')
+            sys.exit(2)
+    elif not click.confirm(f'delete the empty classroom "{classroom_dir}"?',
+                           default=False):
+        output("nothing to do")
+        return
+
+    actions = []
+    if delete_repo:
+        by_id = {r.id: r for r in list_org_repos(gh, org)}
+        for rows in data["assignments"].values():
+            for row in rows:
+                if row["repo_id"] is None:
+                    continue
+                repo = by_id.get(row["repo_id"]) or get_repo_by_id(gh, row["repo_id"])
+                if repo is None:
+                    warn(f"recorded repo for {row['name']}"
+                         f" (id {row['repo_id']}) is gone")
+                    continue
+
+                def _delete(repo=repo):
+                    repo.delete()
+                _perform(dryrun, f"delete repo {repo.full_name}", _delete, actions)
+
+    def _remove():
+        shutil.rmtree(ms.classroom_dir(checkout, classroom_dir))
+        ms.commit_and_push(checkout, f"delete {classroom_dir}", get_token())
+    _perform(dryrun, f"delete classroom {classroom_dir}"
+             f" from {org}/{ms.META_REPO_NAME}", _remove, actions)
 
 
 def _rows_from_canvas(room, canvas_group, unresolvable):
