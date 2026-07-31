@@ -41,9 +41,9 @@ def seed_demo_meta(root):
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
     bare = root / "classroom-meta.git"
-    GitRepo.init(bare, bare=True)
+    GitRepo.init(bare, bare=True).close()
     work = root / "seed-work"
-    GitRepo.clone_from(str(bare), str(work))
+    GitRepo.clone_from(str(bare), str(work)).close()
     # no prefix, so repo names start at the assignment segment — matching the
     # org's existing project-* and hw1-* repos
     ms.save_classroom(str(work), DEMO_CLASSROOM, assignments={

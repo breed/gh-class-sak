@@ -346,16 +346,18 @@ def commit_and_push(checkout, message, token=None):
 
     from gh_class_sak.git_ops import auth_env
 
-    repo = Repo(checkout)
-    repo.git.add("-A")
-    if repo.head.is_valid():
-        if not repo.index.diff("HEAD"):
+    # the context manager closes the repo's handles deterministically — an
+    # open Repo pins files on windows and blocks temp-dir cleanup
+    with Repo(checkout) as repo:
+        repo.git.add("-A")
+        if repo.head.is_valid():
+            if not repo.index.diff("HEAD"):
+                return False
+        elif not repo.index.entries:
             return False
-    elif not repo.index.entries:
-        return False
-    actor = Actor("gh-class-sak", "gh-class-sak@localhost")
-    repo.index.commit(message, author=actor, committer=actor)
-    with repo.git.custom_environment(**auth_env(token)):
-        # -u so a clone of an initially-empty origin gains a tracking branch
-        repo.git.push("--set-upstream", "origin", "HEAD")
-    return True
+        actor = Actor("gh-class-sak", "gh-class-sak@localhost")
+        repo.index.commit(message, author=actor, committer=actor)
+        with repo.git.custom_environment(**auth_env(token)):
+            # -u so a clone of an initially-empty origin gains a tracking branch
+            repo.git.push("--set-upstream", "origin", "HEAD")
+        return True

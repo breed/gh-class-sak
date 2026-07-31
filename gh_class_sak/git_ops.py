@@ -52,7 +52,8 @@ def push_template(template_url, dest_url, token=None, branch="main"):
         atexit.register(shutil.rmtree, workdir, ignore_errors=True)
         checkout = os.path.join(workdir, "content")
         try:
-            Repo.clone_from(template_url, checkout, depth=1, env=auth_env(token))
+            Repo.clone_from(template_url, checkout, depth=1,
+                            env=auth_env(token)).close()
             shutil.rmtree(os.path.join(checkout, ".git"))
             source = Repo.init(checkout)
             source.git.add("-A")
@@ -87,7 +88,9 @@ def clone_or_update(clone_url, dest, token=None):
 
     if not os.path.exists(dest):
         try:
-            Repo.clone_from(clone_url, dest, env=env)
+            # close the handle right away: an open Repo pins files on
+            # windows, blocking later cleanup of the checkout
+            Repo.clone_from(clone_url, dest, env=env).close()
         except GitCommandError:
             return "failed"
         return "cloned"
@@ -97,17 +100,18 @@ def clone_or_update(clone_url, dest, token=None):
     except Exception:
         return "not-a-repo"
 
-    before = repo.head.commit.hexsha if repo.head.is_valid() else None
-    try:
-        with repo.git.custom_environment(**env):
-            repo.git.pull("--ff-only")
-    except GitCommandError as exc:
-        text = str(exc).lower()
-        if "fast-forward" in text or "divergent" in text:
-            return "diverged"
-        if before is None:
-            # an empty repo has no tracking branch to pull yet
-            return "empty"
-        return "pull-failed"
-    after = repo.head.commit.hexsha if repo.head.is_valid() else None
-    return "up-to-date" if before == after else "updated"
+    with repo:
+        before = repo.head.commit.hexsha if repo.head.is_valid() else None
+        try:
+            with repo.git.custom_environment(**env):
+                repo.git.pull("--ff-only")
+        except GitCommandError as exc:
+            text = str(exc).lower()
+            if "fast-forward" in text or "divergent" in text:
+                return "diverged"
+            if before is None:
+                # an empty repo has no tracking branch to pull yet
+                return "empty"
+            return "pull-failed"
+        after = repo.head.commit.hexsha if repo.head.is_valid() else None
+        return "up-to-date" if before == after else "updated"

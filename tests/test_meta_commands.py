@@ -47,7 +47,7 @@ def seed_meta(env, course=COURSE, prefix=PREFIX, template=None, tas=(),
     call it again with another course to seed a second classroom directory.
     """
     bare = env.root / "classroom-meta.git"
-    GitRepo.init(bare, bare=True)
+    GitRepo.init(bare, bare=True).close()
     work = ms.checkout_meta(str(bare), "seed-work")
     ms.save_classroom(work, course, prefix, template, tas=list(tas),
                       assignments=assignments, **settings)

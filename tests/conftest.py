@@ -58,9 +58,9 @@ def fake_github(tmp_path, monkeypatch):
                         lambda org: str(tmp_path / "checkouts" / org))
     bare = tmp_path / "origins" / "classroom-meta.git"
     bare.parent.mkdir(parents=True)
-    GitRepo.init(bare, bare=True)
+    GitRepo.init(bare, bare=True).close()
     work = tmp_path / "origins" / "seed-work"
-    GitRepo.clone_from(str(bare), str(work))
+    GitRepo.clone_from(str(bare), str(work)).close()
     ms.save_classroom(str(work), "cmpe_195a",
                       assignments={"hw1": [], "project": [], "quiz": []})
     ms.commit_and_push(str(work), "seed")
