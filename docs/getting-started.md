@@ -164,5 +164,7 @@ Add `--no-dryrun` and it actually clones, fast-forwarding any repo you already h
 
 - **[Commands](commands.md)** — the full reference: every command, every flag, and the
   classroom-meta repo in detail
+- **[The Discord server](https://discord.gg/nyfCHTZJkt)** — questions, quick help, and
+  other instructors running courses this way
 - **[CONTRIBUTING.md](../CONTRIBUTING.md)** — the test suite stubs GitHub and Canvas, so
   you can hack on the tool without a course or a token

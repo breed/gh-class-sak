@@ -7,6 +7,7 @@ is gone.**
 [![PyPI](https://img.shields.io/pypi/v/gh-class-sak)](https://pypi.org/project/gh-class-sak/)
 [![Python](https://img.shields.io/pypi/pyversions/gh-class-sak)](https://pypi.org/project/gh-class-sak/)
 [![License](https://img.shields.io/pypi/l/gh-class-sak)](LICENSE)
+[![Discord](https://img.shields.io/badge/discord-join%20the%20server-5865F2?logo=discord&logoColor=white)](https://discord.gg/nyfCHTZJkt)
 
 ![Terminal demo: gh-class-sak listing classrooms, showing an assignment's teams and members, and previewing a bulk clone for grading](https://raw.githubusercontent.com/breed/gh-class-sak/main/docs/demo.svg)
 
@@ -94,6 +95,10 @@ Every example on those pages — and above — is replayed against an invented d
 the test suite, so the output you see is the output you get.
 
 ## Contributing
+
+Questions, war stories, and quick help live on the
+[Discord server](https://discord.gg/nyfCHTZJkt) — running a course with this, or thinking
+about it? Come say hi.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). The test suite stubs out GitHub and Canvas, so you
 can contribute without a course, a token, or a Canvas account:

@@ -6,7 +6,8 @@ contributions — you do not need to write code to be useful here.
 This tool is built by and for instructors, so the most valuable thing you can tell us is
 **how your course is actually set up**. Org naming, repo naming, whether you use Canvas
 groups or sections — these vary enormously between courses, and we only see our own.
-There's a [Share your course setup][experience] issue template for exactly that.
+There's a [Share your course setup][experience] issue template for exactly that, and a
+[Discord server][discord] for questions and quick help.
 
 ## Local setup
 
@@ -121,6 +122,7 @@ Be kind. We use "we" rather than "you" when something goes wrong, and we assume 
 faith. Report problems privately to the maintainer via [@breed](https://github.com/breed).
 
 [codespace]: https://codespaces.new/breed/gh-class-sak
+[discord]: https://discord.gg/nyfCHTZJkt
 [gfi]: https://github.com/breed/gh-class-sak/labels/good%20first%20issue
 [docs]: https://github.com/breed/gh-class-sak/labels/documentation
 [discussions]: https://github.com/breed/gh-class-sak/discussions
