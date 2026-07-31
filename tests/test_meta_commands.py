@@ -1233,6 +1233,27 @@ class TestClassroomResolution:
         assert core.resolve_classroom(env.gh, "physics-dept") == ("physics-dept", None)
 
 
+class TestClassroomsCommand:
+    def test_naming_a_classroom_lists_only_it(self, env, tmp_path, monkeypatch):
+        seed_meta(env, course="cmpe_195a", assignments={"hw1": []})
+        seed_meta(env, course="cmpe_195b", assignments={"lab1": []})
+        orgs_config(tmp_path, monkeypatch, ORG)
+        result = run(env.runner, "classrooms", "195B")
+        assert result.exit_code == 0, result.output
+        assert "cmpe_195b: lab1" in result.output
+        assert "cmpe_195a" not in result.output
+
+    def test_naming_the_org_still_lists_every_classroom(self, env, tmp_path,
+                                                        monkeypatch):
+        seed_meta(env, course="cmpe_195a", assignments={"hw1": []})
+        seed_meta(env, course="cmpe_195b", assignments={"lab1": []})
+        orgs_config(tmp_path, monkeypatch, ORG)
+        result = run(env.runner, "classrooms", ORG)
+        assert result.exit_code == 0, result.output
+        assert "cmpe_195a: hw1" in result.output
+        assert "cmpe_195b: lab1" in result.output
+
+
 class TestMigrateGithubClassroom:
     """prompts run per inferred assignment, alphabetically: hw1 then project.
     the input feeds course-for-hw1, name-for-hw1, course-for-project, ..."""

@@ -22,8 +22,9 @@ def classrooms(classroom):
     """List assignments for CLASSROOM, or for every configured classroom."""
     gh = get_github()
 
+    partial = None
     if classroom:
-        org, _partial = resolve_classroom(gh, classroom)
+        org, partial = resolve_classroom(gh, classroom)
         orgs = [org]
     else:
         # orgs are never discovered from the token: enumerating every org the
@@ -45,6 +46,11 @@ def classrooms(classroom):
             error(f'no classroom-meta repo in "{org}". create one with: meta init')
             missing = True
             continue
+        if partial:
+            # the argument named one classroom, not its whole host org
+            meta_classrooms = {name: data
+                               for name, data in meta_classrooms.items()
+                               if name == partial}
         for classroom_dir, data in sorted(meta_classrooms.items()):
             if data["assignments"]:
                 for assignment in data["assignments"]:
