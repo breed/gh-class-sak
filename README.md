@@ -56,8 +56,9 @@ Add `--no-dryrun` and it actually clones, fast-forwarding any repo you already h
   per-section instructor columns, and "who has no repo yet" reports
 - **Managed classrooms** — `meta apply` reconciles the org to the
   [classroom-meta repo](docs/commands.md#the-classroom-meta-repo): creates private repos
-  (optionally from a template), keeps student, TA, and branch-protection state exactly as
-  recorded, and tracks repos by permanent id so renames can't hide them
+  (optionally from a template), grants student, TA, and branch-protection state exactly
+  as recorded — removing people is opt-in — and tracks repos by permanent id so renames
+  can't hide them
 - **Safe by default** — every mutating command previews with a ⚠️ until you pass
   `--no-dryrun`, and your token never appears in `ps` output, clone URLs, or
   `.git/config`

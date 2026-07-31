@@ -282,20 +282,54 @@ gh-class-sak meta apply CLASSROOM [--remove-unlisted-contributors] [--dryrun/--n
 ```
 
 Naming a classroom reconciles just that one; naming the org reconciles every classroom
-directory. For each one:
+directory. The files are the source of truth: a run works out what the org is missing
+and changes only that, in four passes per classroom.
 
-- rows without a repo yet — including ones you hand-added to any assignment's tsv — get
-  created
-- each classroom has its own **`<classroom>-TAs` team** (e.g. `cs101_fall-TAs`) whose
-  membership matches its `[TAS]` section, added as a **read** collaborator on that classroom's
-  student repos across all of its assignments — so TAs accept one org invite ever, and
-  TAs of one classroom never gain access to another classroom's repos
-- every listed student has **write** on their repo. Collaborators (and pending
-  invitations) the rows don't list are *warned about* and left in place; pass
-  `--remove-unlisted-contributors` to revoke them — org admins are never touched
-  either way
-- every recorded repo's default branch carries the classroom's protection settings
-- run it twice: the second pass prints `nothing to do`
+**1. Every row gets a repo.** A row whose `REPO_ID` is empty — imported or hand-added
+to any assignment's tsv — is realized. If a repo already exists under the row's
+default name (`prefix-assignment-NAME`), it is **adopted**: recorded, contents
+untouched. Otherwise a private repo is created and seeded from the first of: the
+assignment's `[TEMPLATE]` record (its content, as one fresh commit on the repo's
+default branch), the classroom-wide `template` repo, or nothing (an empty repo). An
+unreachable `[TEMPLATE]` url fails that row cleanly — the empty shell is deleted so
+the next run retries, the rest of the classroom proceeds, and the run exits 1. The
+row's listed students get **push** on the new repo.
+
+**2. Students match the rows.** Every row with a recorded repo — found by its
+permanent id, so a renamed repo still syncs — is checked. Listed students without
+access are granted push; an unaccepted invitation counts as access, so nobody is
+re-invited run after run. Collaborators and pending invitations the row does *not*
+list are warned about and left in place — `--remove-unlisted-contributors` revokes
+the collaborators and cancels the invitations instead. Org admins are never touched
+either way. One safety rule overrides everything: if **any** identity in a row fails
+to resolve (a removed Canvas link, a search rate limit), that row's collaborators are
+left entirely alone — a shrunken list must never masquerade as the roster — and the
+run exits 1.
+
+**3. Protection matches the settings.** Every recorded repo's default branch carries
+the classroom's `protection`/`linear_history`/`force_push` — mechanics and caveats
+under [Repo settings](#repo-settings).
+
+**4. The TA team matches `[TAS]`.** Each classroom's **`<classroom>-TAs`** team is
+created if missing, its membership is made exactly the `[TAS]` identities (pending
+invitations count as membership; members not in `[TAS]` are removed), and it holds
+**read** on exactly the classroom's repos — the per-assignment name matches plus
+every recorded id — so TAs accept one org invite ever and never gain access to
+another classroom's repos. Team grants outside the classroom are revoked, the
+classroom-meta repo itself excepted.
+
+What a run **writes back**: `REPO` and `REPO_ID` on the rows it realized — only the
+tsvs that changed are rewritten, so hand-written `#` comments in untouched files
+survive — committed and pushed as author `gh-class-sak`. What a run **never does**:
+touch an org admin, modify the contents of an existing repo, remove branch
+protection, delete a tsv, or delete a repo (beyond rolling back a shell it created
+moments earlier in the seed-failure case above).
+
+Apply is idempotent — run it twice and the second pass prints `nothing to do` — and,
+like every mutating command, a preview with ⚠️ until `--no-dryrun`. Exit status: `1`
+when an identity didn't resolve or a template seed failed (the org may be part-way
+reconciled; fix the cause and re-run), `2` when the classroom or its classroom-meta
+repo can't be found at all.
 
 ### Repo settings
 

@@ -117,7 +117,9 @@ It creates each repo privately (from a template, if the classroom names one), gr
 students push, and records the repo's URL and permanent id — so even a renamed repo stays
 tracked. From then on, `meta apply` reconciles everything: missing repos, student access,
 the classroom's TA team, and branch protection. Run it twice — the second pass prints
-`nothing to do`.
+`nothing to do`. The full sync contract — what each pass changes, what only ever happens
+on request, and what apply never touches — is specified in the
+[commands reference](commands.md#meta-apply).
 
 Coming from GitHub Classroom? One command imports an org Classroom left behind — see
 [Migrating from GitHub Classroom](migrating-from-github-classroom.md) for where
