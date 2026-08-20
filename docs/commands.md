@@ -388,6 +388,20 @@ Once repos are recorded, `repos list`, `repos members`, `repos missing`, and `re
 all include them by id — so a renamed repo shows up under its original team name instead
 of silently vanishing.
 
+### meta list
+
+List the classrooms the classroom-meta repos record — one row per classroom with its
+prefix, TA count, and each assignment with its team count. It reads only the meta repo,
+so it's fast: no live-org checks (that's `meta show`'s job). Without an argument it
+walks every org in `[ORGS]`; the argument names an org or a single classroom:
+
+```console
+$ gh-class-sak meta list cs101-fall
+scanning cs101-fall ...
+CLASSROOM   PREFIX  TAS  ASSIGNMENTS
+cs101_fall  -       0    hw1(2) project(3)
+```
+
 ## How group matching works
 
 With `--group`, the tool:

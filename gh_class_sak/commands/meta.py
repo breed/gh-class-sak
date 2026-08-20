@@ -633,6 +633,55 @@ def meta_show(classroom):
                "   \N{CROSS MARK} not a collaborator")
 
 
+@meta.command("list")
+@click.argument("classroom", required=False)
+def meta_list(classroom):
+    """List the classrooms recorded in the classroom-meta repos.
+
+    One row per classroom: prefix, TA count, and each assignment with its
+    team count — read straight from the meta repo, without touching any
+    live repos. Without an argument, every configured org is listed.
+    """
+    gh = get_github()
+
+    partial = None
+    if classroom:
+        org, partial = resolve_classroom(gh, classroom)
+        orgs = [org]
+    else:
+        # orgs are never discovered from the token: enumerating every org the
+        # user belongs to means paginating giant unrelated orgs (e.g. apache)
+        orgs = configured_orgs()
+        if not orgs:
+            error("no classroom given and no configured orgs found")
+            error(f"pass a classroom (github org), or list orgs in "
+                  f"the [ORGS] section of {config_ini}")
+            sys.exit(2)
+
+    missing = False
+    for org in orgs:
+        info(f"scanning {org} ...")
+        meta_classrooms = ms.load_meta_classrooms(gh, org, get_token())
+        if not meta_classrooms:
+            error(f'no {ms.META_REPO_NAME} repo in "{org}". create one with: meta init')
+            missing = True
+            continue
+        if partial:
+            # the argument named one classroom, not its whole host org
+            meta_classrooms = {name: data
+                               for name, data in meta_classrooms.items()
+                               if name == partial}
+        table = []
+        for classroom_dir, data in sorted(meta_classrooms.items()):
+            assignments = " ".join(f"{name}({len(rows)})"
+                                   for name, rows in data["assignments"].items())
+            table.append([classroom_dir, data["prefix"] or ms.EMPTY,
+                          str(len(data["tas"])), assignments or ms.EMPTY])
+        print_table(["CLASSROOM", "PREFIX", "TAS", "ASSIGNMENTS"], table)
+    if missing:
+        sys.exit(2)
+
+
 @meta.command("delete")
 @click.argument("classroom")
 @click.option("--delete-repo/--no-delete-repo", default=False,

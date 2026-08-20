@@ -302,6 +302,57 @@ class TestMetaShow:
         assert "no classroom-meta repo" in result.output
 
 
+def _list_row(name, students=()):
+    return {"name": name, "students": list(students),
+            "repo": None, "repo_id": None}
+
+
+class TestMetaList:
+    def test_lists_recorded_classrooms(self, env):
+        seed_meta(env, tas=["/ta1", "grader@sjsu.edu/"], assignments={
+            "hw1": [_list_row("alice"), _list_row("bob")],
+            ASSIGNMENT: [_list_row("team-1")],
+        })
+        result = run(env.runner, "meta", "list", ORG)
+        assert result.exit_code == 0
+        lines = result.output.splitlines()
+        header = next(line for line in lines if line.startswith("CLASSROOM"))
+        assert header.split() == ["CLASSROOM", "PREFIX", "TAS", "ASSIGNMENTS"]
+        row = next(line for line in lines if line.startswith(COURSE))
+        assert row.split() == [COURSE, PREFIX, "2", "hw1(2)", f"{ASSIGNMENT}(1)"]
+
+    def test_empty_cells_show_a_dash(self, env):
+        seed_meta(env, prefix=None)
+        result = run(env.runner, "meta", "list", ORG)
+        row = next(line for line in result.output.splitlines()
+                   if line.startswith(COURSE))
+        assert row.split() == [COURSE, "-", "0", "-"]
+
+    def test_a_classroom_argument_lists_just_that_classroom(self, env, config_file):
+        seed_meta(env)
+        seed_meta(env, course="cs_50", prefix=None)
+        result = run(env.runner, "meta", "list", "cs_50")
+        assert result.exit_code == 0
+        assert "cs_50" in result.output
+        assert COURSE not in result.output
+
+    def test_no_argument_lists_every_configured_org(self, env, config_file):
+        seed_meta(env)
+        result = run(env.runner, "meta", "list")
+        assert result.exit_code == 0
+        assert COURSE in result.output
+
+    def test_errors_without_a_meta_repo(self, env):
+        result = run(env.runner, "meta", "list", ORG)
+        assert result.exit_code == 2
+        assert "no classroom-meta repo" in result.output
+
+    def test_errors_with_no_argument_and_no_config(self, env):
+        result = run(env.runner, "meta", "list")
+        assert result.exit_code == 2
+        assert "no classroom given" in result.output
+
+
 class TestMetaDelete:
     def seed_with_repo(self, env):
         repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1")

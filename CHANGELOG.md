@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- new `meta list [CLASSROOM]` subcommand: one row per recorded classroom — prefix, TA
+  count, and each assignment with its team count — read straight from the
+  classroom-meta repo, with no live-org checks. Without an argument it lists every
+  configured org; the argument names an org or a single classroom
+
 ## v1.0.3
 
 - a display name is never used to resolve a GitHub id: the search fallback for a
