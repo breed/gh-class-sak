@@ -28,6 +28,16 @@ def list_group_users(group):
     return list(group.get_users())
 
 
+def send_message(canvas, user_id, subject, body):
+    """send a canvas conversation message to one user.
+
+    force_new so every run starts its own conversation instead of silently
+    appending to an old thread the student may have muted.
+    """
+    canvas.create_conversation([str(user_id)], body, subject=subject,
+                               force_new=True)
+
+
 _ENROLLMENT_QUERY = """
 query ($courseId: ID!, $cursor: String) {
   course(id: $courseId) {

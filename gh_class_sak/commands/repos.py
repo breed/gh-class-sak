@@ -36,7 +36,6 @@ from gh_class_sak.github_api import (
     get_repo_by_id,
     list_commit_authors,
     list_org_repos,
-    resolve_email_to_username,
     split_collaborators,
 )
 from gh_class_sak.meta_store import join_repo_name, load_meta_classrooms
@@ -255,24 +254,7 @@ def _github_from_canvas_profiles(course, people):
             people[uid]["github"] = github
 
 
-def _github_from_search(gh, people):
-    """For anyone still unresolved, search GitHub by email.
-
-    Never by display name: two people can share one, and a github id that
-    ends up granting repo access must not come from a lookalike match.
-    """
-    for person in people.values():
-        if person.get("github"):
-            continue
-        github = None
-        if person.get("email"):
-            github = resolve_email_to_username(gh, person["email"])
-        person["github"] = github
-        if not github:
-            warn(f"could not resolve github id for {person['name']}")
-
-
-def fetch_enrollment_data(room, canvas_ctx=None, gh=None, resolve_students=False):
+def fetch_enrollment_data(room, canvas_ctx=None, resolve_students=False):
     """Fetch Canvas enrollment data mapping students to instructors by section."""
     if canvas_ctx is None:
         canvas_ctx = resolve_canvas_course(room)
@@ -300,6 +282,7 @@ def fetch_enrollment_data(room, canvas_ctx=None, gh=None, resolve_students=False
 
         if user_id not in bucket:
             bucket[user_id] = {
+                "id": user_id,
                 "name": user.get("name", ""),
                 "email": user.get("email", ""),
                 "section_ids": set(),
@@ -307,8 +290,6 @@ def fetch_enrollment_data(room, canvas_ctx=None, gh=None, resolve_students=False
         bucket[user_id]["section_ids"].add(section_id)
 
     _github_from_canvas_profiles(course, instructors)
-    if gh:
-        _github_from_search(gh, instructors)
 
     if resolve_students:
         _github_from_canvas_profiles(course, students)
@@ -396,7 +377,6 @@ def repos():
 def repos_list(classroom, assignment, repo, members, show_instructors, show_name, show_email,
                group_category, show_empty):
     """List repos for a classroom assignment."""
-    gh = get_github()
     room, found = resolve_assignment_repos(classroom, assignment)
 
     # resolve the Canvas course once if any Canvas feature is usable —
@@ -411,7 +391,7 @@ def repos_list(classroom, assignment, repo, members, show_instructors, show_name
 
     enrollment_data = None
     if (show_instructors or show_email) and canvas_ctx:
-        enrollment_data = fetch_enrollment_data(room, canvas_ctx, gh=gh)
+        enrollment_data = fetch_enrollment_data(room, canvas_ctx)
 
     # a profile name is needed for group matching, canvas matching, or --name
     need_names = (groups_data is not None
@@ -533,7 +513,6 @@ def repos_members(classroom, assignment):
               help="show Canvas groups with no matching repo")
 def repos_missing(classroom, assignment, group_category):
     """List Canvas students or groups without repos."""
-    gh = get_github()
     room, found = resolve_assignment_repos(classroom, assignment)
 
     if group_category:
@@ -556,7 +535,7 @@ def repos_missing(classroom, assignment, group_category):
         return
 
     # without --group: Canvas students who are not a collaborator on any repo
-    enrollment_data = fetch_enrollment_data(room, gh=gh, resolve_students=True)
+    enrollment_data = fetch_enrollment_data(room, resolve_students=True)
 
     logins = set()
     gh_names = []

@@ -1,42 +1,10 @@
 from gh_class_sak.commands.repos import (
-    _github_from_search,
     extract_github_username,
     format_label,
     match_groups,
     names_match,
     normalize_name,
 )
-from tests.fakes import FakeSearchResult
-
-
-class TestGithubFromSearch:
-    def test_display_name_never_resolves_a_github_id(self):
-        # two people can share a display name; resolving an id from one
-        # could hand repo access to a stranger. email search only.
-        queried = []
-
-        class GH:
-            def search_users(self, query):
-                queried.append(query)
-                return FakeSearchResult(
-                    ["a-stranger"] if query.startswith("fullname:") else [])
-
-        people = {"1": {"name": "Erin Evans", "email": "erin@nowhere.edu",
-                        "github": None}}
-        _github_from_search(GH(), people)
-        assert people["1"]["github"] is None
-        assert not [q for q in queried if q.startswith("fullname:")]
-
-    def test_email_search_still_resolves(self):
-        class GH:
-            def search_users(self, query):
-                return FakeSearchResult(
-                    ["erin-dev"] if query == "erin@sjsu.edu in:email" else [])
-
-        people = {"1": {"name": "Erin Evans", "email": "erin@sjsu.edu",
-                        "github": None}}
-        _github_from_search(GH(), people)
-        assert people["1"]["github"] == "erin-dev"
 
 
 class TestNormalizeName:

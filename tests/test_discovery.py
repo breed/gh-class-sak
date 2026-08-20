@@ -8,7 +8,6 @@ from gh_class_sak.github_api import (
     get_team,
     github_safe_name,
     infer_assignment_prefixes,
-    resolve_email_to_username,
     team_name,
 )
 from tests.fakes import FakeGithub, FakeOrg, FakeRepo
@@ -54,19 +53,6 @@ class TestGithubLookupErrors:
         with pytest.raises(SystemExit) as exc:
             get_team(self.Boom(), ORG, "cs101-tas")
         assert exc.value.code == 2
-
-
-class TestSearchRateLimit:
-    def test_rate_limit_warns_instead_of_reading_as_no_match(self, capsys):
-        from github import RateLimitExceededException
-
-        class Limited:
-            def search_users(self, _query):
-                raise RateLimitExceededException(
-                    403, {"message": "API rate limit exceeded"}, None)
-
-        assert resolve_email_to_username(Limited(), "jane@sjsu.edu") is None
-        assert "rate limit" in capsys.readouterr().err
 
 
 class TestInferAssignmentPrefixes:

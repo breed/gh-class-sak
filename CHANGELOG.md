@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- new `canvas message-missing CLASSROOM ASSIGNMENT` subcommand: sends each stranded
+  student a Canvas message saying exactly what to do — add the missing GitHub link to
+  their Canvas profile, fix a link that points at a nonexistent GitHub account, or
+  accept the still-pending invitation to their assignment repo. Collaborators are
+  left alone; a student with a working GitHub account but neither access nor an
+  invitation is a loud error pointing at `meta apply` (exit 1), not a message; the
+  dry run (default) lists who would get which message and prints the full texts
+- the GitHub search API is no longer used to resolve an email to a GitHub id — an
+  email-only identity now resolves via the Canvas profile's GitHub link or not at
+  all. The search only ever matched a student who publicly listed that exact email
+  on their GitHub profile (nearly none do), its loose token matching could return
+  strangers, and its 30-requests-a-minute rate limit slowed every roster-sized run.
+  Migration note: an identity that used to resolve through a public profile email
+  now needs its `/githubid` half recorded in the tsv, or the GitHub link added to
+  the student's Canvas profile
 - new `meta list [CLASSROOM]` subcommand: one row per recorded classroom — prefix, TA
   count, and each assignment with its team count — read straight from the
   classroom-meta repo, with no live-org checks. Without an argument it lists every

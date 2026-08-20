@@ -146,6 +146,33 @@ doesn't fuzzy-match any collaborator's profile name.
 With `--group`, it lists Canvas groups that no repo could be matched to, along with their
 members.
 
+## canvas message-missing
+
+Where `repos missing` tells *you* who is stranded, this tells *them*. It checks every
+enrolled student against an assignment's repos and sends a Canvas message to each one
+stuck on the way to their repo — one of three texts, each saying exactly what to do:
+
+```
+gh-class-sak canvas message-missing CLASSROOM ASSIGNMENT [--dryrun/--no-dryrun]
+```
+
+- **no-link** — the Canvas profile has no GitHub link: asks them to add
+  `https://github.com/YOUR-USERNAME` under Account → Profile → Links.
+- **bad-link** — the profile links to a GitHub account that doesn't exist (a typo, or
+  a renamed/deleted account): asks them to fix the link.
+- **invited** — their account holds an unaccepted invitation to their assignment repo:
+  asks them to accept it (naming the repo URL), and warns that GitHub invitations
+  expire after 7 days.
+
+Students already collaborating on a repo are left alone. A student with a working
+GitHub account but neither repo access nor a pending invitation gets no message — that
+one isn't theirs to fix — and is instead a loud, red error aimed at you (the run exits
+1): the org is out of sync with the meta, and `meta apply` is the cure. Needs the
+Canvas config. Like every mutating
+command it previews by default: the dry run lists who would get which message and
+prints the full message texts, so nothing goes out sight-unseen. The texts live in one
+place at the top of `gh_class_sak/commands/canvas.py` if you want to reword them.
+
 ## repos clone
 
 Clone every repo for an assignment into `--dest`, one directory per team, fast-forwarding
@@ -190,7 +217,7 @@ classroom-meta/
 The tsv files are the heart of it. You supply the first two columns — `NAME` (the team
 suffix) and `STUDENTS`: comma-joined **identities** in `EMAIL/GITHUBID` syntax —
 `joe@example.com/JoeDevExample` when both are known, `joe@example.com/` for email only
-(resolved to a GitHub id via Canvas and then the GitHub search API), `/JoeDevExample`
+(resolved to a GitHub id via the Canvas profile's GitHub link), `/JoeDevExample`
 for a bare GitHub id. A
 repo's default name joins the non-empty parts of classroom `prefix`, assignment, and
 `NAME` with dashes: with `prefix = sp26-195a`, row `team-1` of `hw1.tsv` becomes
@@ -242,7 +269,7 @@ gh-class-sak meta assign CLASSROOM project.tsv [--assignment NAME] [--dryrun/--n
 
 The table lands in the classroom directory as an assignment named after the file's
 basename (`project.tsv` → `project`); `--assignment` overrides that. Emails are resolved
-to GitHub logins via the student's Canvas profile link, then the GitHub search API; an
+to GitHub logins via the student's Canvas profile link — never a GitHub search; an
 email nothing can resolve is a loud error. Under `--no-dryrun` it creates each missing
 repo (privately, from the template when `classroom.ini` names one), records the URL and
 repo id, grants the listed students push, and reconciles the classroom's TA team so the
@@ -302,7 +329,7 @@ re-invited run after run. Collaborators and pending invitations the row does *no
 list are warned about and left in place — `--remove-unlisted-contributors` revokes
 the collaborators and cancels the invitations instead. Org admins are never touched
 either way. One safety rule overrides everything: if **any** identity in a row fails
-to resolve (a removed Canvas link, a search rate limit), that row's collaborators are
+to resolve (a removed Canvas link, a Canvas outage), that row's collaborators are
 left entirely alone — a shrunken list must never masquerade as the roster — and the
 run exits 1.
 

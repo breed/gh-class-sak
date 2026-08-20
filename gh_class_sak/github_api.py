@@ -2,7 +2,7 @@ import sys
 import unicodedata
 from collections import Counter
 
-from github import GithubException, RateLimitExceededException
+from github import GithubException
 
 from gh_class_sak.core import error, warn
 
@@ -157,32 +157,20 @@ def list_commit_authors(repo):
     return authors
 
 
-def _search_one(gh, query, subject):
-    """the single search hit, or None. a rate limit warns loudly: the search
-    api allows ~30 requests a minute, and hitting the cap must not read as
-    "nothing matched" for everyone after the cutoff."""
-    try:
-        results = gh.search_users(query)
-        if results.totalCount == 1:
-            return results[0].login
-    except RateLimitExceededException:
-        warn(f'github search rate limit hit while resolving "{subject}";'
-             " wait a minute and re-run")
-    except GithubException:
-        pass
-    return None
-
-
-def resolve_email_to_username(gh, email):
-    return _search_one(gh, f"{email} in:email", email)
-
-
 def add_collaborator(repo, username, permission="push"):
     return repo.add_to_collaborators(username, permission)
 
 
 def remove_collaborator(repo, username):
     return repo.remove_from_collaborators(username)
+
+
+def get_github_user(gh, login):
+    """the NamedUser, or None when no account with this login exists."""
+    try:
+        return gh.get_user(login)
+    except GithubException as exc:
+        return _none_on_404(exc, f'user "{login}"')
 
 
 def _none_on_404(exc, what):

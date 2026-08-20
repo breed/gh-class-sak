@@ -250,18 +250,6 @@ class FakeOrg:
         return team
 
 
-class FakeSearchResult:
-    def __init__(self, logins):
-        self._users = [FakeNamedUser(login) for login in logins]
-
-    @property
-    def totalCount(self):
-        return len(self._users)
-
-    def __getitem__(self, index):
-        return self._users[index]
-
-
 class FakeAuthenticatedUser:
     # deliberately no get_orgs(): classrooms come from the config or an
     # explicit argument, never from enumerating the token's orgs
@@ -270,10 +258,10 @@ class FakeAuthenticatedUser:
 
 
 class FakeGithub:
-    def __init__(self, orgs, users=None, search_results=None):
+    def __init__(self, orgs, users=None, missing_users=()):
         self._orgs = {o.login: o for o in orgs}
         self._users = users or {}
-        self._search_results = search_results or {}
+        self._missing_users = {login.lower() for login in missing_users}
 
     def get_organization(self, name):
         if name not in self._orgs:
@@ -290,10 +278,9 @@ class FakeGithub:
     def get_user(self, login=None):
         if login is None:
             return FakeAuthenticatedUser(list(self._orgs.values()))
+        if login.lower() in self._missing_users:
+            raise GithubException(404, {"message": "Not Found"}, None)
         return self._users.get(login, FakeNamedUser(login))
-
-    def search_users(self, query):
-        return FakeSearchResult(self._search_results.get(query, []))
 
 
 # --- canvas ---------------------------------------------------------------
@@ -348,6 +335,7 @@ class FakeCanvas:
         self._courses = list(courses)
         self._enrollments = list(enrollments)
         self._profiles = profiles or {}
+        self.conversations = []
         for course in self._courses:
             course._canvas = self
 
@@ -371,6 +359,11 @@ class FakeCanvas:
         # (SJSU's canvas 404s it for teacher tokens); nothing in the tool may
         # rely on it
         raise Exception("Not Found: /users/:id is admin-or-self")
+
+    def create_conversation(self, recipients, body, subject=None,
+                            force_new=False):
+        self.conversations.append({"recipients": list(recipients),
+                                   "subject": subject, "body": body})
 
 
 class _FakeCanvasProfileHolder:

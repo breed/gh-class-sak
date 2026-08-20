@@ -50,7 +50,6 @@ from gh_class_sak.github_api import (
     protect_default_branch,
     read_default_branch_protection,
     remove_collaborator,
-    resolve_email_to_username,
     split_collaborators,
     team_name,
     team_pending_invitations,
@@ -159,10 +158,11 @@ def _ini_settings(data):
     return {key: data[key] for key in keys}
 
 
-def _make_resolver(gh, org, course_partial):
+def _make_resolver(org, course_partial):
     """entry -> github login. logins pass through; emails resolve via the
-    canvas roster (profile links) and then the github search api. returns
-    None for an email nothing can resolve."""
+    canvas roster (profile links) only — never a github search, whose hit
+    rate is too low to matter and whose rate limit stalls every run.
+    returns None for an email canvas can't resolve."""
     cache = {}
     canvas_map = None
 
@@ -185,7 +185,7 @@ def _make_resolver(gh, org, course_partial):
         if not email:
             return None
         if entry not in cache:
-            cache[entry] = _canvas_lookup(email) or resolve_email_to_username(gh, email)
+            cache[entry] = _canvas_lookup(email)
         return cache[entry]
 
     return resolve
@@ -519,7 +519,7 @@ def meta_init(classroom, org, prefix, template, canvas_course, dryrun):
 
     # the classroom's TA team exists from day one, with read access to
     # whatever repos the classroom already has (usually none yet)
-    resolve = _make_resolver(gh, org, canvas_course or classroom_dir)
+    resolve = _make_resolver(org, canvas_course or classroom_dir)
     unresolved = []
     ta_logins = _resolve_tas(tas, resolve, unresolved)
     universe = {}
@@ -593,7 +593,7 @@ def meta_show(classroom):
     data = _load_classroom(checkout, classroom_dir)
 
     protection, linear_history, force_push = ms.effective_repo_settings(data)
-    resolve = _make_resolver(gh, org, data["canvas_course"] or classroom_dir)
+    resolve = _make_resolver(org, data["canvas_course"] or classroom_dir)
     output(f"CLASSROOM {classroom_dir}")
     output(f"PREFIX    {data['prefix'] or '-'}")
     if data["template"]:
@@ -882,7 +882,7 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
         _perform(dryrun, f"record {name} rows: {', '.join(changed_names)}",
                  lambda: None, actions)
 
-    resolve = _make_resolver(gh, org, course)
+    resolve = _make_resolver(org, course)
     changed, unresolved, failures = _realize_classroom(gh, org, data, resolve,
                                                        dryrun, actions)
     unresolved = unresolvable + unresolved
@@ -994,7 +994,7 @@ def meta_apply(classroom, remove_unlisted, dryrun):
 
     for classroom_dir in classroom_dirs:
         data = _load_classroom(checkout, classroom_dir)
-        resolve = _make_resolver(gh, org, data["canvas_course"] or classroom_dir)
+        resolve = _make_resolver(org, data["canvas_course"] or classroom_dir)
         desired = ms.effective_repo_settings(data)
 
         # 1. realize rows that don't have a repo yet (hand-added ones included)

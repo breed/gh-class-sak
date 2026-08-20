@@ -87,7 +87,7 @@ files parse fine.
 - **`NAME`** — the team: the suffix appended to `prefix-assignment` to name the repo.
 - **`STUDENTS`** — comma-joined **identities** who get write access. An identity is
   `EMAIL/GITHUBID`: both halves (`jane@sjsu.edu/jdoe`), email only (`jane@sjsu.edu/`,
-  resolved via Canvas then the GitHub search API), or GitHub id only (`/msmith`, used
+  resolved via the Canvas profile's GitHub link), or GitHub id only (`/msmith`, used
   directly).
 - **`REPO`, `REPO_ID`** — filled in by the tool when it creates the repo: the URL, and
   GitHub's permanent numeric id. The id is how a repo stays tracked after students

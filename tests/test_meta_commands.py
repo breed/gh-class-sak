@@ -29,9 +29,7 @@ def env(tmp_path, monkeypatch):
 
     template = FakeRepo(ORG, "Template")
     org = FakeOrg(ORG, [template], local_git_root=str(root))
-    gh = FakeGithub(orgs=[org], search_results={
-        "jane@sjsu.edu in:email": ["jdoe"],
-    })
+    gh = FakeGithub(orgs=[org])
     for mod in (core, repos_cmd, classrooms_cmd, meta_cmd):
         monkeypatch.setattr(mod, "get_github", lambda: gh, raising=False)
         monkeypatch.setattr(mod, "get_token", lambda: None, raising=False)
@@ -423,7 +421,7 @@ class TestMetaAssign:
 
     def test_dryrun_previews_and_touches_nothing(self, env, tmp_path):
         seed_meta(env)
-        table = self.table(tmp_path, "NAME STUDENTS\nteam-1 jane@sjsu.edu,msmith\n")
+        table = self.table(tmp_path, "NAME STUDENTS\nteam-1 /jdoe,msmith\n")
         result = run(env.runner, "meta", "assign", ORG, table)
         assert result.exit_code == 0, result.output
         assert f"would create private {ORG}/{REPO_PREFIX}-team-1" in result.output
@@ -432,9 +430,18 @@ class TestMetaAssign:
         assert env.org.created_repos == []
         assert meta_state(env)["assignments"] == {}
 
+    def test_email_resolves_via_canvas_only_never_github_search(self, env, tmp_path):
+        # env's FakeGithub has no search_users at all, so any attempt to
+        # search github by email would blow up the test rather than pass
+        seed_meta(env)
+        table = self.table(tmp_path, "team-1 jane@sjsu.edu\n")
+        result = run(env.runner, "meta", "assign", ORG, table)
+        assert result.exit_code == 1
+        assert 'cannot resolve "jane@sjsu.edu"' in result.output
+
     def test_creates_records_and_grants(self, env, tmp_path):
         seed_meta(env, template=f"{ORG}/Template")
-        table = self.table(tmp_path, "team-1 jane@sjsu.edu,msmith\n")
+        table = self.table(tmp_path, "team-1 /jdoe,msmith\n")
         result = run(env.runner, "meta", "assign", ORG, table, "--no-dryrun")
         assert result.exit_code == 0, result.output
 

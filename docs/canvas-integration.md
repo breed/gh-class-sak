@@ -25,7 +25,9 @@ matches the Canvas course "FA26: CS-101 Sec 01".
 
 The link lives in the **Canvas profile**: a student adds their GitHub URL to the
 *links* section of their Canvas profile (a `github.com/...` URL in the bio works too).
-That's the one thing to ask students to do at the start of the term.
+That's the one thing to ask students to do at the start of the term — and
+`canvas message-missing` chases the stragglers for you, messaging everyone whose link
+is missing or broken, or who never accepted their repo invitation.
 
 Resolution runs in a chain, stopping at the first hit:
 
@@ -33,10 +35,11 @@ Resolution runs in a chain, stopping at the first hit:
    lookup at all.
 2. **The Canvas profile.** The enrollment's profile is fetched (through the course —
    teachers may not read profiles account-wide) and searched for a GitHub link.
-3. **The GitHub search API.** By email only — and only when the student's GitHub
-   account exposes it. Display names are deliberately never used to *resolve* an id:
-   two people can share a name, and an id that ends up granting repo access must not
-   come from a lookalike match.
+That's the whole chain — deliberately. GitHub's search API is never consulted: it only
+indexes the email a user *publicly* lists on their profile (which almost no student
+does), its loose token matching can return strangers, and an id that ends up granting
+repo access must not come from a guess. Display names are never used to resolve an id
+either: two people can share one.
 
 Anything still unresolved is a loud, red error naming the person, and the command exits
 nonzero — silent gaps would surface weeks later as a student who never had access.
