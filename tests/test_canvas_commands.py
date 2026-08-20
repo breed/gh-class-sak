@@ -173,6 +173,36 @@ class TestMessageMissing:
         assert "nothing to do" in result.output
         assert env.canvas.conversations == []
 
+    def test_canvas_test_student_is_ignored(self, env):
+        # canvas's "Student View" test student enrolls with role
+        # StudentEnrollment but type StudentViewEnrollment; it is not a
+        # person and canvas refuses to message it
+        env.canvas._enrollments.append(
+            {"type": "StudentViewEnrollment",
+             "role": {"name": "StudentEnrollment"},
+             "user": {"_id": "99", "name": "Test Student", "email": None},
+             "courseSectionId": "s1"})
+        result = run(env.runner, "canvas", "message-missing", ORG, "project")
+        assert result.exit_code == 0, result.output
+        assert "Test Student" not in result.output
+
+    def test_a_failed_send_errors_at_the_end_and_continues(self, env):
+        env.canvas.reject_recipients = {"2"}  # bob
+        result = run(env.runner, "canvas", "message-missing", ORG, "project",
+                     "--no-dryrun")
+        assert result.exit_code == 1, result.output
+        assert "cannot message Bob Baker" in result.output
+        # the other stranded students were still messaged
+        recipients = [c["recipients"][0] for c in env.canvas.conversations]
+        assert set(recipients) == {"3", "4"}
+        # and the failure prints after the message lines, like every held error
+        lines = result.output.splitlines()
+        last_sent = max(i for i, line in enumerate(lines)
+                        if line.startswith("message "))
+        failed = next(i for i, line in enumerate(lines)
+                      if "cannot message" in line)
+        assert failed > last_sent
+
     def test_errors_without_canvas_config(self, env, tmp_path, monkeypatch):
         config = tmp_path / "orgs-only.ini"
         config.write_text(f"[ORGS]\n{ORG}\n")

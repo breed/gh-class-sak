@@ -266,6 +266,11 @@ def fetch_enrollment_data(room, canvas_ctx=None, resolve_students=False):
     students = {}
     instructors = {}
     for node in nodes:
+        if node.get("type") == "StudentViewEnrollment":
+            # canvas's "Test Student" (student view) enrolls with role
+            # StudentEnrollment but is not a person: it has no profile and
+            # canvas refuses to message it
+            continue
         role = node.get("role", {}).get("name", "")
         user = node.get("user", {})
         user_id = user.get("_id")

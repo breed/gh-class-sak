@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Canvas's Student View "Test Student" is excluded from every roster the tool
+  builds: it enrolls with role StudentEnrollment but is not a person — it broke
+  `canvas message-missing --no-dryrun` (Canvas refuses it as a recipient) and got
+  phantom rows from `meta assign --from-canvas`
+- fix: a Canvas send failure in `canvas message-missing` is a held per-student
+  error printed at the end (exit 1), not a crash that aborts the remaining sends
+
 - GitHub's own route names (`dashboard`, `settings`, `notifications`, …) are never
   treated as usernames: a Canvas link to `github.com/dashboard` — the address bar
   pasted while signed in — is not recorded as an id by `--from-canvas`, resolves to

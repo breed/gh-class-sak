@@ -368,6 +368,9 @@ class FakeCanvas:
 
     def create_conversation(self, recipients, body, subject=None,
                             force_new=False):
+        if set(recipients) & getattr(self, "reject_recipients", set()):
+            from canvasapi.exceptions import BadRequest
+            raise BadRequest('[{"attribute":"recipients","message":"invalid"}]')
         self.conversations.append({"recipients": list(recipients),
                                    "subject": subject, "body": body})
 

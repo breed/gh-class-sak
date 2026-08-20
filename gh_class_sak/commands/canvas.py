@@ -10,6 +10,7 @@ student a canvas message saying exactly what to do.
 import sys
 
 import click
+from canvasapi.exceptions import CanvasException
 
 from gh_class_sak.canvas_api import send_message
 from gh_class_sak.commands.repos import (
@@ -176,10 +177,16 @@ def message_missing(classroom, assignment, dryrun):
                 f" ({category}): {subject}")
         if dryrun:
             would(f"would {line}")
-        else:
+            continue
+        try:
             send_message(canvas, student["id"], subject,
                          body.format(name=student["name"], **extra))
-            output(line)
+        except CanvasException as exc:
+            # one refused recipient must not abort the rest of the sends
+            stranded.append(f'cannot message {student["name"]}'
+                            f' <{student["email"] or "-"}>: {exc}')
+            continue
+        output(line)
 
     if dryrun:
         # show exactly what would go out, once per category that has anyone

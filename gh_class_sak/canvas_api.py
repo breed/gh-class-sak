@@ -43,6 +43,7 @@ query ($courseId: ID!, $cursor: String) {
   course(id: $courseId) {
     enrollmentsConnection(first: 500, after: $cursor) {
       nodes {
+        type
         role {
           name
         }

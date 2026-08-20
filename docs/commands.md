@@ -166,7 +166,8 @@ gh-class-sak canvas message-missing CLASSROOM ASSIGNMENT [--dryrun/--no-dryrun]
   asks them to accept it (naming the repo URL), and warns that GitHub invitations
   expire after 7 days.
 
-Students already collaborating on a repo are left alone. A student with a working
+Students already collaborating on a repo are left alone, and Canvas's Student View
+"Test Student" is ignored — it isn't a person, and Canvas refuses to message it. A student with a working
 GitHub account but neither repo access nor a pending invitation gets no message — that
 one isn't theirs to fix — and is instead a loud, red error aimed at you (the run exits
 1): the org is out of sync with the meta, and `meta apply` is the cure. Needs the

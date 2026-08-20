@@ -739,6 +739,18 @@ class TestMetaAssignFromCanvas:
         assert rows["Alice-Adams"]["repo_id"] is not None
         assert env.gh.get_repo(f"{ORG}/{PREFIX}-hw1-Alice-Adams") is not None
 
+    def test_canvas_test_student_never_gets_a_row(self, env, canvas):
+        seed_meta(env)
+        canvas._enrollments.append(
+            {"type": "StudentViewEnrollment",
+             "role": {"name": "StudentEnrollment"},
+             "user": {"_id": "99", "name": "Test Student", "email": None},
+             "courseSectionId": "s1"})
+        run(env.runner, "meta", "assign", ORG, "--from-canvas",
+            "--assignment", "hw1", "--no-dryrun")
+        names = [row["name"] for row in meta_state(env)["assignments"]["hw1"]]
+        assert "Test-Student" not in names
+
     def test_a_reserved_github_route_is_never_recorded_as_an_id(self, env, canvas):
         # a student who copies the address bar while logged in pastes
         # github.com/dashboard — a github page, not their account
