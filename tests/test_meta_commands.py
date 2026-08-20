@@ -739,6 +739,18 @@ class TestMetaAssignFromCanvas:
         assert rows["Alice-Adams"]["repo_id"] is not None
         assert env.gh.get_repo(f"{ORG}/{PREFIX}-hw1-Alice-Adams") is not None
 
+    def test_a_reserved_github_route_is_never_recorded_as_an_id(self, env, canvas):
+        # a student who copies the address bar while logged in pastes
+        # github.com/dashboard — a github page, not their account
+        canvas._profiles["4"] = {"links": [{"url": "https://github.com/dashboard"}]}
+        seed_meta(env)
+        result = run(env.runner, "meta", "assign", ORG, "--from-canvas",
+                     "--assignment", "hw1", "--no-dryrun")
+        assert result.exit_code == 1
+        rows = {row["name"]: row for row in meta_state(env)["assignments"]["hw1"]}
+        assert rows["Erin-Evans"]["students"] == ["erin@sjsu.edu/"]
+        assert 'cannot resolve "erin@sjsu.edu/"' in result.output
+
     def test_group_set_makes_a_row_per_group_and_is_recorded(self, env, canvas):
         seed_meta(env)
         result = run(env.runner, "meta", "assign", ORG, "--from-canvas",
@@ -851,6 +863,41 @@ class TestMetaApply:
         team = env.org.get_team_by_slug("cmpe_195a-tas")
         assert [u.login for u in team.invitations()] == ["ta-one"]
         assert ("grant", repo.full_name, "pull") in team.log
+
+    def test_a_grant_to_a_nonexistent_login_errors_and_continues(self, env):
+        # a typo'd github id records a login github 404s on grant; one bad
+        # account must not abort the whole run
+        repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1",
+                        reject_collaborators=["jd0e-typo"])
+        env.org._repos.append(repo)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["/jd0e-typo", "/msmith"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 1, result.output
+        assert 'no github account "jd0e-typo"' in result.output
+        # the run kept going: the good student still got their grant
+        assert ("add", "msmith", "push") in repo.collab_log
+
+    def test_a_recorded_reserved_name_is_unresolvable_never_granted(self, env):
+        repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1")
+        env.org._repos.append(repo)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["/dashboard"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 1, result.output
+        assert 'cannot resolve "/dashboard"' in result.output
+        assert repo.collab_log == []
+
+    def test_a_ta_without_a_github_account_errors_and_continues(self, env):
+        seed_meta(env, tas=["/ghost-ta", "/ta-one"])
+        env.gh._missing_users.add("ghost-ta")
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 1, result.output
+        assert 'no github account "ghost-ta"' in result.output
+        team = env.org.get_team_by_slug("cmpe_195a-tas")
+        assert [u.login for u in team.invitations()] == ["ta-one"]
 
     def test_second_apply_has_nothing_to_do(self, env):
         self.setup_realized(env)

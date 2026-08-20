@@ -165,6 +165,25 @@ def remove_collaborator(repo, username):
     return repo.remove_from_collaborators(username)
 
 
+# github.com/<name> pages that are github's own routes, never a user. a
+# student copying the address bar while signed in pastes github.com/dashboard,
+# and treating that path segment as a username records a login nobody owns.
+RESERVED_GITHUB_NAMES = frozenset((
+    "about", "account", "admin", "api", "apps", "blog", "codespaces",
+    "collections", "contact", "copilot", "customer-stories", "dashboard",
+    "enterprise", "events", "explore", "features", "gist", "help", "home",
+    "issues", "join", "login", "logout", "marketplace", "new",
+    "notifications", "organizations", "orgs", "pricing", "pulls", "search",
+    "security", "settings", "signup", "site", "sponsors", "stars", "team",
+    "topics", "trending", "watching",
+))
+
+
+def reserved_github_name(login):
+    """whether the name is a github route (github.com/dashboard), not a user."""
+    return login.lower() in RESERVED_GITHUB_NAMES
+
+
 def get_github_user(gh, login):
     """the NamedUser, or None when no account with this login exists."""
     try:

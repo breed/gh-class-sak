@@ -31,6 +31,7 @@ from gh_class_sak.core import (
 from gh_class_sak.github_api import (
     get_github_user,
     pending_invitees,
+    reserved_github_name,
     split_collaborators,
 )
 
@@ -139,7 +140,8 @@ def message_missing(classroom, assignment, dryrun):
             invited_repo.setdefault(login.lower(), repo)
 
     todo = []  # (student, category, extra format args)
-    stranded = []
+    stranded = []  # error lines, held to the end: an error mid-loop would
+    # be torn apart by the progress bar and scroll out of sight
     for student in progress(enrollment["students"], "checking github accounts"):
         login = student.get("github")
         if not login:
@@ -150,22 +152,25 @@ def message_missing(classroom, assignment, dryrun):
             todo.append((student, "invited",
                          {"login": login,
                           "repo_url": invited_repo[login.lower()].html_url}))
-        elif get_github_user(gh, login) is None:
+        elif reserved_github_name(login) or get_github_user(gh, login) is None:
+            # a github route (github.com/dashboard) is bad without asking
             todo.append((student, "bad-link", {"login": login}))
         else:
             # a working link but no access and no invitation: nothing the
             # student can act on, so the error goes to the instructor
-            error(f'{student["name"]} ({login}) is not a collaborator on any'
-                  " repo for this assignment and has no pending invitation"
-                  " — run: meta apply")
-            stranded.append(student)
+            stranded.append(
+                f'{student["name"]} ({login}) is not a collaborator on any'
+                " repo for this assignment and has no pending invitation"
+                " — run: meta apply")
 
     if not todo and not stranded:
         output("nothing to do")
         return
 
     canvas, _course = canvas_ctx
-    for student, category, extra in progress(todo, "sending canvas messages"):
+    # no bar for a dry run: nothing slow happens, the would-lines are the point
+    recipients = todo if dryrun else progress(todo, "sending canvas messages")
+    for student, category, extra in recipients:
         subject, body = MESSAGES[category]
         line = (f'message {student["name"]} <{student["email"] or "-"}>'
                 f" ({category}): {subject}")
@@ -185,4 +190,6 @@ def message_missing(classroom, assignment, dryrun):
                 output(f"--- {category}: {subject} ---")
                 output(body)
     if stranded:
+        for message in stranded:
+            error(message)
         sys.exit(1)

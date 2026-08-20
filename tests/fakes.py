@@ -87,7 +87,7 @@ class FakeInvitation:
 class FakeRepo:
     def __init__(self, org, name, collaborators=(), commits=(), commits_raise=False,
                  repo_id=None, clone_url=None, default_branch="main", has_branch=True,
-                 protection_403=False, invitations=()):
+                 protection_403=False, invitations=(), reject_collaborators=()):
         _repo_id_counter[0] += 1
         self.id = repo_id if repo_id is not None else _repo_id_counter[0]
         self.name = name
@@ -104,6 +104,8 @@ class FakeRepo:
         self._protection_403 = protection_403
         self.protection_log = []
         self._invitations = [FakeInvitation(login) for login in invitations]
+        self._reject_collaborators = {login.lower()
+                                      for login in reject_collaborators}
         self.deleted = False
 
     def get_pending_invitations(self):
@@ -122,6 +124,10 @@ class FakeRepo:
 
     def add_to_collaborators(self, collaborator, permission="push"):
         login = getattr(collaborator, "login", collaborator)
+        if login.lower() in self._reject_collaborators:
+            # like github: granting to a login that doesn't exist is a 404,
+            # not an invitation
+            raise GithubException(404, {"message": "Not Found"}, None)
         self.collab_log.append(("add", login, permission))
         role = "admin" if permission == "admin" else \
             ("read" if permission == "pull" else "write")

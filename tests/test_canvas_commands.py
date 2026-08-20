@@ -123,6 +123,15 @@ class TestMessageMissing:
             "--no-dryrun")
         assert env.repo.collab_log == []
 
+    def test_a_reserved_route_link_is_a_bad_link_without_an_api_check(self, env):
+        # github.com/settings is github's own page, never an account — the
+        # classification must not depend on a user-existence lookup
+        env.canvas._enrollments.append(
+            _student("6", "Gina Cruz", "gina@sjsu.edu"))
+        env.canvas._profiles["6"] = {"links": [{"url": "https://github.com/settings"}]}
+        result = run(env.runner, "canvas", "message-missing", ORG, "project")
+        assert "would message Gina Cruz <gina@sjsu.edu> (bad-link)" in result.output
+
     def test_no_access_and_no_invite_is_a_loud_error(self, env):
         env.canvas._enrollments.append(
             _student("5", "Frank Field", "frank@sjsu.edu"))
@@ -135,6 +144,20 @@ class TestMessageMissing:
         # frank gets no canvas message: only the instructor can fix this
         recipients = [c["recipients"][0] for c in env.canvas.conversations]
         assert "5" not in recipients
+
+    def test_errors_print_after_the_messages(self, env):
+        # held to the end so they aren't torn apart by the progress bars
+        env.canvas._enrollments.append(
+            _student("5", "Frank Field", "frank@sjsu.edu"))
+        env.canvas._profiles["5"] = {"links": [{"url": "https://github.com/frank"}]}
+        result = run(env.runner, "canvas", "message-missing", ORG, "project",
+                     "--no-dryrun")
+        lines = result.output.splitlines()
+        last_message = max(i for i, line in enumerate(lines)
+                           if line.startswith("message "))
+        frank = next(i for i, line in enumerate(lines)
+                     if "Frank Field" in line)
+        assert frank > last_message
 
     def test_collaborators_are_never_messaged(self, env):
         run(env.runner, "canvas", "message-missing", ORG, "project",

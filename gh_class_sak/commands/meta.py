@@ -5,6 +5,7 @@ import sys
 
 import click
 from git import GitCommandError
+from github import GithubException
 
 from gh_class_sak import meta_store as ms
 from gh_class_sak.commands.repos import (
@@ -48,6 +49,7 @@ from gh_class_sak.github_api import (
     matches_prefix,
     pending_invitees,
     protect_default_branch,
+    reserved_github_name,
     read_default_branch_protection,
     remove_collaborator,
     split_collaborators,
@@ -102,6 +104,19 @@ def _perform(dryrun, message, fn, actions):
     else:
         fn()
         output(message)
+
+
+def _perform_grant(dryrun, message, fn, actions, login, failures):
+    """_perform for access grants: github 404s a grant to a login that
+    doesn't exist (a github.com/dashboard pasted into canvas, a typo'd id),
+    and one bad account must not abort the rest of the run."""
+    try:
+        _perform(dryrun, message, fn, actions)
+    except GithubException as exc:
+        if exc.status != 404:
+            raise
+        error(f'cannot {message}: no github account "{login}"')
+        failures.append(login)
 
 
 def _open_meta(gh, org, required=True):
@@ -174,14 +189,18 @@ def _make_resolver(org, course_partial):
                 data = fetch_enrollment_data(Classroom(org, course_partial),
                                              resolve_students=True)
                 for person in data["students"] + data["instructors"]:
-                    if person.get("email") and person.get("github"):
-                        canvas_map[person["email"].lower()] = person["github"]
+                    github = person.get("github")
+                    if person.get("email") and github \
+                            and not reserved_github_name(github):
+                        canvas_map[person["email"].lower()] = github
         return canvas_map.get(email.lower())
 
     def resolve(entry):
         email, github = ms.parse_identity(entry)
         if github:
-            return github
+            # a recorded github route (a hand-edited or pre-fix /dashboard)
+            # is nobody's account: unresolvable, not grantable
+            return None if reserved_github_name(github) else github
         if not email:
             return None
         if entry not in cache:
@@ -357,8 +376,8 @@ def _realize_classroom(gh, org, data, resolve, dryrun, actions):
             for login in logins:
                 def _grant(login=login, made=made):
                     add_collaborator(made["repo"], login, "push")
-                _perform(dryrun, f"grant push to {login} on {org}/{repo_name}",
-                         _grant, actions)
+                _perform_grant(dryrun, f"grant push to {login} on {org}/{repo_name}",
+                               _grant, actions, login, failures)
 
             if not dryrun:
                 row["repo"] = made["repo"].html_url
@@ -374,7 +393,7 @@ def _cancel_invitation(repo, login):
 
 
 def _reconcile_row_collaborators(gh, repo, logins, remove_unlisted, dryrun,
-                                 actions):
+                                 actions, failures):
     """grant the row's students push; handle collaborators the row doesn't list.
 
     an unaccepted invitation counts as present — re-granting would re-invite
@@ -390,8 +409,8 @@ def _reconcile_row_collaborators(gh, repo, logins, remove_unlisted, dryrun,
         if lowered not in current and lowered not in invited:
             def _grant(login=login):
                 add_collaborator(repo, login, "push")
-            _perform(dryrun, f"grant push to {login} on {repo.full_name}",
-                     _grant, actions)
+            _perform_grant(dryrun, f"grant push to {login} on {repo.full_name}",
+                           _grant, actions, login, failures)
     for lowered, login in current.items():
         if lowered not in desired:
             if not remove_unlisted:
@@ -527,7 +546,8 @@ def meta_init(classroom, org, prefix, template, canvas_course, dryrun):
         all_repos = list_org_repos(gh, org)
         by_id = {r.id: r for r in all_repos}
         universe = _classroom_universe(gh, org, existing, all_repos, by_id)
-    _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe, dryrun, actions)
+    _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe, dryrun,
+                        actions, unresolved)
     if unresolved:
         sys.exit(1)
 
@@ -762,6 +782,10 @@ def _rows_from_canvas(room, canvas_group, unresolvable):
 
     def _entry(person):
         email, github = person.get("email"), person.get("github")
+        if github and reserved_github_name(github):
+            # a canvas link to a github page (github.com/dashboard) carries
+            # no account; keep the email half and let resolution flag it
+            github = None
         if not email and not github:
             error(f'no github id or email in canvas for "{person.get("name")}"')
             unresolvable.append(person.get("name"))
@@ -894,7 +918,7 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
         by_id = {r.id: r for r in all_repos}
         universe = _classroom_universe(gh, org, data, all_repos, by_id)
         _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe,
-                            dryrun, actions)
+                            dryrun, actions, failures)
 
     to_save = set(changed)
     if changed_names:
@@ -913,7 +937,8 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
         sys.exit(1)
 
 
-def _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe, dryrun, actions):
+def _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe, dryrun,
+                        actions, failures):
     """the classroom's team exists, has exactly the tas, and reads exactly
     the classroom's repos. unrelated team-repo grants are left alone only
     for the meta repo itself."""
@@ -937,7 +962,8 @@ def _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe, dryrun, act
         if lowered not in current_members:
             def _add(login=login):
                 (team or made_team["team"]).add_membership(gh.get_user(login))
-            _perform(dryrun, f'add {login} to team "{name}"', _add, actions)
+            _perform_grant(dryrun, f'add {login} to team "{name}"', _add,
+                           actions, login, failures)
     for lowered, member in current_members.items():
         if lowered not in desired_members:
             def _remove(member=member):
@@ -1035,14 +1061,14 @@ def meta_apply(classroom, remove_unlisted, dryrun):
                      " every identity resolves")
             else:
                 _reconcile_row_collaborators(gh, repo, logins, remove_unlisted,
-                                             dryrun, actions)
+                                             dryrun, actions, any_failures)
             # and its default branch carries the classroom's protection settings
             _reconcile_repo_protection(repo, desired, dryrun, actions)
 
         # 3. the classroom's TA team reads exactly the classroom's repos
         ta_logins = _resolve_tas(data["tas"], resolve, any_unresolved)
         _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe,
-                            dryrun, actions)
+                            dryrun, actions, any_failures)
 
     if not dryrun:
         ms.commit_and_push(checkout, "apply", get_token())

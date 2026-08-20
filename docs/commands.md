@@ -159,7 +159,9 @@ gh-class-sak canvas message-missing CLASSROOM ASSIGNMENT [--dryrun/--no-dryrun]
 - **no-link** — the Canvas profile has no GitHub link: asks them to add
   `https://github.com/YOUR-USERNAME` under Account → Profile → Links.
 - **bad-link** — the profile links to a GitHub account that doesn't exist (a typo, or
-  a renamed/deleted account): asks them to fix the link.
+  a renamed/deleted account), or to one of GitHub's own pages — the classic being
+  `github.com/dashboard`, pasted straight from the address bar while signed in: asks
+  them to fix the link.
 - **invited** — their account holds an unaccepted invitation to their assignment repo:
   asks them to accept it (naming the repo URL), and warns that GitHub invitations
   expire after 7 days.

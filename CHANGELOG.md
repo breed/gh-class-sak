@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- GitHub's own route names (`dashboard`, `settings`, `notifications`, …) are never
+  treated as usernames: a Canvas link to `github.com/dashboard` — the address bar
+  pasted while signed in — is not recorded as an id by `--from-canvas`, resolves to
+  nothing when already recorded, and `canvas message-missing` flags it as a bad link
+  without needing a lookup
+- fix: a recorded github id that doesn't exist (a typo'd login) no longer crashes
+  `meta apply`/`meta assign` with a traceback and aborts every grant after
+  it. The 404 on the grant — student push, or TA team membership — degrades
+  to a loud per-person error, the rest of the run completes, and the run
+  exits 1
 - new `canvas message-missing CLASSROOM ASSIGNMENT` subcommand: sends each stranded
   student a Canvas message saying exactly what to do — add the missing GitHub link to
   their Canvas profile, fix a link that points at a nonexistent GitHub account, or

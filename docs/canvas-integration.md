@@ -34,7 +34,11 @@ Resolution runs in a chain, stopping at the first hit:
 1. **The identity itself.** A `/githubid` half in an `EMAIL/GITHUBID` identity needs no
    lookup at all.
 2. **The Canvas profile.** The enrollment's profile is fetched (through the course —
-   teachers may not read profiles account-wide) and searched for a GitHub link.
+   teachers may not read profiles account-wide) and searched for a GitHub link. A link
+   to one of GitHub's own pages — `github.com/dashboard`, `github.com/settings`, the
+   address bar copied while signed in — carries no account and is never treated as
+   one: it isn't recorded as an id, resolves to nothing, and `canvas message-missing`
+   flags it as a bad link.
 That's the whole chain — deliberately. GitHub's search API is never consulted: it only
 indexes the email a user *publicly* lists on their profile (which almost no student
 does), its loose token matching can return strangers, and an id that ends up granting
