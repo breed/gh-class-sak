@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.1.0
 
 - Canvas's Student View "Test Student" is excluded from every roster the tool
   builds: it enrolls with role StudentEnrollment but is not a person — it broke
