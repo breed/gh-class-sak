@@ -2,9 +2,32 @@ import atexit
 import base64
 import os
 import shutil
+import stat
+import sys
 import tempfile
 
 from git import Actor, Git, GitCommandError, Repo
+
+
+def _clear_readonly(func, path, _exc):
+    """git marks object files read-only, and windows refuses to delete a
+    read-only file until the bit is cleared; linux never takes this path."""
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
+
+# shutil.rmtree's error hook was renamed onerror -> onexc in 3.12
+_RMTREE_HOOK = {"onexc" if sys.version_info >= (3, 12) else "onerror":
+                _clear_readonly}
+
+
+def force_rmtree(path, ignore_errors=False):
+    """rmtree that survives git's read-only object files on windows."""
+    try:
+        shutil.rmtree(path, **_RMTREE_HOOK)
+    except OSError:
+        if not ignore_errors:
+            raise
 
 
 def auth_env(token):
@@ -49,19 +72,19 @@ def push_template(template_url, dest_url, token=None, branch="main"):
     source = _template_sources.get(template_url)
     if source is None:
         workdir = tempfile.mkdtemp(prefix="gh-class-sak-template-")
-        atexit.register(shutil.rmtree, workdir, ignore_errors=True)
+        atexit.register(force_rmtree, workdir, ignore_errors=True)
         checkout = os.path.join(workdir, "content")
         try:
             Repo.clone_from(template_url, checkout, depth=1,
                             env=auth_env(token)).close()
-            shutil.rmtree(os.path.join(checkout, ".git"))
+            force_rmtree(os.path.join(checkout, ".git"))
             source = Repo.init(checkout)
             source.git.add("-A")
             actor = Actor("gh-class-sak", "gh-class-sak@localhost")
             source.index.commit(f"template from {template_url}",
                                 author=actor, committer=actor)
         except BaseException:
-            shutil.rmtree(workdir, ignore_errors=True)
+            force_rmtree(workdir, ignore_errors=True)
             raise
         _template_sources[template_url] = source
     with source.git.custom_environment(**auth_env(token)):
