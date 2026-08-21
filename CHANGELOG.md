@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.1.1
 
 - the accept-your-invitation message ends with a note that a 404 on the
   invitation link means you aren't logged in to GitHub (or are logged in as
