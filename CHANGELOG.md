@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- the accept-your-invitation message ends with a note that a 404 on the
+  invitation link means you aren't logged in to GitHub (or are logged in as
+  the wrong account)
+- every `canvas message-missing` message closes with a bold do-not-respond
+  footer: the messages are informational
+
 ## v1.1.0
 
 - Canvas's Student View "Test Student" is excluded from every roster the tool

@@ -97,9 +97,19 @@ work yet. Sign in to GitHub as "{login}" and open
 
 or use the invitation email GitHub sent to your account's address. GitHub
 invitations expire after 7 days — if yours has expired, reply here and a
-new one will be sent.""",
+new one will be sent.
+
+Note: if following the link shows a 404 page, you are not logged in to
+GitHub (or are logged in to a different account). Log in as "{login}" and
+try the link again.""",
     ),
 }
+
+_FOOTER = "\n\n**You DO NOT need to respond to this email." \
+          " It is for your information.**"
+# every message carries the same closing line
+MESSAGES = {category: (subject, body + _FOOTER)
+            for category, (subject, body) in MESSAGES.items()}
 
 
 @gh_class_sak.group("canvas")

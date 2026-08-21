@@ -107,6 +107,14 @@ class TestMessageMissing:
         assert "Bob Baker" in invited["body"]
         assert env.repo.html_url in invited["body"]
         assert '"bob"' in invited["body"]
+        # the 404-means-log-in note survives edits to the template
+        assert "404" in invited["body"]
+        assert "logged in" in invited["body"]
+        # every message ends with the do-not-respond footer
+        for conversation in env.canvas.conversations:
+            assert conversation["body"].endswith(
+                "**You DO NOT need to respond to this email."
+                " It is for your information.**")
         assert '"ghost"' in by_recipient["3"]["body"]
         assert "add it now" in by_recipient["4"]["body"]
 
