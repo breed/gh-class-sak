@@ -835,7 +835,13 @@ def _rows_from_canvas(room, canvas_group, unresolvable):
 @dryrun_option
 def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
                 template_url, dryrun):
-    """Import a NAME + STUDENTS table as an assignment and create its repos."""
+    """Import a NAME + STUDENTS table as an assignment and create its repos.
+
+    Every student who needs a repo gets one, and is invited to it as a
+    collaborator (granted push). A student whose repo is already recorded
+    is skipped entirely — assign never adds missing collaborators to an
+    existing repo; run meta apply for that.
+    """
     if from_canvas and table_file is not None:
         error("--from-canvas replaces the table file; pass one or the other")
         sys.exit(2)
@@ -998,6 +1004,9 @@ def meta_apply(classroom, remove_unlisted, dryrun):
 
     Naming a classroom reconciles just that one; naming the org reconciles
     every classroom directory, each with its own CLASSROOM-TAs team.
+    A student listed on a repo's row but not yet a collaborator is invited
+    (granted push) — this is what sends the invitation when a repo was
+    created before the student's GitHub id was known.
     Collaborators the rows don't list are warned about; only
     --remove-unlisted-contributors revokes them (admins are never touched).
     """

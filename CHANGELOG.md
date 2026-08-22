@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.1.2
+
+- the no-github-link message now says the Canvas profile link's name (Title)
+  must be exactly `github`, alongside the profile URL
+- `meta apply --help` explains that a student listed on a repo's row but not
+  yet a collaborator is invited (granted push)
+- `meta assign --help` explains that new repos' students are invited as
+  collaborators, but a row whose repo is already recorded is skipped —
+  `meta apply` adds missing collaborators to existing repos
+
 ## v1.1.1
 
 - the accept-your-invitation message ends with a note that a 404 on the

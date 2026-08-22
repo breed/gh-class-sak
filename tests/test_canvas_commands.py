@@ -95,7 +95,8 @@ class TestMessageMissing:
         assert "--- no-link:" in result.output
         assert "--- bad-link:" in result.output
         assert "--- invited:" in result.output
-        assert "add your GitHub profile URL" in result.output
+        assert "name (Title) is exactly" in result.output
+        assert "URL is your GitHub profile" in result.output
 
     def test_no_dryrun_sends_one_message_per_stranded_student(self, env):
         result = run(env.runner, "canvas", "message-missing", ORG, "project",
@@ -117,6 +118,8 @@ class TestMessageMissing:
                 " It is for your information.**")
         assert '"ghost"' in by_recipient["3"]["body"]
         assert "add it now" in by_recipient["4"]["body"]
+        # the link-must-be-named-github instruction survives template edits
+        assert "name (Title) is exactly" in by_recipient["4"]["body"]
 
     def test_bad_link_message_shows_the_url_form(self, env):
         run(env.runner, "canvas", "message-missing", ORG, "project",

@@ -51,7 +51,11 @@ Please add it now:
 
 1. Sign in to GitHub, or create a free account at https://github.com/signup
 2. In Canvas, go to Account > Profile > Edit Profile
-3. Under Links, add your GitHub profile URL: https://github.com/YOUR-USERNAME
+3. Under Links, add a link whose name (Title) is exactly
+
+       github
+
+   and whose URL is your GitHub profile: https://github.com/YOUR-USERNAME
 4. Save
 
 Once the link is in place you will receive a GitHub invitation to your
