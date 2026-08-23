@@ -21,7 +21,7 @@ a swiss army knife for managing github classrooms now the official github classr
 
 # common flags
 
-- slow per-repo/per-person loops iterate through `core.progress(items, label)` — a stderr progress bar that is a plain passthrough when stderr is not a tty, so pipes, fences, and tests see nothing
+- slow per-repo/per-person loops iterate through `core.progress(items, label)` — a stderr progress bar that is a plain passthrough when stderr is not a tty, so pipes, fences, and tests see nothing. while a bar is up, `error`/`warn`/`info`/`output` hold the message and flash it at the end of the bar's line, where it stays until the next message replaces it; everything prints for real — colors, streams, and order intact — when the bar finishes; a nested bar hands its held messages to the outer one
 - for commands that change something, use a `--dryrun/--no-dryrun` flag pair defaulting to dryrun. the bare command just prints what would happen with a ⚠️ in front; `--no-dryrun` applies the change. a dry run announces itself first: `⚠️  dry run: no changes will be made. add --no-dryrun to apply` (implemented centrally in core.dryrun_option's callback)
 
 # how classrooms and assignments are identified

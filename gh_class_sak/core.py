@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import sys
 from configparser import ConfigParser
@@ -60,20 +61,76 @@ def get_github():
     return _github
 
 
+class _BarHold:
+    """messages arriving while a progress bar owns the terminal line.
+
+    each one is flashed at the end of the bar's line, staying up until the
+    next message replaces it, and all of them are replayed for real —
+    colors, streams, and order intact — once the bar finishes.
+    """
+
+    def __init__(self, label):
+        self.label = label
+        self.bar = None
+        self.held = []  # (message, fg, err) in arrival order
+        self.flash = ""
+
+    def show(self, _item=None):
+        """item_show_func for the bar: the latest message, on its line."""
+        return self.flash or None
+
+    def add(self, message, fg, err):
+        self.held.append((message, fg, err))
+        # the flash must stay on the bar's single line, or the \r redraw
+        # leaves wrapped leftovers behind: first line only, clipped to fit
+        first = message.splitlines()[0] if message else ""
+        self.flash = ""
+        base = len(self.label) + 50
+        if self.bar is not None:
+            try:
+                # the bar line as it stands without a flash, measured exactly
+                base = len(self.bar.format_progress_line())
+            except AttributeError:
+                pass
+        avail = shutil.get_terminal_size().columns - base - 3
+        if avail >= 8:
+            self.flash = first if len(first) <= avail \
+                else first[:avail - 1] + "\N{HORIZONTAL ELLIPSIS}"
+        if self.bar is not None:
+            self.bar.render_progress()
+
+    def replay(self):
+        # through _echo, so a nested bar's messages hand off to the outer one
+        for message, fg, err in self.held:
+            _echo(message, fg=fg, err=err)
+
+
+_bar_holds = []  # innermost active progress bar last
+
+
+def _echo(message, fg=None, err=False):
+    """the one exit for messages: straight through, unless a progress bar
+    owns the line — then held for the bar to flash now and replay at its end."""
+    if _bar_holds:
+        _bar_holds[-1].add(message, fg, err)
+        return
+    click.echo(click.style(message, fg=fg) if fg else message, err=err)
+
+
 def error(message):
-    click.echo(click.style(message, fg='red'), err=True)
+    _echo(message, fg="red", err=True)
 
 
 def info(message):
-    click.echo(click.style(message, fg='blue'), err=True)
+    _echo(message, fg="blue", err=True)
 
 
 def warn(message):
-    click.echo(click.style(message, fg='yellow'), err=True)
+    _echo(message, fg="yellow", err=True)
 
 
 def output(message):
-    click.echo(message)
+    _echo(message)
 
 
 def would(message):
@@ -85,14 +142,26 @@ def progress(items, label, length=None):
     """iterate items behind a stderr progress bar for slow loops.
 
     a plain passthrough when stderr is not a terminal, so pipes, the doc
-    fences, and the test suite see nothing at all.
+    fences, and the test suite see nothing at all. a message printed while
+    the bar is up is flashed at the end of the bar's line — staying there
+    until the next message replaces it — and every held message prints for
+    real when the bar finishes.
     """
     if not _interactive():
         yield from items
         return
-    with click.progressbar(items, length=length, label=label,
-                           file=sys.stderr, show_pos=True) as bar:
-        yield from bar
+    hold = _BarHold(label)
+    try:
+        with click.progressbar(items, length=length, label=label,
+                               file=sys.stderr, show_pos=True,
+                               item_show_func=hold.show) as bar:
+            hold.bar = bar
+            _bar_holds.append(hold)
+            yield from bar
+    finally:
+        if hold in _bar_holds:
+            _bar_holds.remove(hold)
+        hold.replay()
 
 
 def _announce_dryrun(ctx, param, value):
