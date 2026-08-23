@@ -670,6 +670,7 @@ class TestMetaAssign:
         result = run(env.runner, "meta", "assign", ORG, table, "--no-dryrun")
         assert result.exit_code == 0, result.output
         created = env.gh.get_repo(f"{ORG}/{REPO_PREFIX}-team-1")
+        assert created.file_log == []  # the template is the content, no welcome
         assert created.protection_log == [
             ("main", {"required_linear_history": True, "allow_force_pushes": False})]
 
@@ -692,14 +693,29 @@ class TestMetaAssign:
         assert created.protection_log == []
         assert "protect" not in result.output
 
-    def test_bare_created_repo_warns_protection_pending(self, env, tmp_path):
+    def test_bare_created_repo_is_seeded_and_protected(self, env, tmp_path):
         seed_meta(env)
         table = self.table(tmp_path, "team-1 msmith\n")
         result = run(env.runner, "meta", "assign", ORG, table, "--no-dryrun")
         assert result.exit_code == 0, result.output
-        assert "starts with no branch" in result.output
         created = env.gh.get_repo(f"{ORG}/{REPO_PREFIX}-team-1")
-        assert created.protection_log == []
+        [(path, _message, content)] = created.file_log
+        assert path == "WELCOME.md"
+        assert content == (f"Welcome to {COURSE}! You will submit your"
+                           " assignments here using git commit and git push.\n")
+        assert created.protection_log == [
+            ("main", {"required_linear_history": True, "allow_force_pushes": False})]
+
+    def test_assign_seeds_an_adopted_empty_repo(self, env, tmp_path):
+        empty = FakeRepo(ORG, f"{REPO_PREFIX}-team-1", has_branch=False)
+        env.org._repos.append(empty)
+        seed_meta(env)
+        table = self.table(tmp_path, "team-1 msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, table, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert len(empty.file_log) == 1
+        assert empty.protection_log == [
+            ("main", {"required_linear_history": True, "allow_force_pushes": False})]
 
     def test_dryrun_previews_protection(self, env, tmp_path):
         seed_meta(env, template=f"{ORG}/Template")

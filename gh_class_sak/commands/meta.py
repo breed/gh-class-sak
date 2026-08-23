@@ -329,10 +329,12 @@ def _reconcile_repo_protection(repo, desired, dryrun, actions):
              f" ({_protection_summary(desired)})", _protect, actions)
 
 
-def _realize_classroom(gh, org, data, resolve, dryrun, actions):
+def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions):
     """create/adopt the repo for every row that has none, and grant push.
 
-    covers every assignment in the classroom. mutates rows in place under
+    covers every assignment in the classroom. a repo realized without a
+    template gets the WELCOME.md initial commit, so no repo ever leaves
+    here without a default branch. mutates rows in place under
     --no-dryrun. returns (changed assignment names, unresolved, failures) —
     callers save exactly the named tsvs, so untouched files (and their hand
     comments) are never rewritten.
@@ -358,7 +360,9 @@ def _realize_classroom(gh, org, data, resolve, dryrun, actions):
                     made["repo"] = existing
                 _perform(dryrun, f"adopt existing {existing.full_name} for {row['name']}",
                          _adopt, actions)
-                _reconcile_repo_protection(existing, desired, dryrun, actions)
+                if not _seed_empty_repo(existing, classroom_dir, desired,
+                                        dryrun, actions):
+                    _reconcile_repo_protection(existing, desired, dryrun, actions)
             else:
                 if content_url:
                     # the assignment's [TEMPLATE] record: its content, as a
@@ -394,16 +398,20 @@ def _realize_classroom(gh, org, data, resolve, dryrun, actions):
                     error(str(exc))
                     failures.append(repo_name)
                     continue
+                if template is None and not content_url:
+                    # a bare create starts empty: the welcome commit gives
+                    # the default branch its first commit right away
+                    def _seed(made=made):
+                        made["repo"].create_file(
+                            WELCOME_FILE, "welcome",
+                            WELCOME_TEXT.format(classroom=classroom_dir))
+                    _perform(dryrun, f"add {WELCOME_FILE} to {org}/{repo_name}"
+                             " as the initial commit", _seed, actions)
                 if desired != UNPROTECTED:
-                    if template is not None or content_url:
-                        def _protect(made=made):
-                            protect_default_branch(made["repo"], *desired)
-                        _perform(dryrun, f"protect default branch on {org}/{repo_name}"
-                                 f" ({_protection_summary(desired)})", _protect, actions)
-                    else:
-                        warn(f"{org}/{repo_name} starts with no branch;"
-                             " run meta apply to add the welcome commit"
-                             " and protect it")
+                    def _protect(made=made):
+                        protect_default_branch(made["repo"], *desired)
+                    _perform(dryrun, f"protect default branch on {org}/{repo_name}"
+                             f" ({_protection_summary(desired)})", _protect, actions)
 
             for login in logins:
                 def _grant(login=login, made=made):
@@ -870,9 +878,11 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
     """Import a NAME + STUDENTS table as an assignment and create its repos.
 
     Every student who needs a repo gets one, and is invited to it as a
-    collaborator (granted push). A student whose repo is already recorded
-    is skipped entirely — assign never adds missing collaborators to an
-    existing repo; run meta apply for that.
+    collaborator (granted push). A repo created without a template is
+    seeded with a WELCOME.md initial commit, so its branch protection
+    lands right away. A student whose repo is already recorded is skipped
+    entirely — assign never adds missing collaborators to an existing
+    repo; run meta apply for that.
     """
     if from_canvas and table_file is not None:
         error("--from-canvas replaces the table file; pass one or the other")
@@ -945,8 +955,9 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
                  lambda: None, actions)
 
     resolve = _make_resolver(org, course)
-    changed, unresolved, failures = _realize_classroom(gh, org, data, resolve,
-                                                       dryrun, actions)
+    changed, unresolved, failures = _realize_classroom(gh, org, classroom_dir,
+                                                       data, resolve, dryrun,
+                                                       actions)
     unresolved = unresolvable + unresolved
 
     # repos created here must be TA-readable now, not after the next apply
@@ -1067,7 +1078,8 @@ def meta_apply(classroom, remove_unlisted, dryrun):
         desired = ms.effective_repo_settings(data)
 
         # 1. realize rows that don't have a repo yet (hand-added ones included)
-        changed, unresolved, failures = _realize_classroom(gh, org, data,
+        changed, unresolved, failures = _realize_classroom(gh, org,
+                                                           classroom_dir, data,
                                                            resolve, dryrun,
                                                            actions)
         any_unresolved.extend(unresolved)
