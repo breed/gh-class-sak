@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.2.0
+
+- empty repos are seeded with a `WELCOME.md` initial commit ("Welcome to
+  CLASSROOM! You will submit your assignments here using git commit and git
+  push.") by both `meta assign` (repos it creates or adopts without a
+  template) and `meta apply` (any recorded repo with no default branch), so
+  the branch exists and the classroom's protection lands in the same run
+  instead of waiting for the first student push
+- messages printed while a progress bar is up no longer tear the bar apart:
+  the latest is shown at the end of the bar's line (clipped to fit, staying
+  up until the next message replaces it) and every held message prints for
+  real — colors, streams, and order intact — when the bar finishes
+
 ## v1.1.2
 
 - the no-github-link message now says the Canvas profile link's name (Title)
