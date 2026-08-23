@@ -236,10 +236,21 @@ def _warn_unprotectable(repo, exc):
     """the two expected protection failures: branch not born yet, free plan."""
     if exc.status == 404:
         warn(f"{repo.full_name}: no {repo.default_branch} branch to protect yet;"
-             " meta apply will protect it after the first push")
+             " meta apply will add the welcome commit and protect it")
     else:
         warn(f"{repo.full_name}: branch protection needs a public repo or a paid"
              f" plan: {_exc_message(exc)}")
+
+
+def has_default_branch(repo):
+    """whether the default branch exists yet — False for an empty repo."""
+    try:
+        repo.get_branch(repo.default_branch)
+        return True
+    except GithubException as exc:
+        if exc.status == 404:
+            return False
+        raise
 
 
 def read_default_branch_protection(repo):

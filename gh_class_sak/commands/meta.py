@@ -44,6 +44,7 @@ from gh_class_sak.github_api import (
     get_repo_by_id,
     get_team,
     github_safe_name,
+    has_default_branch,
     infer_assignment_prefixes,
     list_org_repos,
     matches_prefix,
@@ -58,6 +59,12 @@ from gh_class_sak.github_api import (
 )
 
 REPO_SETTING_KEYS = ("protection", "linear_history", "force_push")
+
+# the initial commit meta apply gives an empty repo, so its default branch
+# exists and the classroom's protection can land right away
+WELCOME_FILE = "WELCOME.md"
+WELCOME_TEXT = ("Welcome to {classroom}! You will submit your assignments"
+                " here using git commit and git push.\n")
 
 
 def tas_team_name(classroom_dir):
@@ -280,6 +287,30 @@ def _protection_summary(desired):
     return ", ".join(parts)
 
 
+def _seed_empty_repo(repo, classroom_dir, desired, dryrun, actions):
+    """give an empty repo WELCOME.md as its initial commit, then protect it.
+
+    the commit makes the default branch exist, so the classroom's protection
+    lands in this run instead of waiting for the first student push. returns
+    True when the repo was empty and handled; a repo with a branch is left
+    for the normal protection reconcile.
+    """
+    if has_default_branch(repo):
+        return False
+
+    def _seed():
+        repo.create_file(WELCOME_FILE, "welcome",
+                         WELCOME_TEXT.format(classroom=classroom_dir))
+    _perform(dryrun, f"add {WELCOME_FILE} to {repo.full_name}"
+             " as the initial commit", _seed, actions)
+    if desired != UNPROTECTED:
+        def _protect():
+            protect_default_branch(repo, *desired)
+        _perform(dryrun, f"protect {repo.default_branch} on {repo.full_name}"
+                 f" ({_protection_summary(desired)})", _protect, actions)
+    return True
+
+
 def _reconcile_repo_protection(repo, desired, dryrun, actions):
     """put the classroom's branch protection on a repo when it has drifted.
 
@@ -371,7 +402,8 @@ def _realize_classroom(gh, org, data, resolve, dryrun, actions):
                                  f" ({_protection_summary(desired)})", _protect, actions)
                     else:
                         warn(f"{org}/{repo_name} starts with no branch;"
-                             " run meta apply after the first push to protect it")
+                             " run meta apply to add the welcome commit"
+                             " and protect it")
 
             for login in logins:
                 def _grant(login=login, made=made):
@@ -1007,6 +1039,8 @@ def meta_apply(classroom, remove_unlisted, dryrun):
     A student listed on a repo's row but not yet a collaborator is invited
     (granted push) — this is what sends the invitation when a repo was
     created before the student's GitHub id was known.
+    A repo with no default branch yet gets a WELCOME.md as its initial
+    commit, so the classroom's branch protection can land right away.
     Collaborators the rows don't list are warned about; only
     --remove-unlisted-contributors revokes them (admins are never touched).
     """
@@ -1071,8 +1105,11 @@ def meta_apply(classroom, remove_unlisted, dryrun):
             else:
                 _reconcile_row_collaborators(gh, repo, logins, remove_unlisted,
                                              dryrun, actions, any_failures)
-            # and its default branch carries the classroom's protection settings
-            _reconcile_repo_protection(repo, desired, dryrun, actions)
+            # an empty repo first gets its welcome commit; either way the
+            # default branch ends up carrying the classroom's protection
+            if not _seed_empty_repo(repo, classroom_dir, desired, dryrun,
+                                    actions):
+                _reconcile_repo_protection(repo, desired, dryrun, actions)
 
         # 3. the classroom's TA team reads exactly the classroom's repos
         ta_logins = _resolve_tas(data["tas"], resolve, any_unresolved)

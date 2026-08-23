@@ -1202,22 +1202,51 @@ class TestMetaApply:
         assert repo.protection_log == [
             ("main", {"required_linear_history": True, "allow_force_pushes": False})]
 
-    def test_apply_heals_protection_after_first_push(self, env):
+    def seed_empty_recorded_repo(self, env, **settings):
         repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1", has_branch=False)
         env.org._repos.append(repo)
         seed_meta(env, assignments={ASSIGNMENT: [
             {"name": "team-1", "students": [],
-             "repo": repo.html_url, "repo_id": repo.id}]})
-        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
-        assert result.exit_code == 0, result.output
-        assert "no main branch to protect yet" in result.output
-        assert repo.protection_log == []
+             "repo": repo.html_url, "repo_id": repo.id}]}, **settings)
+        return repo
 
-        repo._has_branch = True  # a student pushed
+    def test_apply_seeds_an_empty_repo_and_protects_it(self, env):
+        repo = self.seed_empty_recorded_repo(env)
         result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
         assert result.exit_code == 0, result.output
+        assert f"add WELCOME.md to {repo.full_name}" in result.output
+        [(path, _message, content)] = repo.file_log
+        assert path == "WELCOME.md"
+        assert content == (f"Welcome to {COURSE}! You will submit your"
+                           " assignments here using git commit and git push.\n")
         assert repo.protection_log == [
             ("main", {"required_linear_history": True, "allow_force_pushes": False})]
+
+        # the branch now exists and matches: a re-run touches nothing
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert "nothing to do" in result.output
+        assert len(repo.file_log) == 1
+
+    def test_dryrun_previews_the_welcome_seed_and_protection(self, env):
+        repo = self.seed_empty_recorded_repo(env)
+        result = run(env.runner, "meta", "apply", ORG)
+        assert result.exit_code == 0, result.output
+        assert f"would add WELCOME.md to {repo.full_name}" in result.output
+        assert f"would protect main on {repo.full_name}" in result.output
+        assert "no main branch to protect yet" not in result.output
+        assert repo.file_log == []
+        assert repo.protection_log == []
+
+    def test_noop_settings_seed_the_welcome_without_protection(self, env):
+        repo = self.seed_empty_recorded_repo(env, protection="none",
+                                             linear_history=False,
+                                             force_push=True)
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert len(repo.file_log) == 1
+        assert repo.protection_log == []
+        assert "protect" not in result.output
 
     def test_plan_403_warns_and_stays_idempotent(self, env):
         repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1", protection_403=True)

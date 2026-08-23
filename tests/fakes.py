@@ -106,6 +106,7 @@ class FakeRepo:
         self._invitations = [FakeInvitation(login) for login in invitations]
         self._reject_collaborators = {login.lower()
                                       for login in reject_collaborators}
+        self.file_log = []
         self.deleted = False
 
     def get_pending_invitations(self):
@@ -118,6 +119,12 @@ class FakeRepo:
         if not self._has_branch or name != self.default_branch:
             raise GithubException(404, {"message": "Branch not found"}, None)
         return FakeBranch(self, name)
+
+    def create_file(self, path, message, content):
+        # like github: the contents API on an empty repo makes the initial
+        # commit, and the default branch exists from then on
+        self.file_log.append((path, message, content))
+        self._has_branch = True
 
     def get_collaborators(self):
         return list(self._collaborators)
