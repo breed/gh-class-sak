@@ -441,12 +441,15 @@ def _reconcile_row_collaborators(gh, repo, logins, remove_unlisted, dryrun,
     about unless remove_unlisted asks for the revoke: taking a human's
     access away is opt-in, not a side effect.
     """
-    members, _admins = split_collaborators(repo)
+    members, admins = split_collaborators(repo)
     invited = {login.lower(): login for login in pending_invitees(repo)}
     desired = {login.lower(): login for login in logins}
     current = {m.login.lower(): m.login for m in members}
+    # a listed admin is already present: github answers a grant to an org
+    # admin with a no-op, so re-granting would repeat on every run
+    present = current.keys() | invited.keys() | {a.login.lower() for a in admins}
     for lowered, login in desired.items():
-        if lowered not in current and lowered not in invited:
+        if lowered not in present:
             def _grant(login=login):
                 add_collaborator(repo, login, "push")
             _perform_grant(dryrun, f"grant push to {login} on {repo.full_name}",

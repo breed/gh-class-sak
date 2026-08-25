@@ -892,6 +892,26 @@ class TestMetaApply:
         assert [u.login for u in team.invitations()] == ["ta-one"]
         assert ("grant", repo.full_name, "pull") in team.log
 
+    def test_a_listed_admin_is_already_present_never_regranted(self, env):
+        # the instructor listed as a student on their own row: admins are
+        # never touched either way, and github treats a grant to an org
+        # admin as a no-op, so re-granting would repeat on every run
+        # without ever converging
+        repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1", collaborators=[
+            FakeNamedUser("prof", role_name="admin", admin=True),
+        ])
+        env.org._repos.append(repo)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["/prof"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+
+        preview = run(env.runner, "meta", "apply", ORG)
+        assert "would grant push to prof" not in preview.output
+
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert repo.collab_log == []
+
     def test_a_grant_to_a_nonexistent_login_errors_and_continues(self, env):
         # a typo'd github id records a login github 404s on grant; one bad
         # account must not abort the whole run
