@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.1
+
+- `meta apply` no longer re-grants push to a listed student who is already
+  an admin on the repo (the instructor on their own row): github answers
+  that grant with a no-op, so it repeated on every run without ever
+  converging. Admins now count as present alongside collaborators and
+  pending invitees — and stay untouched in both directions
+
 ## v1.2.0
 
 - empty repos are seeded with a `WELCOME.md` initial commit ("Welcome to
