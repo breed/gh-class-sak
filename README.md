@@ -53,8 +53,14 @@ Add `--no-dryrun` and it actually clones, fast-forwarding any repo you already h
   the emails students actually commit with, in columns that `cut` and `awk` parse
 - **Bulk clone for grading** — clone or fast-forward every team's repo into one
   directory, named by team
-- **Canvas integration** — map orgs to Canvas courses for rosters, group matching,
-  per-section instructor columns, and "who has no repo yet" reports
+- **Canvas integration** — map orgs to Canvas courses: build an assignment's repos
+  straight from the enrollment roster or a Canvas group set (one repo per person or
+  per group), resolve emails to GitHub ids via Canvas profile links, match groups,
+  add per-section instructor columns, and report who has no repo yet
+- **Message the stragglers** — `canvas message-missing` finds every student stranded
+  on the way to their repo — no GitHub link on their Canvas profile, a broken one, or
+  a repo invitation they never accepted — and sends each a Canvas message saying
+  exactly what to fix; a dry run shows every message before anything goes out
 - **Managed classrooms** — `meta apply` reconciles the org to the
   [classroom-meta repo](https://github.com/breed/gh-class-sak/blob/main/docs/commands.md#the-classroom-meta-repo): creates private repos
   (optionally from a template), grants student, TA, and branch-protection state exactly
@@ -85,7 +91,8 @@ Requires Python 3.9+.
 - **[Migrating from GitHub Classroom](https://github.com/breed/gh-class-sak/blob/main/docs/migrating-from-github-classroom.md)** —
   where Classroom's bookkeeping lives now, and the one-command import
 - **[Canvas integration](https://github.com/breed/gh-class-sak/blob/main/docs/canvas-integration.md)** — how GitHub ids map to Canvas
-  accounts, and assignments built from enrollments or group sets
+  accounts, assignments built from enrollments or group sets, and messaging the
+  students whose setup is stuck
 - **[The classroom-meta files](https://github.com/breed/gh-class-sak/blob/main/docs/classroom-meta-files.md)** — the file layouts and
   formats, and how TA teams manage the TAs
 - **[Commands](https://github.com/breed/gh-class-sak/blob/main/docs/commands.md)** — the full reference: every command, every flag, and

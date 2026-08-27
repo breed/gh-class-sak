@@ -26,8 +26,9 @@ matches the Canvas course "FA26: CS-101 Sec 01".
 The link lives in the **Canvas profile**: a student adds their GitHub URL to the
 *links* section of their Canvas profile (a `github.com/...` URL in the bio works too).
 That's the one thing to ask students to do at the start of the term — and
-`canvas message-missing` chases the stragglers for you, messaging everyone whose link
-is missing or broken, or who never accepted their repo invitation.
+[`canvas message-missing`](#messaging-students-with-problems) chases the stragglers
+for you, messaging everyone whose link is missing or broken, or who never accepted
+their repo invitation.
 
 Resolution runs in a chain, stopping at the first hit:
 
@@ -83,6 +84,39 @@ so the classroom remembers where each assignment's teams came from.
 Group sets also drive the read-side commands: `repos list --group SET` annotates each
 repo with the Canvas group it matches, and `repos missing --group SET` lists the groups
 that have no repo yet.
+
+## Messaging students with problems
+
+The same plumbing drives `canvas message-missing`, which turns "who is stranded on the
+way to their repo?" into a Canvas message to exactly those students:
+
+```
+gh-class-sak canvas message-missing CLASSROOM ASSIGNMENT [--dryrun/--no-dryrun]
+```
+
+Every enrolled student is checked against the assignment's repos and the stuck ones
+sorted into one of three messages, each saying exactly what to do:
+
+- **no-link** — the Canvas profile has no GitHub link: how to add one.
+- **bad-link** — the link points at a GitHub account that doesn't exist, or at one of
+  GitHub's own pages (`github.com/dashboard`, pasted from the address bar while signed
+  in): fix the link.
+- **invited** — an unaccepted invitation to their repo: accept it, with the repo URL
+  named, before GitHub expires it.
+
+Students already collaborating on their repo get nothing, and Canvas's Student View
+"Test Student" is skipped — it isn't a person.
+
+One case deliberately produces no message: a student whose GitHub account is fine but
+who has neither repo access nor a pending invitation. That gap is yours to fix, not
+theirs — the org has drifted from the meta — so it's a loud, red error pointing at
+`meta apply`, and the run exits 1.
+
+Like every mutating command it previews by default: the dry run lists who would get
+which message and prints the full texts, so nothing goes out sight-unseen. Each real
+send opens a new conversation rather than appending to an old thread. The message
+texts, and where to reword them, are in the
+[command reference](commands.md#canvas-message-missing).
 
 ## What the roster features unlock
 
