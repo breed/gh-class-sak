@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.4.0
 
 - `meta assign --from-canvas` now notices recorded rows whose person (or
   group) has left the Canvas roster: it warns about each by default, and the
