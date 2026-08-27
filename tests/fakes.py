@@ -116,9 +116,25 @@ class FakeRepo:
         self.deleted = True
 
     def get_branch(self, name):
-        if not self._has_branch or name != self.default_branch:
+        if name != self.default_branch or not (self._has_branch
+                                               or self._bare_branch_exists()):
             raise GithubException(404, {"message": "Branch not found"}, None)
         return FakeBranch(self, name)
+
+    def _bare_branch_exists(self):
+        # like github: a branch pushed by real git (push_template into the
+        # local bare origin) exists even though no create_file ran
+        import os
+
+        if not os.path.isdir(self.clone_url):
+            return False
+        from git import Repo as GitRepo
+
+        origin = GitRepo(self.clone_url)
+        try:
+            return any(h.name == self.default_branch for h in origin.heads)
+        finally:
+            origin.close()
 
     def create_file(self, path, message, content):
         # like github: the contents API on an empty repo makes the initial

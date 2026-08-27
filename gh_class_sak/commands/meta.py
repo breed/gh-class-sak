@@ -475,6 +475,47 @@ def _reconcile_row_collaborators(gh, repo, logins, remove_unlisted, dryrun,
                      f" on {repo.full_name}", _cancel, actions)
 
 
+def _reconcile_recorded_repos(gh, org, classroom_dir, data, resolve,
+                              remove_unlisted, dryrun, actions, all_repos,
+                              by_id, unresolved, failures):
+    """converge every recorded row's repo — assign and apply share this.
+
+    per repo: the row's students are exactly its push collaborators, an
+    empty repo gets its welcome commit, and either way the default branch
+    ends up carrying the classroom's protection. returns the classroom's
+    repo universe (per-assignment prefix matches ∪ recorded ids) for the
+    TA team reconcile.
+    """
+    desired = ms.effective_repo_settings(data)
+    universe = {}
+    for assignment in data["assignments"]:
+        joined = ms.join_repo_name(data["prefix"], assignment)
+        for r in all_repos:
+            if matches_prefix(r.name, joined):
+                universe[r.full_name] = r
+    recorded = [row for rows in data["assignments"].values()
+                for row in rows if row["repo_id"] is not None]
+    for row in progress(recorded, f"checking {classroom_dir}"):
+        repo = by_id.get(row["repo_id"]) or get_repo_by_id(gh, row["repo_id"])
+        if repo is None:
+            warn(f"recorded repo for {row['name']} (id {row['repo_id']}) is gone")
+            continue
+        universe[repo.full_name] = repo
+        logins, row_unresolved = _resolve_row_students(row, resolve)
+        unresolved.extend(row_unresolved)
+        if row_unresolved:
+            # a shrunken list must never masquerade as the full roster:
+            # reconciling with it would revoke a real student's access
+            warn(f"{row['name']}: leaving collaborators untouched until"
+                 " every identity resolves")
+        else:
+            _reconcile_row_collaborators(gh, repo, logins, remove_unlisted,
+                                         dryrun, actions, failures)
+        if not _seed_empty_repo(repo, classroom_dir, desired, dryrun, actions):
+            _reconcile_repo_protection(repo, desired, dryrun, actions)
+    return universe
+
+
 @gh_class_sak.group()
 def meta():
     """Manage the org's classroom-meta repo: one directory per classroom."""
@@ -875,17 +916,23 @@ def _rows_from_canvas(room, canvas_group, unresolvable):
 @click.option("--template", "template_url", default=None,
               help="REPO_URL whose content seeds this assignment's new repos;"
                    " recorded in classroom.ini [TEMPLATE]")
+@click.option("--remove-unlisted-contributors", "remove_unlisted", is_flag=True,
+              default=False,
+              help="revoke collaborators (and cancel invitations) the assignment"
+                   " rows don't list; the default only warns about them")
 @dryrun_option
 def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
-                template_url, dryrun):
+                template_url, remove_unlisted, dryrun):
     """Import a NAME + STUDENTS table as an assignment and create its repos.
 
     Every student who needs a repo gets one, and is invited to it as a
     collaborator (granted push). A repo created without a template is
     seeded with a WELCOME.md initial commit, so its branch protection
-    lands right away. A student whose repo is already recorded is skipped
-    entirely — assign never adds missing collaborators to an existing
-    repo; run meta apply for that.
+    lands right away. The classroom's recorded repos converge too, exactly
+    as meta apply would: listed students missing from an existing repo are
+    invited, an empty repo gets its welcome commit, drifted protection is
+    re-applied, and unlisted collaborators are warned about (revoked with
+    --remove-unlisted-contributors).
     """
     if from_canvas and table_file is not None:
         error("--from-canvas replaces the table file; pass one or the other")
@@ -963,14 +1010,17 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
                                                        actions)
     unresolved = unresolvable + unresolved
 
-    # repos created here must be TA-readable now, not after the next apply
-    if data["tas"]:
-        ta_logins = _resolve_tas(data["tas"], resolve, unresolved)
-        all_repos = list_org_repos(gh, org)
-        by_id = {r.id: r for r in all_repos}
-        universe = _classroom_universe(gh, org, data, all_repos, by_id)
-        _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe,
-                            dryrun, actions, failures)
+    # the whole classroom converges like apply: recorded repos get their
+    # missing collaborators, seeding, and protection, and repos created
+    # here are TA-readable now, not after the next apply
+    all_repos = list_org_repos(gh, org)
+    by_id = {r.id: r for r in all_repos}
+    universe = _reconcile_recorded_repos(gh, org, classroom_dir, data, resolve,
+                                         remove_unlisted, dryrun, actions,
+                                         all_repos, by_id, unresolved, failures)
+    ta_logins = _resolve_tas(data["tas"], resolve, unresolved)
+    _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe,
+                        dryrun, actions, failures)
 
     to_save = set(changed)
     if changed_names:
@@ -1078,7 +1128,6 @@ def meta_apply(classroom, remove_unlisted, dryrun):
     for classroom_dir in classroom_dirs:
         data = _load_classroom(checkout, classroom_dir)
         resolve = _make_resolver(org, data["canvas_course"] or classroom_dir)
-        desired = ms.effective_repo_settings(data)
 
         # 1. realize rows that don't have a repo yet (hand-added ones included)
         changed, unresolved, failures = _realize_classroom(gh, org,
@@ -1094,37 +1143,11 @@ def meta_apply(classroom, remove_unlisted, dryrun):
                                            for n in sorted(changed)},
                               **_ini_settings(data))
 
-        # the classroom's repos: per-assignment prefix matches ∪ recorded ids
-        universe = {}
-        for assignment in data["assignments"]:
-            joined = ms.join_repo_name(data["prefix"], assignment)
-            for r in all_repos:
-                if matches_prefix(r.name, joined):
-                    universe[r.full_name] = r
-        recorded = [row for rows in data["assignments"].values()
-                    for row in rows if row["repo_id"] is not None]
-        for row in progress(recorded, f"checking {classroom_dir}"):
-            repo = by_id.get(row["repo_id"]) or get_repo_by_id(gh, row["repo_id"])
-            if repo is None:
-                warn(f"recorded repo for {row['name']} (id {row['repo_id']}) is gone")
-                continue
-            universe[repo.full_name] = repo
-            # 2. students on a realized row are exactly its push collaborators
-            logins, unresolved = _resolve_row_students(row, resolve)
-            any_unresolved.extend(unresolved)
-            if unresolved:
-                # a shrunken list must never masquerade as the full roster:
-                # reconciling with it would revoke a real student's access
-                warn(f"{row['name']}: leaving collaborators untouched until"
-                     " every identity resolves")
-            else:
-                _reconcile_row_collaborators(gh, repo, logins, remove_unlisted,
-                                             dryrun, actions, any_failures)
-            # an empty repo first gets its welcome commit; either way the
-            # default branch ends up carrying the classroom's protection
-            if not _seed_empty_repo(repo, classroom_dir, desired, dryrun,
-                                    actions):
-                _reconcile_repo_protection(repo, desired, dryrun, actions)
+        # 2. recorded rows converge: collaborators, seeding, protection
+        universe = _reconcile_recorded_repos(gh, org, classroom_dir, data,
+                                             resolve, remove_unlisted, dryrun,
+                                             actions, all_repos, by_id,
+                                             any_unresolved, any_failures)
 
         # 3. the classroom's TA team reads exactly the classroom's repos
         ta_logins = _resolve_tas(data["tas"], resolve, any_unresolved)

@@ -267,7 +267,7 @@ nightowls  /rpatel,/tk-codes
 ```
 
 ```
-gh-class-sak meta assign CLASSROOM project.tsv [--assignment NAME] [--dryrun/--no-dryrun]
+gh-class-sak meta assign CLASSROOM project.tsv [--assignment NAME] [--remove-unlisted-contributors] [--dryrun/--no-dryrun]
 ```
 
 The table lands in the classroom directory as an assignment named after the file's
@@ -275,9 +275,14 @@ basename (`project.tsv` → `project`); `--assignment` overrides that. Emails ar
 to GitHub logins via the student's Canvas profile link — never a GitHub search; an
 email nothing can resolve is a loud error. Under `--no-dryrun` it creates each missing
 repo (privately, from the template when `classroom.ini` names one), records the URL and
-repo id, grants the listed students push, and reconciles the classroom's TA team so the
-new repos are TA-readable immediately. Re-importing an updated table changes
-student lists but **never clobbers a recorded repo**.
+repo id, and grants the listed students push. It then converges the whole classroom
+exactly as [`meta apply`](#meta-apply)'s passes 2–4 would: students missing from a
+recorded repo are invited, unlisted collaborators are warned about (the same
+`--remove-unlisted-contributors` flag revokes them, with the same safety rule for
+unresolved identities), empty repos are welcome-seeded, drifted branch protection is
+re-applied, and the classroom's TA team is reconciled so new repos are TA-readable
+immediately. Re-importing an updated table changes student lists but **never clobbers
+a recorded repo**.
 
 `--template REPO_URL` gives the assignment starter content: the URL is validated first
 (`git ls-remote`; an unreachable repo is an error before anything happens), recorded in
@@ -361,6 +366,18 @@ when an identity didn't resolve or a template seed failed (the org may be part-w
 reconciled; fix the cause and re-run), `2` when the classroom or its classroom-meta
 repo can't be found at all.
 
+### Assign or apply?
+
+Both commands end with the same converge passes, so either one leaves the classroom
+matching its files — the difference is what you're holding when something changes.
+Something new to **record** — a team table, a Canvas roster, a template URL — is
+`meta assign`: it imports first, then converges. Nothing to import, just changes that
+need to **land** — a hand-edited tsv row, a new `[TAS]` entry, changed repo settings,
+a student who fixed their Canvas profile link, a fresh
+`migrate-github-classroom` import — is `meta apply`. Apply is also the one that
+takes the whole org in one run (name the org instead of a classroom, and every
+classroom directory reconciles); assign works one classroom at a time.
+
 ### Repo settings
 
 `classroom.ini` can also carry branch-protection settings for the classroom's repos:
@@ -373,11 +390,11 @@ linear_history = true      # default true: require a linear history
 force_push = false         # default false: block force pushes
 ```
 
-`meta assign` and `meta apply` put the effective settings on each repo's default branch —
-at creation for repos made from a template, and on the next `meta apply` after the first
-push for repos created empty (GitHub can't protect a branch that doesn't exist yet).
-`meta apply` also repairs drift on every recorded repo, checking first so an untouched org
-still reconciles to `nothing to do`.
+`meta assign` and `meta apply` put the effective settings on each repo's default branch.
+GitHub can't protect a branch that doesn't exist yet, so a repo created without a
+template gets a `WELCOME.md` initial commit first — the branch exists and the
+protection lands in the same run. Both commands repair drift on every recorded repo,
+checking first so an untouched org still reconciles to `nothing to do`.
 
 Two caveats: GitHub can't protect private repos on a free org plan — the tool warns and
 moves on — and a protection write replaces the whole protection object, so hand-set extras

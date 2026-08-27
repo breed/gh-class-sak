@@ -732,6 +732,119 @@ class TestMetaAssign:
         assert result.exit_code == 0, result.output
         assert meta_state(env)["protection"] == "pr-review"
 
+    def test_assign_invites_listed_students_on_recorded_repos(self, env,
+                                                              tmp_path):
+        # a row that already has its repo converges too: the student added
+        # to the tsv after the repo was created gets invited, exactly as
+        # apply would do it
+        repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1", collaborators=[
+            FakeNamedUser("jdoe", role_name="write")])
+        env.org._repos.append(repo)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["/jdoe", "/msmith"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        table = self.table(tmp_path, "team-2 /rpatel\n", name="hw2.tsv")
+
+        preview = run(env.runner, "meta", "assign", ORG, table)
+        assert preview.exit_code == 0, preview.output
+        assert f"would grant push to msmith on {repo.full_name}" \
+            in preview.output
+        assert repo.collab_log == []
+
+        result = run(env.runner, "meta", "assign", ORG, table, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert ("add", "msmith", "push") in repo.collab_log
+
+    def test_assign_warns_about_unlisted_collaborators(self, env, tmp_path):
+        repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1", collaborators=[
+            FakeNamedUser("jdoe", role_name="write"),
+            FakeNamedUser("intruder", role_name="write")])
+        env.org._repos.append(repo)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["/jdoe"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        table = self.table(tmp_path, "team-1 /jdoe\n")
+        result = run(env.runner, "meta", "assign", ORG, table, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert ("remove", "intruder", None) not in repo.collab_log
+        assert f"unlisted collaborator intruder on {repo.full_name}" \
+            in result.output
+
+    def test_assign_remove_unlisted_contributors_flag_revokes(self, env,
+                                                              tmp_path):
+        repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1", collaborators=[
+            FakeNamedUser("jdoe", role_name="write"),
+            FakeNamedUser("intruder", role_name="write")])
+        env.org._repos.append(repo)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["/jdoe"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        table = self.table(tmp_path, "team-1 /jdoe\n")
+        result = run(env.runner, "meta", "assign", ORG, table,
+                     "--remove-unlisted-contributors", "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert ("remove", "intruder", None) in repo.collab_log
+
+    def test_assign_seeds_a_recorded_empty_repo(self, env, tmp_path):
+        # a recorded repo that never got its first push is fixed like
+        # apply fixes it, not only the repos assign adopts this run
+        empty = FakeRepo(ORG, f"{REPO_PREFIX}-team-1", has_branch=False)
+        env.org._repos.append(empty)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": [],
+             "repo": empty.html_url, "repo_id": empty.id}]})
+        table = self.table(tmp_path, "team-2 /msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, table, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        [(path, _message, _content)] = empty.file_log
+        assert path == "WELCOME.md"
+        assert empty.protection_log == [
+            ("main", {"required_linear_history": True, "allow_force_pushes": False})]
+
+    def test_assign_reconciles_drifted_protection(self, env, tmp_path):
+        repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1")
+        # someone hand-tightened the branch to require reviews
+        repo._protection = FakeBranchProtection(
+            {"required_approving_review_count": 1}, True, False)
+        env.org._repos.append(repo)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": [],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        table = self.table(tmp_path, "team-2 /msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, table, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert repo.protection_log == [
+            ("main", {"required_linear_history": True, "allow_force_pushes": False})]
+
+    def test_assign_reconciles_the_tas_team_even_without_tas(self, env,
+                                                             tmp_path):
+        # an emptied [TAS] section still converges the team, like apply: a
+        # TA who left the course loses the standing membership
+        team = env.org.create_team("cmpe_195a-TAs")
+        team.add_membership(FakeNamedUser("old-ta"))
+        team.log.clear()
+        seed_meta(env)
+        table = self.table(tmp_path, "team-1 /msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, table, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert ("remove-member", "old-ta") in team.log
+        created = env.gh.get_repo(f"{ORG}/{REPO_PREFIX}-team-1")
+        assert ("grant", created.full_name, "pull") in team.log
+
+    def test_assign_template_repo_is_never_welcome_seeded(self, env, tmp_path):
+        # the pushed template branch exists the moment the create finishes,
+        # so the recorded-repo pass must not stack WELCOME.md on top of it
+        starter = self.make_template_origin(tmp_path)
+        seed_meta(env)
+        table = self.table(tmp_path, "team-1 /msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, table,
+                     "--template", starter, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        created = env.gh.get_repo(f"{ORG}/{REPO_PREFIX}-team-1")
+        assert created.file_log == []
+        assert created.protection_log == [
+            ("main", {"required_linear_history": True, "allow_force_pushes": False})]
+
 
 class TestMetaAssignFromCanvas:
     @pytest.fixture
@@ -1029,6 +1142,9 @@ class TestMetaApply:
         pushed = GitRepo(str(env.root / f"{REPO_PREFIX}-team-1.git"))
         assert "README.md" in pushed.git.ls_tree("main", name_only=True)
         assert len(list(pushed.iter_commits("main"))) == 1
+        # the pushed branch exists, so no WELCOME.md lands on top of it
+        created = env.gh.get_repo(f"{ORG}/{REPO_PREFIX}-team-1")
+        assert created.file_log == []
 
     def test_assignment_template_beats_the_classroom_template(self, env,
                                                               tmp_path):
