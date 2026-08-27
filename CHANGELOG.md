@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.3.0
+
+- `meta assign` now converges the whole classroom after its import, exactly
+  as `meta apply` would: students missing from a recorded repo are invited,
+  unlisted collaborators are warned about (the new
+  `--remove-unlisted-contributors` flag revokes them, with apply's safety
+  hold when an identity doesn't resolve), empty recorded repos get the
+  welcome commit, drifted branch protection is re-applied, and the TA team
+  reconciles even when `[TAS]` is empty
+- the docs gained a "when to assign, when to apply" note, a
+  `canvas message-missing` section on the Canvas integration page, and
+  README coverage of roster-built assignments and straggler messaging
+
 ## v1.2.1
 
 - `meta apply` no longer re-grants push to a listed student who is already
