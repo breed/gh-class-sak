@@ -920,9 +920,13 @@ def _rows_from_canvas(room, canvas_group, unresolvable):
               default=False,
               help="revoke collaborators (and cancel invitations) the assignment"
                    " rows don't list; the default only warns about them")
+@click.option("--remove-dropped", "remove_dropped", is_flag=True, default=False,
+              help="with --from-canvas: remove recorded rows no longer on the"
+                   " canvas roster (their repos are left in place); the default"
+                   " only warns about them")
 @dryrun_option
 def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
-                template_url, remove_unlisted, dryrun):
+                template_url, remove_unlisted, remove_dropped, dryrun):
     """Import a NAME + STUDENTS table as an assignment and create its repos.
 
     Every student who needs a repo gets one, and is invited to it as a
@@ -933,6 +937,10 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
     invited, an empty repo gets its welcome commit, drifted protection is
     re-applied, and unlisted collaborators are warned about (revoked with
     --remove-unlisted-contributors).
+
+    With --from-canvas, recorded rows whose person (or group) is gone from
+    canvas are warned about; --remove-dropped removes them instead. A
+    removed row's repo is left in place, untracked.
     """
     if from_canvas and table_file is not None:
         error("--from-canvas replaces the table file; pass one or the other")
@@ -946,6 +954,9 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
         sys.exit(2)
     if canvas_group and not from_canvas:
         error("--canvas-group only makes sense with --from-canvas")
+        sys.exit(2)
+    if remove_dropped and not from_canvas:
+        error("--remove-dropped only makes sense with --from-canvas")
         sys.exit(2)
     if from_canvas and not assignment:
         error("--assignment is required with --from-canvas")
@@ -997,6 +1008,28 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
         incoming = []  # template-only: no roster changes
 
     merged, changed_names = ms.merge_rows(data["assignments"].get(name, []), incoming)
+    removed = []
+    if from_canvas:
+        # an enrolled person whose canvas entry is unusable never makes it
+        # into incoming, but they are still in the class — never treat a
+        # recorded row of theirs as dropped
+        still_here = {row["name"] for row in incoming} \
+            | {github_safe_name(n) for n in unresolvable if n}
+        gone = [row for row in merged if row["name"] not in still_here]
+        if remove_dropped:
+            removed = gone
+        else:
+            for row in gone:
+                warn(f'"{row["name"]}" is recorded for {name} but no longer on'
+                     " the canvas roster; --remove-dropped removes the row")
+    if removed:
+        removed_names = {row["name"] for row in removed}
+        merged = [row for row in merged if row["name"] not in removed_names]
+        _perform(dryrun, f"remove {name} rows: "
+                 + ", ".join(sorted(removed_names)), lambda: None, actions)
+        for row in removed:
+            if row["repo"]:
+                warn(f'removing "{row["name"]}" leaves {row["repo"]} in place')
     data["assignments"][name] = merged
     data["assignments"] = dict(sorted(data["assignments"].items()))
 
@@ -1023,7 +1056,7 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
                         dryrun, actions, failures)
 
     to_save = set(changed)
-    if changed_names:
+    if changed_names or removed:
         to_save.add(name)
     if not dryrun and (to_save or group_set_changed or template_changed):
         ms.save_classroom(checkout, classroom_dir, data["prefix"], data["template"],

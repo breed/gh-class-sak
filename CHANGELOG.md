@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- `meta assign --from-canvas` now notices recorded rows whose person (or
+  group) has left the Canvas roster: it warns about each by default, and the
+  new `--remove-dropped` flag removes the rows instead. A removed row's repo
+  is left in place (each one is named in a warning) — only the record and
+  the TA team's read grant go away. An enrollee whose Canvas entry has
+  neither an email nor a GitHub link is never treated as dropped
+
 ## v1.3.0
 
 - `meta assign` now converges the whole classroom after its import, exactly

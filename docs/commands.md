@@ -297,7 +297,7 @@ Instead of a file, `--from-canvas` builds the table from the Canvas roster
 (`--assignment` is required then, since there's no filename to name it):
 
 ```
-gh-class-sak meta assign CLASSROOM --from-canvas --assignment hw1 [--canvas-group SET]
+gh-class-sak meta assign CLASSROOM --from-canvas --assignment hw1 [--canvas-group SET] [--remove-dropped]
 ```
 
 Without `--canvas-group`, everyone enrolled in the course — students, instructors, and
@@ -307,6 +307,14 @@ their `email/githubid` identity — both halves, as far as Canvas knows them. Wi
 row instead, its members drawn from the roster the same way — and the group set's name
 is recorded in `classroom.ini` under `[GROUP_SETS]` for the assignment. Everything else
 works exactly like a file import: merge, never-clobber, dryrun first.
+
+A recorded row whose person (or group) is no longer in Canvas — a student who dropped
+the class — is warned about and left in place; `--remove-dropped` removes the row
+instead. The row's repo is never deleted: it stays on GitHub, untracked, with its
+collaborators intact (the run warns about each repo it leaves behind, and the TA team's
+read grant on it is revoked as the classroom converges). A student who is still
+enrolled but whose Canvas entry carries neither an email nor a GitHub link is never
+treated as dropped.
 
 ### meta apply
 

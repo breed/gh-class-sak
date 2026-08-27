@@ -963,6 +963,64 @@ class TestMetaAssignFromCanvas:
         assert result.exit_code == 2
         assert "pass one or the other" in result.output
 
+    def test_a_recorded_row_gone_from_the_roster_is_warned_about(self, env,
+                                                                 canvas):
+        gone = FakeRepo(ORG, f"{PREFIX}-hw1-Dave-Dropped")
+        env.org._repos.append(gone)
+        seed_meta(env, assignments={"hw1": [
+            {"name": "Dave-Dropped", "students": [],
+             "repo": gone.html_url, "repo_id": gone.id}]})
+        result = run(env.runner, "meta", "assign", ORG, "--from-canvas",
+                     "--assignment", "hw1", "--no-dryrun")
+        assert ('"Dave-Dropped" is recorded for hw1 but no longer on the'
+                " canvas roster") in result.output
+        rows = [r["name"] for r in meta_state(env)["assignments"]["hw1"]]
+        assert "Dave-Dropped" in rows
+
+    def test_remove_dropped_removes_rows_gone_from_the_roster(self, env,
+                                                              canvas):
+        gone = FakeRepo(ORG, f"{PREFIX}-hw1-Dave-Dropped")
+        env.org._repos.append(gone)
+        seed_meta(env, assignments={"hw1": [
+            {"name": "Dave-Dropped", "students": [],
+             "repo": gone.html_url, "repo_id": gone.id}]})
+        result = run(env.runner, "meta", "assign", ORG, "--from-canvas",
+                     "--assignment", "hw1", "--remove-dropped", "--no-dryrun")
+        assert "remove hw1 rows: Dave-Dropped" in result.output
+        assert (f'removing "Dave-Dropped" leaves {gone.html_url} in place'
+                in result.output)
+        rows = [r["name"] for r in meta_state(env)["assignments"]["hw1"]]
+        assert "Dave-Dropped" not in rows
+        assert "Alice-Adams" in rows
+
+    def test_an_unresolvable_enrollee_is_never_treated_as_dropped(self, env,
+                                                                  canvas):
+        # frank is enrolled, but canvas has neither an email nor a github
+        # link for him, so he never makes it into the incoming rows; his
+        # recorded row must survive --remove-dropped anyway
+        canvas._enrollments.append(
+            {"role": {"name": "StudentEnrollment"},
+             "user": {"_id": "9", "name": "Frank Field", "email": None},
+             "courseSectionId": "s1"})
+        seed_meta(env, assignments={"hw1": [
+            {"name": "Frank-Field", "students": ["/frank"],
+             "repo": None, "repo_id": None}]})
+        result = run(env.runner, "meta", "assign", ORG, "--from-canvas",
+                     "--assignment", "hw1", "--remove-dropped", "--no-dryrun")
+        rows = [r["name"] for r in meta_state(env)["assignments"]["hw1"]]
+        assert "Frank-Field" in rows
+        assert "remove hw1 rows" not in result.output
+
+    def test_remove_dropped_needs_from_canvas(self, env, canvas, tmp_path):
+        seed_meta(env)
+        table = tmp_path / "project.tsv"
+        table.write_text("team-1 msmith\n")
+        result = run(env.runner, "meta", "assign", ORG, str(table),
+                     "--remove-dropped")
+        assert result.exit_code == 2
+        assert "--remove-dropped only makes sense with --from-canvas" \
+            in result.output
+
 
 class TestMetaApply:
     def setup_realized(self, env):
