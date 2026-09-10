@@ -23,8 +23,11 @@ from configparser import Error as ConfigParserError
 
 import click
 
-from gh_class_sak.core import warn
-from gh_class_sak.github_api import get_org_repo
+from gh_class_sak.core import error, warn
+from gh_class_sak.github_api import (
+    get_org_repo,
+    token_visibility_hint,
+)
 
 META_REPO_NAME = "classroom-meta"
 STUDENTS_HEADERS = ("NAME", "STUDENTS", "REPO", "REPO_ID")
@@ -317,27 +320,60 @@ def checkout_meta(clone_url, org, token=None):
     return dest
 
 
-def load_meta_classrooms(gh, org, token=None):
-    """{classroom: data} from the classroom-meta repo; {} when none or unusable.
+def read_meta_classrooms(gh, org, token=None):
+    """({classroom: data}, why) — why is "ok", "no-repo", "unreadable" or "empty".
 
-    a broken checkout degrades to a warning rather than an error, because
-    read-only commands must keep working from prefixes alone.
+    the three ways of coming back empty read alike to the caller but not to
+    the user: report_missing_meta turns each into its own advice.
     """
     repo = get_org_repo(gh, org, META_REPO_NAME)
     if repo is None:
-        return {}
+        return {}, "no-repo"
     try:
         checkout = checkout_meta(repo.clone_url, org, token)
     except RuntimeError as exc:
         warn(f"ignoring classroom-meta repo: {exc}")
-        return {}
+        return {}, "unreadable"
     classrooms = {}
     for classroom in list_classrooms(checkout):
         try:
             classrooms[classroom] = load_classroom(checkout, classroom)
         except (ValueError, ConfigParserError) as exc:
             warn(f"ignoring classroom {classroom} in the classroom-meta repo: {exc}")
-    return classrooms
+    return classrooms, "ok" if classrooms else "empty"
+
+
+def load_meta_classrooms(gh, org, token=None):
+    """{classroom: data} from the classroom-meta repo; {} when none or unusable.
+
+    a broken checkout degrades to a warning rather than an error, because
+    read-only commands must keep working from prefixes alone.
+    """
+    return read_meta_classrooms(gh, org, token)[0]
+
+
+def report_missing_meta(gh, org, why="no-repo", report=error, prefix=""):
+    """say why the meta read came back empty, and what would fix it.
+
+    "no-repo" is the ambiguous one: github hides a private repo behind the
+    same 404 it uses for one that was never created, so the message offers
+    both readings rather than sending a TA off to run meta init on a course
+    that is already set up.
+    """
+    if why == "empty":
+        report(f'{prefix}the {META_REPO_NAME} repo in "{org}" records no'
+               " classrooms. create one with: meta init")
+        return
+    if why == "unreadable":
+        report(f'{prefix}cannot read the {META_REPO_NAME} repo in "{org}"'
+               " (see the warning above)")
+        return
+    report(f'{prefix}no {META_REPO_NAME} repo visible in "{org}"')
+    report(f"{prefix}  if it does not exist yet, create one with: meta init")
+    report(f"{prefix}  if it does exist, this token cannot see it"
+           " (github 404s both alike):")
+    for line in token_visibility_hint(gh, org):
+        report(f"{prefix}    {line}")
 
 
 def commit_and_push(checkout, message, token=None):

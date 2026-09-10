@@ -15,6 +15,43 @@ def _exc_message(exc):
     return str(data or exc)
 
 
+def token_login(gh):
+    """the login the token authenticates as, or None when it can't be read."""
+    try:
+        return gh.get_user().login
+    except GithubException:
+        return None
+
+
+def token_visibility_hint(gh, org):
+    """why org's private repos might be invisible to this token: lines to print.
+
+    github answers "there is no such repo" and "that repo isn't yours to see"
+    with the same 404, so a private repo that doesn't turn up is always a
+    guess. the token's own identity and scopes say which guess to make.
+    """
+    login = token_login(gh)
+    who = f'the token acts as "{login}"' if login else "the token"
+    # github sends X-OAuth-Scopes for classic tokens only, on every response
+    # including the 404 that got us here — so no scopes recorded means a
+    # fine-grained token (or a github app's), not an unused client
+    scopes = getattr(gh, "oauth_scopes", None)
+    if scopes is None:
+        return [f"{who}, fine-grained (github sent no scopes)",
+                f"such a token reads {org}'s private repos only when the org",
+                "is one of its resource owners, with Contents: read, and an",
+                "org owner has approved it"]
+    if "repo" not in scopes:
+        return [f'{who}, scopes: {", ".join(scopes) or "(none)"}',
+                'a private repo needs the "repo" scope:',
+                "    gh auth refresh -h github.com -s repo"]
+    return [f'{who}, scopes: {", ".join(scopes)}',
+            'the "repo" scope is there, so it is the account that has no',
+            f"access: check that it is a member of {org} with read on the",
+            "repo, that the token is SSO-authorized for the org, and that",
+            "the org's third-party access policy allows the gh CLI"]
+
+
 def get_org(gh, org_name):
     return gh.get_organization(org_name)
 

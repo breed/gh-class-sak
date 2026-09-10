@@ -30,7 +30,7 @@ github classroom is gone, so nothing may call `gh classroom` or the `/classrooms
 
 - a github ORG hosts a set of classrooms
 - a CLASSROOM is a directory containing a `classroom.ini` in its org's `classroom-meta` repo, named by the normalized canvas course partial it maps to. the config's `[ORGS]` section lists the github orgs, one per line — the course list itself lives in classroom-meta, never in the config. the classroom argument matches a configured org by name first (no meta lookup), else a classroom directory found in the configured orgs' classroom-meta repos; it is used verbatim as an org name when there is no config
-- an ASSIGNMENT is a `.tsv` file in a classroom directory, named by its basename. the classroom-meta repo is required: commands that read a classroom error out (pointing at `meta init`) when the org has none — there is no prefix-inference fallback
+- an ASSIGNMENT is a `.tsv` file in a classroom directory, named by its basename. the classroom-meta repo is required: commands that read a classroom error out when the org has none — the message offers both readings, absent (pointing at `meta init`) or private and invisible to the token, and names the token's identity, scopes, and likely fix; a repo that is there but records no classrooms, or that won't check out, says so instead. there is no prefix-inference fallback
 - an assignment's repos are found by their name prefix (the prefix-assignment join) plus the recorded REPO_IDs
 - a TEAM is the repo name with the assignment's repo prefix stripped off
 - the default repo name joins the non-empty parts of the classroom prefix, the assignment, and the row NAME with `-` (the prefix is optional); a recorded REPO/REPO_ID always wins over the default name

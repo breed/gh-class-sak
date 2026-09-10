@@ -38,7 +38,11 @@ from gh_class_sak.github_api import (
     list_org_repos,
     split_collaborators,
 )
-from gh_class_sak.meta_store import join_repo_name, load_meta_classrooms
+from gh_class_sak.meta_store import (
+    join_repo_name,
+    read_meta_classrooms,
+    report_missing_meta,
+)
 
 
 def normalize_name(name):
@@ -111,9 +115,9 @@ def resolve_assignment_repos(classroom, assignment):
     org, course_partial = resolve_classroom(gh, classroom)
 
     classroom_key = normalize_course_name(course_partial) if course_partial else None
-    meta_classrooms = load_meta_classrooms(gh, org, get_token())
+    meta_classrooms, why = read_meta_classrooms(gh, org, get_token())
     if not meta_classrooms:
-        error(f'no classroom-meta repo in "{org}". create one with: meta init')
+        report_missing_meta(gh, org, why)
         sys.exit(2)
     matches = []
     for classroom_dir, data in sorted(meta_classrooms.items()):
@@ -167,9 +171,10 @@ def resolve_assignment_repos(classroom, assignment):
 
 def _single_classroom_dir(org):
     """the org's one classroom directory; ambiguous or absent is an error."""
-    meta_classrooms = load_meta_classrooms(get_github(), org, get_token())
+    gh = get_github()
+    meta_classrooms, why = read_meta_classrooms(gh, org, get_token())
     if not meta_classrooms:
-        error(f'no classroom-meta repo in "{org}". create one with: meta init')
+        report_missing_meta(gh, org, why)
         sys.exit(2)
     if len(meta_classrooms) > 1:
         error(f'"{org}" hosts several classrooms, so the course is ambiguous:')

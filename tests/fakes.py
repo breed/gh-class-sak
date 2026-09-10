@@ -282,15 +282,21 @@ class FakeOrg:
 class FakeAuthenticatedUser:
     # deliberately no get_orgs(): classrooms come from the config or an
     # explicit argument, never from enumerating the token's orgs
-    def __init__(self, orgs):
+    def __init__(self, orgs, login):
         self._orgs = orgs
+        self.login = login
 
 
 class FakeGithub:
-    def __init__(self, orgs, users=None, missing_users=()):
+    # oauth_scopes is what PyGithub records from the X-OAuth-Scopes response
+    # header: a list for a classic token, None for a fine-grained one
+    def __init__(self, orgs, users=None, missing_users=(), login="profbeth",
+                 oauth_scopes=("repo", "read:org")):
         self._orgs = {o.login: o for o in orgs}
         self._users = users or {}
         self._missing_users = {login.lower() for login in missing_users}
+        self._login = login
+        self.oauth_scopes = None if oauth_scopes is None else list(oauth_scopes)
 
     def get_organization(self, name):
         if name not in self._orgs:
@@ -306,7 +312,7 @@ class FakeGithub:
 
     def get_user(self, login=None):
         if login is None:
-            return FakeAuthenticatedUser(list(self._orgs.values()))
+            return FakeAuthenticatedUser(list(self._orgs.values()), self._login)
         if login.lower() in self._missing_users:
             raise GithubException(404, {"message": "Not Found"}, None)
         return self._users.get(login, FakeNamedUser(login))

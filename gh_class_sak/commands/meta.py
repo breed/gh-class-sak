@@ -131,7 +131,7 @@ def _open_meta(gh, org, required=True):
     repo = get_org_repo(gh, org, ms.META_REPO_NAME)
     if repo is None:
         if required:
-            error(f'no {ms.META_REPO_NAME} repo in "{org}". create one with: meta init')
+            ms.report_missing_meta(gh, org)
             sys.exit(2)
         return None, None
     try:
@@ -765,9 +765,9 @@ def meta_list(classroom):
     missing = False
     for org in orgs:
         info(f"scanning {org} ...")
-        meta_classrooms = ms.load_meta_classrooms(gh, org, get_token())
+        meta_classrooms, why = ms.read_meta_classrooms(gh, org, get_token())
         if not meta_classrooms:
-            error(f'no {ms.META_REPO_NAME} repo in "{org}". create one with: meta init')
+            ms.report_missing_meta(gh, org, why)
             missing = True
             continue
         if partial:

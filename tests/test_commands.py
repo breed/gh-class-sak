@@ -1,5 +1,6 @@
 import os
 import re
+import shutil
 
 import pytest
 
@@ -137,6 +138,75 @@ class TestReposList:
         result = run(cli, "repos", "list", ORG, "project")
         assert result.exit_code == 2
         assert "no classroom-meta repo" in result.output
+
+
+
+class TestMissingMetaRepoBlamesTheToken:
+    """github answers "no such repo" and "not yours to see" with the same 404,
+    so the error names the token as the other suspect: a TA whose token has no
+    private-repo access reads today's message as "the course isn't set up"."""
+
+    @pytest.fixture
+    def no_meta(self, fake_github):
+        org = fake_github.get_organization(ORG)
+        org._repos[:] = [r for r in org._repos if r.name != "classroom-meta"]
+        return fake_github
+
+    def test_names_a_token_without_the_repo_scope(self, cli, no_config, no_meta):
+        no_meta.oauth_scopes = ["gist", "read:org"]
+        result = run(cli, "classrooms", ORG)
+        assert result.exit_code == 2
+        assert "no classroom-meta repo" in result.output
+        assert "meta init" in result.output  # still says how to create one
+        assert 'acts as "profbeth"' in result.output
+        assert "scopes: gist, read:org" in result.output
+        assert '"repo" scope' in result.output
+        assert "gh auth refresh -h github.com -s repo" in result.output
+
+    def test_names_a_fine_grained_token(self, cli, no_config, no_meta):
+        # github sends no X-OAuth-Scopes header for fine-grained tokens
+        no_meta.oauth_scopes = None
+        result = run(cli, "classrooms", ORG)
+        assert result.exit_code == 2
+        assert "fine-grained" in result.output
+        assert "resource owner" in result.output
+        assert "gh auth refresh" not in result.output
+
+    def test_points_a_repo_scoped_token_at_access_and_sso(self, cli, no_config,
+                                                          no_meta):
+        result = run(cli, "classrooms", ORG)  # the fake token carries "repo"
+        assert result.exit_code == 2
+        assert f"member of {ORG}" in result.output
+        assert "SSO" in result.output
+
+    def test_repos_list_explains_it_too(self, cli, no_config, no_meta):
+        no_meta.oauth_scopes = ["gist"]
+        result = run(cli, "repos", "list", ORG, "project")
+        assert result.exit_code == 2
+        assert "gh auth refresh -h github.com -s repo" in result.output
+
+    def test_meta_list_explains_it_too(self, cli, no_config, no_meta):
+        no_meta.oauth_scopes = ["gist"]
+        result = run(cli, "meta", "list", ORG)
+        assert result.exit_code == 2
+        assert "gh auth refresh -h github.com -s repo" in result.output
+
+    def test_meta_show_explains_it_too(self, cli, no_config, no_meta):
+        no_meta.oauth_scopes = ["gist"]
+        result = run(cli, "meta", "show", ORG)
+        assert result.exit_code == 2
+        assert "gh auth refresh -h github.com -s repo" in result.output
+
+    def test_a_readable_but_empty_meta_repo_is_not_blamed_on_the_token(
+            self, cli, no_config, fake_github):
+        # the repo is right there and readable — it just records nothing yet,
+        # which no token change would fix
+        from gh_class_sak import meta_store as ms
+        shutil.rmtree(os.path.join(ms.meta_checkout_dir(ORG), "cmpe_195a"))
+        result = run(cli, "classrooms", ORG)
+        assert result.exit_code == 2
+        assert "records no classrooms" in result.output
+        assert "token" not in result.output
 
 
 class TestReposMembers:

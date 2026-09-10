@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- a missing `classroom-meta` repo no longer reads as "the course isn't set up".
+  GitHub 404s a private repo the token can't see exactly like one that was never
+  created, so the error now offers both readings and names the token: who it
+  authenticates as, its scopes, and the likely fix — the `repo` scope for a
+  classic token, an org resource-owner grant for a fine-grained one, or org
+  membership and SAML SSO authorization when the scope is already there. A
+  `classroom-meta` repo that is present but records no classrooms, or that
+  can't be checked out, now says so instead of claiming it is missing
+
 ## v1.4.0
 
 - `meta assign --from-canvas` now notices recorded rows whose person (or

@@ -82,7 +82,10 @@ def help_me_setup():
         else:
             output(f"[ORGS]         {', '.join(orgs)}")
             if token:
-                from gh_class_sak.meta_store import load_meta_classrooms
+                from gh_class_sak.meta_store import (
+                    read_meta_classrooms,
+                    report_missing_meta,
+                )
                 gh = get_github()
                 for org in orgs:
                     try:
@@ -92,17 +95,22 @@ def help_me_setup():
                         error(f"  {org}: not reachable with this token —"
                               " check the spelling and the token's org access")
                         continue
-                    meta_classrooms = load_meta_classrooms(gh, org, get_token())
+                    meta_classrooms, why = read_meta_classrooms(
+                        gh, org, get_token())
                     if meta_classrooms:
                         output(f"  {org}: classroom-meta ok —"
                                f" {', '.join(sorted(meta_classrooms))}")
                     else:
                         problems.append(f"{org} classroom-meta")
-                        warn(f"  {org}: no classroom-meta repo")
-                        _example([f"gh-class-sak meta init YOUR-COURSE --org {org}",
-                                  "# or import a GitHub Classroom era org wholesale:",
-                                  f"gh-class-sak migrate-github-classroom {org}"],
-                                 lead="create one with:")
+                        report_missing_meta(gh, org, why, report=warn,
+                                            prefix="  ")
+                        if why != "unreadable":
+                            # a repo that is there but unreadable is a
+                            # checkout to fix, not a classroom to create
+                            _example([f"gh-class-sak meta init YOUR-COURSE --org {org}",
+                                      "# or import a GitHub Classroom era org wholesale:",
+                                      f"gh-class-sak migrate-github-classroom {org}"],
+                                     lead="create one with:")
             else:
                 warn("  (orgs not checked — no github token)")
 

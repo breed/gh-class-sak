@@ -203,7 +203,11 @@ in the clone URL, or in the checked-out `.git/config`.
 All course state lives in a private repo named `classroom-meta` inside the org —
 versioned, hand-editable, and invisible to students; the complete file-format reference
 is [The classroom-meta files](classroom-meta-files.md). Every command starts from it: an
-org without one gets an error pointing at `meta init`. An org hosts a set of classrooms (two
+org without one gets an error pointing at `meta init` — one that also names the token as
+a suspect, because a private repo the token can't see 404s exactly like one that was
+never created. Note that TAs are not given access to it: the `<classroom>-TAs` team is
+granted read on the student repos only, so a TA who will run these commands needs the
+team (or their account) added to `classroom-meta` by hand. An org hosts a set of classrooms (two
 Canvas sections often share one org). A classroom is a directory with a `classroom.ini`,
 and **every `.tsv` file in it is an assignment**, named by its basename:
 

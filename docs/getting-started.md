@@ -27,6 +27,15 @@ Your GitHub token is resolved in this order:
 
 If you already use the `gh` CLI, there is nothing to set up.
 
+Whichever it is, the token has to be able to see **private** repos in the org: the
+`classroom-meta` repo is private, and GitHub answers "not yours to see" with the same
+404 it uses for "not there". So a classic token needs the `repo` scope
+(`gh auth refresh -h github.com -s repo`); a fine-grained token needs the org as one of
+its resource owners, with Contents: read approved by an org owner; and an org that
+enforces SAML SSO needs the token authorized for it. When a command reports
+`no classroom-meta repo visible in "ORG"`, it also prints which of these the token looks
+like — that message means "absent **or** invisible", not "the course isn't set up".
+
 ## Naming your classroom: the org and the config file
 
 Every command takes a `CLASSROOM` argument. It names either a **GitHub org** or a

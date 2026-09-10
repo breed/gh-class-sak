@@ -13,7 +13,7 @@ from gh_class_sak.core import (
     output,
     resolve_classroom,
 )
-from gh_class_sak.meta_store import load_meta_classrooms
+from gh_class_sak.meta_store import read_meta_classrooms, report_missing_meta
 
 
 @gh_class_sak.command()
@@ -41,9 +41,9 @@ def classrooms(classroom):
         info(f"scanning {org} ...")
         # an org hosts a set of classrooms, one directory each in its
         # classroom-meta repo
-        meta_classrooms = load_meta_classrooms(gh, org, get_token())
+        meta_classrooms, why = read_meta_classrooms(gh, org, get_token())
         if not meta_classrooms:
-            error(f'no classroom-meta repo in "{org}". create one with: meta init')
+            report_missing_meta(gh, org, why)
             missing = True
             continue
         if partial:
