@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.5.0
 
 - a missing `classroom-meta` repo no longer reads as "the course isn't set up".
   GitHub 404s a private repo the token can't see exactly like one that was never
