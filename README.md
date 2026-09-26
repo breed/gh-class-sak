@@ -63,6 +63,7 @@ $ gh-class-sak repos clone cs101-fall project --dest grading
 ⚠️  would clone cs101-fall/project-team-1 -> grading/team-1
 ⚠️  would clone cs101-fall/project-nightowls -> grading/nightowls
 ⚠️  would clone cs101-fall/project-team-3 -> grading/team-3
+⚠️  that was a preview: nothing changed. add --no-dryrun to apply
 ```
 
 Add `--no-dryrun` and it actually clones, fast-forwarding any repo you already have.

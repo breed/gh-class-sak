@@ -240,3 +240,108 @@ class TestRenamedCommands:
         result = run(course_env.runner, "meta", "show", ORG)
         assert result.exit_code == 0, result.output
         assert "renamed" not in result.output
+
+
+class TestInitRemembersTheOrg:
+    def test_the_org_is_added_to_the_config(self, course_env):
+        result = run(course_env.runner, "course", "init", "CS-101", "--org", ORG,
+                     "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert f"add {ORG} to the config's [ORGS]" in result.output
+        assert core.configured_orgs() == [ORG]
+        # so the next command finds the course without --org
+        result = run(course_env.runner, "course", "show", "CS-101")
+        assert result.exit_code == 0, result.output
+
+    def test_a_dry_run_leaves_the_config_alone(self, course_env):
+        result = run(course_env.runner, "course", "init", "CS-101", "--org", ORG)
+        assert result.exit_code == 0, result.output
+        assert f"would add {ORG} to the config's [ORGS]" in result.output
+        assert core.configured_orgs() == []
+
+    def test_a_configured_org_is_not_added_again(self, configured):
+        result = run(configured.runner, "course", "init", "CS-101", "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert "[ORGS]" not in result.output
+        assert core.configured_orgs() == [ORG]
+
+    def test_meta_init_is_unchanged(self, course_env):
+        result = run(course_env.runner, "meta", "init", "CS-101", "--org", ORG,
+                     "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert core.configured_orgs() == []
+
+
+PREVIEW_FOOTER = ("that was a preview: nothing changed."
+                  " add --no-dryrun to apply")
+
+
+class TestNextSteps:
+    def test_a_dry_run_ends_by_saying_nothing_changed(self, course_env):
+        seed_meta(course_env, assignments=team_row())
+        result = run(course_env.runner, "sync", COURSE, "--org", ORG)
+        assert result.exit_code == 0, result.output
+        assert result.output.rstrip().endswith(PREVIEW_FOOTER)
+
+    def test_a_dry_run_with_nothing_to_preview_has_no_footer(self, course_env):
+        seed_meta(course_env)
+        run(course_env.runner, "sync", COURSE, "--org", ORG, "--no-dryrun")
+        result = run(course_env.runner, "sync", COURSE, "--org", ORG)
+        assert result.exit_code == 0, result.output
+        assert "nothing to do" in result.output
+        assert PREVIEW_FOOTER not in result.output
+
+    def test_the_renamed_commands_print_no_footer(self, course_env):
+        seed_meta(course_env, assignments=team_row())
+        result = run(course_env.runner, "meta", "apply", ORG)
+        assert result.exit_code == 0, result.output
+        assert PREVIEW_FOOTER not in result.output
+        assert "summary:" not in result.output
+
+    def test_init_names_the_next_step(self, course_env):
+        result = run(course_env.runner, "course", "init", "CS-101", "--org", ORG,
+                     "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert "next: gh-class-sak assignment create cs_101 NAME --roster FILE" \
+            " (or --from-canvas)" in result.output
+
+    def test_assignment_create_names_the_next_step(self, course_env, tmp_path):
+        seed_meta(course_env)
+        roster = tmp_path / "roster.tsv"
+        roster.write_text("NAME\tSTUDENTS\nteam-1\t/msmith\n")
+        result = run(course_env.runner, "assignment", "create", COURSE, "hw1",
+                     "--org", ORG, "--roster", str(roster), "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert f"next: students accept their invitations; gh-class-sak course" \
+            f" show {COURSE} shows who hasn't" in result.output
+
+
+class TestSummary:
+    def test_sync_ends_with_a_summary(self, course_env):
+        seed_meta(course_env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["/msmith"], "repo": None, "repo_id": None},
+            {"name": "team-2", "students": ["/jdoe"], "repo": None, "repo_id": None}]})
+        result = run(course_env.runner, "sync", COURSE, "--org", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert result.output.rstrip().splitlines()[-1] == (
+            "summary: 2 repos created, 2 welcome commits, 2 branches protected,"
+            " 2 invitations, 3 TA team changes")
+
+    def test_a_dry_run_summary_says_so(self, course_env):
+        seed_meta(course_env, assignments=team_row())
+        result = run(course_env.runner, "sync", COURSE, "--org", ORG)
+        assert "summary (preview): 1 repo created," in result.output
+
+    def test_warnings_are_counted(self, course_env):
+        repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1", collaborators=[
+            FakeNamedUser("msmith", role_name="write"),
+            FakeNamedUser("stranger", role_name="write")])
+        course_env.org._repos.append(repo)
+        seed_meta(course_env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["/msmith"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        run(course_env.runner, "sync", COURSE, "--org", ORG, "--no-dryrun")
+        result = run(course_env.runner, "sync", COURSE, "--org", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert "nothing to do" in result.output
+        assert result.output.rstrip().endswith("summary: no changes, 1 warning")

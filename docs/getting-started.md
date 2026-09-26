@@ -113,6 +113,8 @@ $ gh-class-sak course init CS-101 --org cs101-fall
 no canvas config; seed the [TAS] section by hand
 ⚠️  would record cs_101: prefix=CS-101 tas=-
 ⚠️  would create team "cs_101-TAs" in cs101-fall
+⚠️  would add cs101-fall to the config's [ORGS]
+⚠️  that was a preview: nothing changed. add --no-dryrun to apply
 ```
 
 **2. Create an assignment's repos.** `assignment create` takes the course, the
@@ -185,6 +187,7 @@ $ gh-class-sak repos clone cs101-fall project --dest grading
 ⚠️  would clone cs101-fall/project-team-1 -> grading/team-1
 ⚠️  would clone cs101-fall/project-nightowls -> grading/nightowls
 ⚠️  would clone cs101-fall/project-team-3 -> grading/team-3
+⚠️  that was a preview: nothing changed. add --no-dryrun to apply
 ```
 
 Add `--no-dryrun` and it actually clones, fast-forwarding any repo you already have.

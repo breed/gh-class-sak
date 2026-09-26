@@ -264,9 +264,12 @@ class TestReposClone:
         # the only clone traffic is the classroom-meta checkout itself
         assert [c for c in calls if "classroom-meta" not in str(c[0])] == []
         assert not dest.exists()
-        # the dry-run banner leads, then one would-line per repo
-        assert len(out) == 4
+        # the dry-run banner leads, then one would-line per repo, then the
+        # footer saying nothing changed
+        assert len(out) == 5
         assert out[0].startswith("\N{WARNING SIGN}\N{VARIATION SELECTOR-16}  dry run")
+        assert out[-1].endswith("that was a preview: nothing changed."
+                                " add --no-dryrun to apply")
         assert all(ln.startswith("\N{WARNING SIGN}") for ln in out)
         assert str(dest / "team-12") in out[1]
 

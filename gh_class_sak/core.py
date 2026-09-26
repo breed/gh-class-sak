@@ -117,7 +117,17 @@ def _echo(message, fg=None, err=False):
     click.echo(click.style(message, fg=fg) if fg else message, err=err)
 
 
+# what the running command has said so far: the dry-run footer and the
+# end-of-run summaries read it. reset at the start of every invocation
+said = {"would": 0, "warn": 0, "error": 0}
+
+# ctx.meta key set by the renamed (pre-course) commands: their output stays
+# exactly as it was, so no footer, summary, or next-step hint
+LEGACY = "gh_class_sak.legacy"
+
+
 def error(message):
+    said["error"] += 1
     _echo(message, fg="red", err=True)
 
 
@@ -126,6 +136,7 @@ def info(message):
 
 
 def warn(message):
+    said["warn"] += 1
     _echo(message, fg="yellow", err=True)
 
 
@@ -133,9 +144,20 @@ def output(message):
     _echo(message)
 
 
+def _warning_line(message):
+    output(f"\N{WARNING SIGN}\N{VARIATION SELECTOR-16}  {message}")
+
+
 def would(message):
     """print what a mutating command would do, per the --dryrun convention."""
-    output(f"\N{WARNING SIGN}\N{VARIATION SELECTOR-16}  {message}")
+    said["would"] += 1
+    _warning_line(message)
+
+
+def is_legacy():
+    """whether a renamed command is running, whose output must not change."""
+    ctx = click.get_current_context(silent=True)
+    return bool(ctx and ctx.meta.get(LEGACY))
 
 
 def progress(items, label, length=None):
@@ -165,10 +187,18 @@ def progress(items, label, length=None):
 
 
 def _announce_dryrun(ctx, param, value):
-    """the first thing a previewing command says is that it is previewing."""
+    """the first thing a previewing command says is that it is previewing —
+    and, when it previewed anything, the last thing too, since a long
+    preview scrolls the first line away."""
     if value:
-        would("dry run: no changes will be made. add --no-dryrun to apply")
+        _warning_line("dry run: no changes will be made. add --no-dryrun to apply")
+        ctx.call_on_close(lambda: _dryrun_footer(ctx))
     return value
+
+
+def _dryrun_footer(ctx):
+    if said["would"] and not ctx.meta.get(LEGACY):
+        _warning_line("that was a preview: nothing changed. add --no-dryrun to apply")
 
 
 dryrun_option = click.option(
@@ -438,6 +468,8 @@ def gh_class_sak():
     Start with: course init, then assignment create, then sync whenever the
     roster or settings change. Run help-me-setup to check your setup.
     """
+    for key in said:
+        said[key] = 0
     if not _interactive():
         return
     warn("this is beta code to replace github classroom, which is going away")

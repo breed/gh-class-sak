@@ -63,8 +63,13 @@ def course_group():
               help="the canvas course name to record in classroom.ini")
 @dryrun_option
 def course_init(course, org, prefix, template, canvas_course, dryrun):
-    """Record a new COURSE, creating the org's classroom-meta repo if needed."""
-    m._init(course, org, prefix, template, canvas_course, dryrun)
+    """Record a new COURSE, creating the org's classroom-meta repo if needed.
+
+    The org is added to the config's [ORGS] when it isn't there yet, so later
+    commands find the course without --org.
+    """
+    m._init(course, org, prefix, template, canvas_course, dryrun,
+            remember_org=True)
 
 
 @course_group.command("list")
