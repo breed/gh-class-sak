@@ -338,6 +338,28 @@ def course_settings(course, org, protection, linear_history, force_push,
     m._summarize(actions, dryrun)
 
 
+ROSTER_FORMATS = """\
+a roster is one person per line — one repo each:
+    jane@school.edu
+    /msmith
+    rp@school.edu/rpatel
+or a table, one repo per row, with comma-joined EMAIL/GITHUBID identities:
+    NAME       STUDENTS
+    team-1     jane@school.edu/,/msmith
+    nightowls  /rpatel,/tk-codes"""
+
+
+def _parse_roster(text):
+    """parse_roster, exiting with both formats shown when the file is bad."""
+    try:
+        return ms.parse_roster(text)
+    except ValueError as exc:
+        error(f"cannot read the roster: {exc}")
+        for line in ROSTER_FORMATS.splitlines():
+            error(line)
+        sys.exit(2)
+
+
 @gh_class_sak.group("assignment")
 def assignment_group():
     """Create assignments: one repo per student or group.
@@ -353,7 +375,8 @@ def assignment_group():
 @click.argument("name")
 @org_option
 @click.option("--roster", type=click.File("r"), default=None,
-              help="a NAME + STUDENTS table: one row per repo")
+              help="one person per line (a repo each), or a NAME STUDENTS"
+                   " table (a repo per row)")
 @click.option("--from-canvas", is_flag=True,
               help="build the roster from canvas: one row per enrolled person")
 @click.option("--canvas-group", default=None,
@@ -396,7 +419,7 @@ def assignment_create(course, name, org, roster, from_canvas, canvas_group,
     gh = get_github()
     m._assign(gh, *resolve_course(gh, course, org), course, roster, name,
               from_canvas, canvas_group, template_url, remove_unlisted,
-              remove_dropped, dryrun, whole_classroom=False)
+              remove_dropped, dryrun, whole_classroom=False, parse=_parse_roster)
 
 
 @gh_class_sak.command("sync")

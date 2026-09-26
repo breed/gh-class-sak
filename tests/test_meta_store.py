@@ -341,3 +341,35 @@ class TestLoadMetaCourses:
         classrooms = ms.load_meta_classrooms(gh, ORG)
         assert list(classrooms) == ["cs101"]
         assert "cs210" in capsys.readouterr().err
+
+
+class TestParseRoster:
+    def test_a_plain_list_is_one_repo_per_person(self):
+        rows = ms.parse_roster("# fall roster\njane.doe@school.edu\n/msmith\n"
+                               "rp@school.edu/rpatel\ntk-codes\n")
+        assert [(r["name"], r["students"]) for r in rows] == [
+            ("jane.doe", ["jane.doe@school.edu/"]),
+            ("msmith", ["/msmith"]),
+            ("rpatel", ["rp@school.edu/rpatel"]),
+            ("tk-codes", ["/tk-codes"])]
+        assert all(r["repo"] is None and r["repo_id"] is None for r in rows)
+
+    def test_plain_list_names_stay_unique(self):
+        rows = ms.parse_roster("jane@a.edu\njane@b.edu\n")
+        assert [r["name"] for r in rows] == ["jane", "jane-2"]
+
+    def test_a_table_parses_as_before(self):
+        text = "NAME\tSTUDENTS\nteam-1\tjane@school.edu/,/msmith\n"
+        assert ms.parse_roster(text) == ms.parse_students_tsv(text)
+
+    def test_mixing_the_formats_is_an_error(self):
+        with pytest.raises(ValueError, match="line 3: .*one column"):
+            ms.parse_roster("NAME STUDENTS\nteam-1 /jdoe\n/msmith\n")
+
+    def test_a_bad_repo_id_is_an_error_not_a_crash(self):
+        with pytest.raises(ValueError, match="line 2: REPO_ID"):
+            ms.parse_roster("NAME STUDENTS REPO REPO_ID\nteam-1 /jdoe - oops\n")
+
+    def test_too_many_columns_is_an_error(self):
+        with pytest.raises(ValueError, match="line 1: 5 columns"):
+            ms.parse_roster("team-1 /jdoe - 1 extra\n")

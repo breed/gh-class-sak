@@ -514,3 +514,27 @@ def test_every_command_shows_examples_in_its_help(course_env, path):
     assert result.exit_code == 0, result.output
     assert "Examples:" in result.output
     assert f"  gh-class-sak {' '.join(path)}" in result.output
+
+
+class TestRosterInput:
+    def test_a_plain_list_roster_creates_one_repo_per_person(self, course_env,
+                                                               tmp_path):
+        seed_meta(course_env)
+        roster = tmp_path / "people.txt"
+        roster.write_text("/msmith\n/jdoe\n")
+        result = run(course_env.runner, "assignment", "create", COURSE, "hw1",
+                     "--org", ORG, "--roster", str(roster), "--apply")
+        assert result.exit_code == 0, result.output
+        course_env.gh.get_repo(f"{ORG}/{PREFIX}-hw1-msmith")
+        course_env.gh.get_repo(f"{ORG}/{PREFIX}-hw1-jdoe")
+
+    def test_a_bad_roster_shows_both_formats(self, course_env, tmp_path):
+        seed_meta(course_env)
+        roster = tmp_path / "roster.tsv"
+        roster.write_text("team-1 /jdoe - oops\n")
+        result = run(course_env.runner, "assignment", "create", COURSE, "hw1",
+                     "--org", ORG, "--roster", str(roster))
+        assert result.exit_code == 2
+        assert "cannot read the roster: line 1: REPO_ID" in result.output
+        assert "one person per line" in result.output
+        assert "NAME       STUDENTS" in result.output
