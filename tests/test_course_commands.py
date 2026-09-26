@@ -586,3 +586,43 @@ class TestCourseStatus:
                 " NAME --from-canvas" in result.output)
         assert f"TAS TEAM  {COURSE}-TAs (not created" in result.output
         assert f"TAs team → gh-class-sak sync {COURSE} --apply" in result.output
+
+
+class TestInitLike:
+    STARTER = "https://github.com/example/hw1-starter"
+
+    def seed_last_term(self, env):
+        seed_meta(env, course="cs_101", prefix="cs101-spring",
+                  template=f"{ORG}/Template", tas=["/ta-one", "ta2@sjsu.edu/ta-two"],
+                  templates={"hw1": self.STARTER}, protection="pr-review",
+                  assignments=team_row("hw1", "solo"))
+
+    def test_copies_tas_templates_and_settings_but_not_prefix_or_rows(
+            self, course_env):
+        self.seed_last_term(course_env)
+        result = run(course_env.runner, "course", "init", "CS-102", "--org", ORG,
+                     "--like", "cs_101", "--apply")
+        assert result.exit_code == 0, result.output
+        new = meta_state(course_env, "cs_102")
+        assert new["tas"] == ["/ta-one", "ta2@sjsu.edu/ta-two"]
+        assert new["template"] == f"{ORG}/Template"
+        assert new["templates"] == {"hw1": self.STARTER}
+        assert new["protection"] == "pr-review"
+        assert new["prefix"] == "CS-102"
+        assert new["assignments"] == {}
+        assert "copying from cs_101: TAs, template, repo settings" in result.output
+
+    def test_an_explicit_flag_beats_the_copy(self, course_env):
+        self.seed_last_term(course_env)
+        result = run(course_env.runner, "course", "init", "CS-102", "--org", ORG,
+                     "--like", "cs_101", "--template", f"{ORG}/Other", "--apply")
+        assert result.exit_code == 0, result.output
+        assert meta_state(course_env, "cs_102")["template"] == f"{ORG}/Other"
+
+    def test_like_only_seeds_a_new_course(self, course_env):
+        self.seed_last_term(course_env)
+        result = run(course_env.runner, "course", "init", "cs_101", "--org", ORG,
+                     "--like", "cs_101")
+        assert result.exit_code == 2
+        assert '"cs_101" already exists; --like only seeds a new course' \
+            in result.output

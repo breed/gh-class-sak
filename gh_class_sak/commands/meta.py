@@ -689,17 +689,28 @@ def meta_init(classroom, org, prefix, template, canvas_course, dryrun):
 
 
 def _init(classroom, org, prefix, template, canvas_course, dryrun,
-          remember_org=False):
+          remember_org=False, like=None):
     """record a new classroom, creating the org's classroom-meta repo if needed.
 
     remember_org adds the org to the config's [ORGS] when it isn't there, so
-    later commands find the course without --org."""
+    later commands find the course without --org. like is (name, data) of a
+    course whose TAs, templates, and repo settings seed this new one — never
+    its prefix (the repo names would collide) or its assignments."""
     gh = get_github()
     org = _pick_org(org, classroom)
     classroom_dir = normalize_course_name(classroom)
 
     meta_repo, checkout = _open_meta(gh, org, required=False)
     existing = _load_classroom(checkout, classroom_dir) if checkout else None
+    if like is not None and existing:
+        error(f'"{classroom_dir}" already exists; --like only seeds a new course')
+        sys.exit(2)
+    if like is not None:
+        like_name, like_data = like
+        output(f"copying from {like_name}: TAs, template, repo settings,"
+               " and assignment templates")
+        if template is None:
+            template = like_data["template"]
 
     if prefix is None and existing:
         prefix = existing["prefix"]
@@ -714,6 +725,8 @@ def _init(classroom, org, prefix, template, canvas_course, dryrun,
         canvas_course = existing["canvas_course"]
 
     tas = list(existing["tas"]) if existing else []
+    if like is not None:
+        tas = list(like_data["tas"])
     if has_canvas_config():
         known_emails, known_githubs = set(), set()
         for entry in tas:
@@ -746,6 +759,8 @@ def _init(classroom, org, prefix, template, canvas_course, dryrun,
         _perform(dryrun, f"create private {org}/{ms.META_REPO_NAME}", _create_meta, actions)
 
     settings = _ini_settings(existing) if existing else {}
+    if like is not None:
+        settings = {key: like_data[key] for key in REPO_SETTING_KEYS + ("templates",)}
     settings["canvas_course"] = canvas_course
 
     def _write():

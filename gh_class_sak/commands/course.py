@@ -74,8 +74,11 @@ def course_group():
               help="OWNER/NAME template repo for created assignment repos")
 @click.option("--canvas-course", default=None,
               help="the canvas course name to record in classroom.ini")
+@click.option("--like", "like_course", default=None,
+              help="an existing course (last term's) whose TAs, templates, and"
+                   " repo settings this new one starts with")
 @dryrun_option
-def course_init(course, org, prefix, template, canvas_course, dryrun):
+def course_init(course, org, prefix, template, canvas_course, like_course, dryrun):
     """Record a new COURSE, creating the org's classroom-meta repo if needed.
 
     The org is added to the config's [ORGS] when it isn't there yet, so later
@@ -86,9 +89,16 @@ def course_init(course, org, prefix, template, canvas_course, dryrun):
       gh-class-sak course init CS-101
       gh-class-sak course init CS-101 --org cs101-fall --apply
       gh-class-sak course init CS-101 --canvas-course "FA26: CS-101" --apply
+      gh-class-sak course init CS-101-spring --like CS-101 --apply
     """
+    like = None
+    if like_course:
+        gh = get_github()
+        _like_org, like_dir, _checkout, like_data = _open_course(
+            gh, like_course, None if configured_orgs() else org)
+        like = (like_dir, like_data)
     m._init(course, org, prefix, template, canvas_course, dryrun,
-            remember_org=True)
+            remember_org=True, like=like)
 
 
 @course_group.command("list")
