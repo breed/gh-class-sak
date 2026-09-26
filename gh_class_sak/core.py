@@ -359,6 +359,26 @@ def add_org_to_config(org):
         f.write(text)
 
 
+def add_canvas_to_config(url, token):
+    """append a [CANVAS] section, creating the file if needed. the token is a
+    secret, so the file is made readable by its owner only."""
+    text = ""
+    if os.path.exists(config_ini):
+        with open(config_ini) as f:
+            text = f.read()
+    if text and not text.endswith("\n"):
+        text += "\n"
+    if text:
+        text += "\n"
+    text += f"[CANVAS]\nurl = {url}\ntoken = {token}\n"
+    parent = os.path.dirname(config_ini)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with open(config_ini, "w") as f:
+        f.write(text)
+    os.chmod(config_ini, 0o600)
+
+
 def match_org(name, orgs):
     """the configured org a partial name means, or None when nothing matches.
 
