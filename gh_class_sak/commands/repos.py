@@ -391,7 +391,13 @@ def repos():
 @click.option("--show-empty", is_flag=True, default=False, help="include teams with no members")
 def repos_list(classroom, assignment, repo, members, show_instructors, show_name, show_email,
                group_category, show_empty):
-    """List the repos of a course's assignment."""
+    """List the repos of a course's assignment.
+
+    \b
+    Examples:
+      gh-class-sak repos list CS-101 hw1
+      gh-class-sak repos list CS-101 project --members --name
+    """
     room, found = resolve_assignment_repos(classroom, assignment)
 
     # resolve the Canvas course once if any Canvas feature is usable —
@@ -503,7 +509,12 @@ def repos_list(classroom, assignment, repo, members, show_instructors, show_name
 @click.argument("classroom", metavar="COURSE")
 @click.argument("assignment")
 def repos_members(classroom, assignment):
-    """List members and their emails extracted from commit history."""
+    """List members and their emails extracted from commit history.
+
+    \b
+    Examples:
+      gh-class-sak repos members CS-101 project
+    """
     _room, found = resolve_assignment_repos(classroom, assignment)
 
     rows = []
@@ -527,7 +538,13 @@ def repos_members(classroom, assignment):
 @click.option("--group", "group_category", default=None, type=str,
               help="show Canvas groups with no matching repo")
 def repos_missing(classroom, assignment, group_category):
-    """List Canvas students or groups without repos."""
+    """List Canvas students or groups without repos.
+
+    \b
+    Examples:
+      gh-class-sak repos missing CS-101 hw1
+      gh-class-sak repos missing CS-101 project --group "Project Groups"
+    """
     room, found = resolve_assignment_repos(classroom, assignment)
 
     if group_category:
@@ -580,7 +597,13 @@ def repos_missing(classroom, assignment, group_category):
               help="directory to clone into (default: current directory)")
 @dryrun_option
 def repos_clone(classroom, assignment, dest, dryrun):
-    """Clone or fast-forward every repo of a course's assignment."""
+    """Clone or fast-forward every repo of a course's assignment.
+
+    \b
+    Examples:
+      gh-class-sak repos clone CS-101 hw1 --dest grading
+      gh-class-sak repos clone CS-101 hw1 --dest grading --apply
+    """
     from gh_class_sak.git_ops import clone_or_update
 
     _room, found = resolve_assignment_repos(classroom, assignment)

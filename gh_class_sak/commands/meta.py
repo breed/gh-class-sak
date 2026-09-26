@@ -1419,6 +1419,11 @@ def migrate_github_classroom(org, dryrun):
     what to call it. Every imported row records the repo's collaborators as
     the students plus its url and permanent id, so it is tracked from day
     one. ORG is added to the config's [ORGS] when it isn't there yet.
+
+    \b
+    Examples:
+      gh-class-sak migrate-github-classroom cs101-fall
+      gh-class-sak migrate-github-classroom cs101-fall --apply
     """
     gh = get_github()
     orgs = configured_orgs()

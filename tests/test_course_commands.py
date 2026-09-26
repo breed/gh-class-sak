@@ -494,3 +494,23 @@ class TestApply:
                      "--template", f"{ORG}/Template", "--apply")
         assert result.exit_code == 0, result.output
         assert meta_state(course_env)["template"] == f"{ORG}/Template"
+
+
+def _visible_leaves(group, path=()):
+    for name in group.list_commands(None):
+        cmd = group.get_command(None, name)
+        if cmd.hidden:
+            continue
+        if hasattr(cmd, "list_commands"):
+            yield from _visible_leaves(cmd, path + (name,))
+        else:
+            yield path + (name,)
+
+
+@pytest.mark.parametrize("path", list(_visible_leaves(core.gh_class_sak)),
+                         ids=lambda path: " ".join(path))
+def test_every_command_shows_examples_in_its_help(course_env, path):
+    result = run(course_env.runner, *path, "--help")
+    assert result.exit_code == 0, result.output
+    assert "Examples:" in result.output
+    assert f"  gh-class-sak {' '.join(path)}" in result.output

@@ -47,7 +47,12 @@ def _example(lines, lead="for example:"):
 
 @gh_class_sak.command("help-me-setup")
 def help_me_setup():
-    """Explain the config file and check that everything is set up."""
+    """Explain the config file and check that everything is set up.
+
+    \b
+    Examples:
+      gh-class-sak help-me-setup
+    """
     problems = []
 
     token, source = probe_token()

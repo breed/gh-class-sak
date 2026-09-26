@@ -78,6 +78,12 @@ def course_init(course, org, prefix, template, canvas_course, dryrun):
 
     The org is added to the config's [ORGS] when it isn't there yet, so later
     commands find the course without --org.
+
+    \b
+    Examples:
+      gh-class-sak course init CS-101
+      gh-class-sak course init CS-101 --org cs101-fall --apply
+      gh-class-sak course init CS-101 --canvas-course "FA26: CS-101" --apply
     """
     m._init(course, org, prefix, template, canvas_course, dryrun,
             remember_org=True)
@@ -90,6 +96,11 @@ def course_list(course, org):
     """List the recorded courses: prefix, TA count, and assignments.
 
     Without COURSE, every course in --org (or every configured org) is listed.
+
+    \b
+    Examples:
+      gh-class-sak course list
+      gh-class-sak course list --org cs101-fall
     """
     gh = get_github()
     if course:
@@ -103,7 +114,12 @@ def course_list(course, org):
 @click.argument("course")
 @org_option
 def course_show(course, org):
-    """Show a course's recorded state, checked against the live org."""
+    """Show a course's recorded state, checked against the live org.
+
+    \b
+    Examples:
+      gh-class-sak course show CS-101
+    """
     gh = get_github()
     m._show(gh, *resolve_course(gh, course, org), course)
 
@@ -120,6 +136,10 @@ def course_delete(course, org, delete_repo, dryrun):
     An empty course asks for a simple yes; one with assignments asks you to
     type the full name of one of them. The github repos survive unless
     --delete-repo says otherwise.
+
+    \b
+    Examples:
+      gh-class-sak course delete CS-101 --apply
     """
     gh = get_github()
     m._delete(gh, *resolve_course(gh, course, org), course, delete_repo, dryrun)
@@ -197,7 +217,12 @@ def _change_tas(gh, org, classroom_dir, checkout, data, tas, dryrun):
 @org_option
 @dryrun_option
 def ta_add(course, identities, org, dryrun):
-    """Add TAs to COURSE: record them and invite them to its TAs team."""
+    """Add TAs to COURSE: record them and invite them to its TAs team.
+
+    \b
+    Examples:
+      gh-class-sak course ta add CS-101 jane@school.edu/ /msmith --apply
+    """
     wanted = [_identity(entry) for entry in identities]
     gh = get_github()
     org, classroom_dir, checkout, data = _open_course(gh, course, org)
@@ -219,6 +244,10 @@ def ta_remove(course, identities, org, dryrun):
     """Remove TAs from COURSE: from the record and from its TAs team.
 
     Either half of an identity is enough to name the TA.
+
+    \b
+    Examples:
+      gh-class-sak course ta remove CS-101 msmith --apply
     """
     unwanted = [_identity(entry) for entry in identities]
     gh = get_github()
@@ -258,6 +287,12 @@ def course_settings(course, org, protection, linear_history, force_push,
     A change is recorded and the branch protection is put on every recorded
     repo right away; a template only affects repos created from now on.
     Existing protection is never removed.
+
+    \b
+    Examples:
+      gh-class-sak course settings CS-101
+      gh-class-sak course settings CS-101 --protection pr-review --apply
+      gh-class-sak course settings CS-101 --template cs101-fall/starter --apply
     """
     requested = {key: value for key, value in (
         ("protection", protection), ("linear_history", linear_history),
@@ -340,6 +375,13 @@ def assignment_create(course, name, org, roster, from_canvas, canvas_group,
     Only this assignment's repos are touched: its students are invited and
     the course's TAs team can read them. The rest of the course is left to
     sync.
+
+    \b
+    Examples:
+      gh-class-sak assignment create CS-101 hw1 --from-canvas --apply
+      gh-class-sak assignment create CS-101 project --from-canvas --canvas-group "Project Groups" --apply
+      gh-class-sak assignment create CS-101 project --roster teams.tsv --apply
+      gh-class-sak assignment create CS-101 hw2 --template https://github.com/cs101-fall/hw2-starter
     """
     if roster is not None and from_canvas:
         error("--from-canvas replaces --roster; pass one or the other")
@@ -369,6 +411,12 @@ def sync(course, org, remove_unlisted, dryrun):
     TAs team and branch protection in place. Collaborators the rows don't
     list are warned about; only --remove-unlisted-contributors revokes them
     (admins are never touched).
+
+    \b
+    Examples:
+      gh-class-sak sync CS-101
+      gh-class-sak sync CS-101 --apply
+      gh-class-sak sync --org cs101-fall --apply
     """
     if not course and not org:
         error("pass a COURSE, or --org ORG to sync every course in it")
