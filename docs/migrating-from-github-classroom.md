@@ -13,7 +13,7 @@ hand-editable, diffable, and invisible to students:
 
 ```
 classroom-meta/
-  cs_101/                          one directory per classroom
+  cs_101/                          one directory per course
     classroom.ini                  [CLASSROOM] prefix and settings; [TAS] one
                                    identity per line; [TEMPLATE] per-assignment
                                    starter repos
@@ -23,18 +23,19 @@ classroom-meta/
 
 | GitHub Classroom managed… | …now lives in |
 |---|---|
-| a classroom, tied to an org | a directory in the org's `classroom-meta` repo, named for the course |
-| an assignment and its accepted repos | one `<assignment>.tsv` per assignment |
+| a classroom, tied to an org | a **course**: a directory in the org's `classroom-meta` repo, named for the Canvas course |
+| an assignment and its accepted repos | an **assignment**: one `<assignment>.tsv` per assignment, one row per repo |
 | which student/team owns which repo | the tsv rows: `NAME  STUDENTS  REPO  REPO_ID` |
 | repos surviving a rename | `REPO_ID` — GitHub's permanent numeric id, recorded per row |
 | the roster | the `STUDENTS` columns (plus Canvas, via the config, for names and emails) |
-| TA access everywhere | classroom.ini's `[TAS]` section — realized as a `<classroom>-TAs` team with read access |
+| TA access everywhere | classroom.ini's `[TAS]` section — realized as a `<course>-TAs` team with read access |
 | starter code | `classroom.ini`: `template = OWNER/NAME`, used when repos are created |
 | repo protection | `classroom.ini`: `protection`, `linear_history`, `force_push` |
 
-The commands are the interface to that state: `meta assign` imports team tables,
-`meta apply` reconciles the org to match the files, and `classrooms` / `repos …` read
-them for discovery. The file formats are documented in
+What Classroom called a classroom, this tool calls a **course**. The commands are the
+interface to that state: `assignment create` records a roster and creates its repos,
+`sync` makes the org match the files, and `course list` / `repos …` read them for
+discovery. The file formats are documented in
 [The classroom-meta files](classroom-meta-files.md), and the commands in the
 [commands reference](commands.md#the-classroom-meta-repo).
 
@@ -72,13 +73,13 @@ re-run with `--no-dryrun`. What the import records:
 - **collaborators as the students** — each row's `STUDENTS` column is the repo's
   write-access collaborators, recorded as `/githubid` identities
 - **TAs detected, not imported as students** — a login with write access on *every* one
-  of a classroom's repos (exactly how Classroom set staff up) goes into classroom.ini's
+  of a course's repos (exactly how Classroom set staff up) goes into classroom.ini's
   `[TAS]` section instead of the `STUDENTS` columns; when everyone is on every repo
   (one group owning all the repos) there is no staff signal, so the import warns and
   records everyone as students
 - **the course repo prefix, when your names reveal it** — repos named
   `cs210-hw1-*` with the assignment named `hw1` leave `cs210` as the shared head,
-  which is recorded as the classroom's `prefix`; future repos then follow the org's
+  which is recorded as the course's `prefix`; future repos then follow the org's
   existing naming automatically
 - **your config updated** — the org is added to `[ORGS]`, and the config file is
   created if you don't have one yet
@@ -91,10 +92,10 @@ after everything is imported prints `nothing to do`.
 Discovery works immediately:
 
 ```console
-$ gh-class-sak classrooms cs101-fall
+$ gh-class-sak course list --org cs101-fall
 scanning cs101-fall ...
-cs101_fall: hw1
-cs101_fall: project
+COURSE      PREFIX  TAS  ASSIGNMENTS
+cs101_fall  -       0    hw1(2) project(3)
 ```
 
 ```console
@@ -110,16 +111,16 @@ Then finish the job:
 1. **Review the imported files.** Clone the `classroom-meta` repo (or read it on
    GitHub): check the tsv rows, and add anyone the TA detection couldn't see to
    classroom.ini's `[TAS]` section — it only detects staff who had write on every repo.
-2. **Add classroom settings** you want going forward: a `template` for new repos, and
+2. **Add course settings** you want going forward: a `template` for new repos, and
    branch protection (`protection`, `linear_history`, `force_push`) in `classroom.ini`.
-3. **Reconcile.** This creates each classroom's `<classroom>-TAs` team with read on all
+3. **Sync.** This creates each course's `<course>-TAs` team with read on all
    its repos, revokes the TAs' leftover per-repo write access, makes each repo's
    collaborators exactly its row's students, and applies the protection settings.
    The `--remove-unlisted-contributors` flag is what demotes the TAs and drops anyone
-   the rows don't list — without it, apply only warns about them:
+   the rows don't list — without it, sync only warns about them:
 
    ```
-   gh-class-sak meta apply cs101-fall --remove-unlisted-contributors [--no-dryrun]
+   gh-class-sak sync --org cs101-fall --remove-unlisted-contributors [--no-dryrun]
    ```
 
    Run it twice — the second pass prints `nothing to do`.
@@ -127,4 +128,4 @@ Then finish the job:
    each org's classroom-meta, and Canvas.
 
 From here on, the [getting started](getting-started.md) flow applies: new assignments
-arrive via `meta assign`, and `meta apply` keeps the org matching the recorded state.
+arrive via `assignment create`, and `sync` keeps the org matching the recorded state.

@@ -6,19 +6,27 @@ page is replayed byte-for-byte against the invented demo course by the test suit
 
 New here? Start with [Getting started](getting-started.md).
 
-## The classroom argument
+## The words, and the COURSE argument
 
-Every command's `CLASSROOM` argument names either a **GitHub org** or a **classroom**.
-An org name (or a partial matching exactly one `[ORGS]` entry) wins first, without
-touching any meta repo. Otherwise the configured orgs' classroom-meta repos are
-searched for a classroom directory matching the name — so Canvas course names work.
-Ambiguity is an error listing the candidates; with no config the argument is used
-verbatim as an org name.
+A **course** is one Canvas course, hosted in a GitHub org (an org can host several). An
+**assignment** is one repo per student or group in a course — assignment `hw1` gives
+repos like `hw1-jdoe`. A **team** is the student or group behind one repo.
+
+A `COURSE` argument names a course recorded in an org's
+[classroom-meta repo](#the-classroom-meta-repo). It is looked up in `--org`, or else in
+every org in the config's `[ORGS]` — partial names work, so Canvas course names do too;
+an exact name beats a partial one, and an ambiguity is an error listing the candidates.
+With no config, pass `--org`. An org name is never taken for a course: `course`,
+`assignment`, and `sync` say to pass it as `--org` instead.
+
+The `repos` and `canvas` commands are more lenient: their `COURSE` may also name the
+org, when it hosts a single course — with no config, the argument is used verbatim as
+the org name.
 
 ## help-me-setup
 
 Explain the config file and verify the whole setup: the GitHub token, the config's
-`[ORGS]` (each org's reachability and classroom-meta repo, with its classrooms), and
+`[ORGS]` (each org's reachability and classroom-meta repo, with its courses), and
 the `[CANVAS]` credentials. With no config file it prints a template to start from.
 Read-only; exits 0 when everything checks out, 1 when something needs attention.
 
@@ -38,16 +46,16 @@ row carries the team name, the repo's collaborators as the students, and the rep
 and **permanent id** — so every imported repo is rename-proof from day one.
 
 Staff are detected, not imported as students: a login with write access on **every** one
-of a classroom's repos (Classroom set TAs up exactly like that) is left out of the
+of a course's repos (Classroom set TAs up exactly like that) is left out of the
 `STUDENTS` columns and recorded in classroom.ini's `[TAS]` section instead — where the next
-`meta apply` gives it team read and revokes the leftover per-repo write. When *everyone*
+`sync` gives it team read and revokes the leftover per-repo write. When *everyone*
 is on every repo (one group owning all the repos), there is no staff signal: the
 migration warns and records everyone as students. Re-running the
 migration also repairs rows imported before this detection existed.
 
 The course repo prefix is derived from your answers: when every assignment's name is a
 `-`-suffix of the repo-name prefix it was inferred from (repos `cs210-hw1-*`, assignment
-`hw1`), the shared head (`cs210`) is recorded as the classroom's `prefix` — so
+`hw1`), the shared head (`cs210`) is recorded as the course's `prefix` — so
 `prefix-assignment` keeps spelling the real repo names and future repos follow the same
 naming.
 
@@ -58,36 +66,18 @@ gh-class-sak migrate-github-classroom ORG [--dryrun/--no-dryrun]
 When the org isn't in the config's `[ORGS]` yet, it is added (the config file is created
 if needed). Like every mutating command it previews by default — the questions are asked
 first, then the plan prints as `would …` lines. Re-importing **never clobbers** a
-recorded repo; rows merge like `meta assign`, so running it again after Classroom's
+recorded repo; rows merge like `assignment create`, so running it again after Classroom's
 sunset picked up stragglers only adds what's new.
 
 The [migration guide](migrating-from-github-classroom.md) walks through the whole move,
 including what to do after the import.
-
-## classrooms
-
-List each classroom in an org and its assignments, straight from the org's
-[classroom-meta repo](#the-classroom-meta-repo) — one line per assignment tsv. Pass the
-org (or a course name) as the argument; with no argument, every org listed in the
-`[ORGS]` section of the config is scanned. Orgs are never discovered from
-your token — your account may belong to orgs with thousands of unrelated repos, and
-scanning them would take forever.
-
-```console
-$ gh-class-sak classrooms cs101-fall
-scanning cs101-fall ...
-cs101_fall: hw1
-cs101_fall: project
-```
-
-An org without a classroom-meta repo is an error pointing at `meta init`.
 
 ## repos list
 
 List the repos for an assignment. Both arguments accept partial names.
 
 ```
-gh-class-sak repos list CLASSROOM ASSIGNMENT [OPTIONS]
+gh-class-sak repos list COURSE ASSIGNMENT [OPTIONS]
 ```
 
 | Option | Effect |
@@ -136,7 +126,7 @@ Canvas students, or Canvas groups, with no repo for the assignment. Both modes n
 Canvas config.
 
 ```
-gh-class-sak repos missing CLASSROOM ASSIGNMENT [--group CATEGORY]
+gh-class-sak repos missing COURSE ASSIGNMENT [--group CATEGORY]
 ```
 
 Without `--group`, a student counts as missing when their GitHub id — taken from the
@@ -153,7 +143,7 @@ enrolled student against an assignment's repos and sends a Canvas message to eac
 stuck on the way to their repo — one of three texts, each saying exactly what to do:
 
 ```
-gh-class-sak canvas message-missing CLASSROOM ASSIGNMENT [--dryrun/--no-dryrun]
+gh-class-sak canvas message-missing COURSE ASSIGNMENT [--dryrun/--no-dryrun]
 ```
 
 - **no-link** — the Canvas profile has no GitHub link: asks them to add
@@ -170,7 +160,7 @@ Students already collaborating on a repo are left alone, and Canvas's Student Vi
 "Test Student" is ignored — it isn't a person, and Canvas refuses to message it. A student with a working
 GitHub account but neither repo access nor a pending invitation gets no message — that
 one isn't theirs to fix — and is instead a loud, red error aimed at you (the run exits
-1): the org is out of sync with the meta, and `meta apply` is the cure. Needs the
+1): the org is out of sync with the meta, and `sync` is the cure. Needs the
 Canvas config. Like every mutating
 command it previews by default: the dry run lists who would get which message and
 prints the full message texts, so nothing goes out sight-unseen. The texts live in one
@@ -182,7 +172,7 @@ Clone every repo for an assignment into `--dest`, one directory per team, fast-f
 any that are already there.
 
 ```
-gh-class-sak repos clone CLASSROOM ASSIGNMENT [--dest DIR] [--dryrun/--no-dryrun]
+gh-class-sak repos clone COURSE ASSIGNMENT [--dest DIR] [--dryrun/--no-dryrun]
 ```
 
 It writes to disk, so it previews by default and only acts with `--no-dryrun`:
@@ -203,17 +193,18 @@ in the clone URL, or in the checked-out `.git/config`.
 All course state lives in a private repo named `classroom-meta` inside the org —
 versioned, hand-editable, and invisible to students; the complete file-format reference
 is [The classroom-meta files](classroom-meta-files.md). Every command starts from it: an
-org without one gets an error pointing at `meta init` — one that also names the token as
+org without one gets an error pointing at `course init` — one that also names the token as
 a suspect, because a private repo the token can't see 404s exactly like one that was
-never created. Note that TAs are not given access to it: the `<classroom>-TAs` team is
+never created. Note that TAs are not given access to it: the `<course>-TAs` team is
 granted read on the student repos only, so a TA who will run these commands needs the
-team (or their account) added to `classroom-meta` by hand. An org hosts a set of classrooms (two
-Canvas sections often share one org). A classroom is a directory with a `classroom.ini`,
+team (or their account) added to `classroom-meta` by hand. An org hosts a set of courses (two
+Canvas sections often share one org). A course is a directory with a `classroom.ini`
+(the file keeps its name from the tool's GitHub Classroom days),
 and **every `.tsv` file in it is an assignment**, named by its basename:
 
 ```
 classroom-meta/
-  cs101_fall/                      one directory per classroom
+  cs101_fall/                      one directory per course
     classroom.ini                  [CLASSROOM] prefix and settings; [TAS] one
                                    identity per line; [TEMPLATE] and [GROUP_SETS]
                                    one ASSIGNMENT = VALUE each
@@ -226,7 +217,7 @@ suffix) and `STUDENTS`: comma-joined **identities** in `EMAIL/GITHUBID` syntax �
 `joe@example.com/JoeDevExample` when both are known, `joe@example.com/` for email only
 (resolved to a GitHub id via the Canvas profile's GitHub link), `/JoeDevExample`
 for a bare GitHub id. A
-repo's default name joins the non-empty parts of classroom `prefix`, assignment, and
+repo's default name joins the non-empty parts of the course's `prefix`, assignment, and
 `NAME` with dashes: with `prefix = sp26-195a`, row `team-1` of `hw1.tsv` becomes
 `sp26-195a-hw1-team-1`; with no prefix, just `hw1-team-1`. A default name longer than
 GitHub's 100-character limit is cut off at 100. A row whose name is already taken by another
@@ -234,37 +225,99 @@ row's repo is skipped with an error (exit 1) instead of sharing it; the run ends
 the fix: give the row a distinct `NAME`. The tool fills in the last two columns when it creates the repo: the URL, and GitHub's **permanent numeric repo id** —
 which is how a repo stays tracked even after students rename it.
 
-### meta init
+## course init
 
 Create the classroom-meta repo (when the org doesn't have one yet) and record a
-classroom. The argument is the **new course's name**, taken literally — partials only
-ever resolve classrooms that already exist. The org comes from `--org` (matched
-partially against `[ORGS]`), from the single configured org, or — with no config — from
-the argument itself; with several orgs configured and no `--org`, it's an error.
+course:
+
+```
+gh-class-sak course init COURSE [--org ORG] [--prefix PREFIX] [--template OWNER/NAME] [--canvas-course NAME] [--dryrun/--no-dryrun]
+```
+
+The argument is the **new course's name**, taken literally — partials only ever
+resolve courses that already exist. The org comes from `--org` (matched partially
+against `[ORGS]`), from the single configured org, or — with no config — from the
+argument itself; with several orgs configured and no `--org`, it's an error.
 
 With a Canvas config, the `[TAS]` section is seeded from the course's TA and
-teacher enrollments. `--prefix` defaults to the classroom argument itself (made
-repo-name safe), so a new classroom's repos are namespaced by its course name; pass
-`--prefix ""` to record none. Existing classrooms keep their recorded prefix — a
-re-init never backfills one. `--canvas-course NAME` records the Canvas
+teacher enrollments. `--prefix` defaults to the course argument itself (made
+repo-name safe), so a new course's repos are namespaced by its name; pass
+`--prefix ""` to record none. Existing courses keep their recorded prefix — a
+re-init never backfills one. `--template` records an `OWNER/NAME` GitHub template repo
+for every repo the course creates. `--canvas-course NAME` records the Canvas
 course's name in `classroom.ini`, and the Canvas lookups use it from then on (otherwise
-they match on the classroom directory name). The classroom's `<classroom>-TAs` team is
+they match on the course directory name). The course's `<course>-TAs` team is
 created right away, with the TAs as members and read access to whatever repos the
-classroom already has — usually none yet. Like every mutating command, it previews by
+course already has — usually none yet. Like every mutating command, it previews by
 default; in an org with no classroom-meta repo yet, a
 `would create private ORG/classroom-meta` line comes first:
 
 ```console
-$ gh-class-sak meta init CS-101 --org cs101-fall
+$ gh-class-sak course init CS-101 --org cs101-fall
 ⚠️  dry run: no changes will be made. add --no-dryrun to apply
 no canvas config; seed the [TAS] section by hand
 ⚠️  would record cs_101: prefix=CS-101 tas=-
 ⚠️  would create team "cs_101-TAs" in cs101-fall
 ```
 
-### meta assign
+## course list
 
-Feed it a team table — just the two columns, emails and logins mixed freely:
+List the courses the classroom-meta repos record — one row per course with its prefix,
+TA count, and each assignment with its team count. It reads only the meta repo, so it's
+fast: no live-org checks (that's `course show`'s job). Without arguments it walks every
+org in `[ORGS]`; `--org` lists one org, and a `COURSE` argument just that course:
+
+```console
+$ gh-class-sak course list --org cs101-fall
+scanning cs101-fall ...
+COURSE      PREFIX  TAS  ASSIGNMENTS
+cs101_fall  -       0    hw1(2) project(3)
+```
+
+Orgs are never discovered from your token — your account may belong to orgs with
+thousands of unrelated repos, and scanning them would take forever.
+
+## course show
+
+Print a course's recorded state — prefix, template, TAs, effective repo settings, and
+one table per assignment — checked against the live org:
+
+```
+gh-class-sak course show COURSE [--org ORG]
+```
+
+- each student in the tables carries a membership marker for their repo: ✅ means
+  collaborator, 📧 means invited but not yet accepted, ❌ means not a collaborator at
+  all (rows whose repo isn't created yet stay unmarked; a legend prints whenever
+  markers appear)
+- a `TAS TEAM` line compares the course's `<course>-TAs` team to the `[TAS]` section:
+  `(matches tas)`, `(not created — run: gh-class-sak sync)`, or the members that are
+  invited but not yet accepted, missing, or extra
+
+Once repos are recorded, `repos list`, `repos members`, `repos missing`, and `repos clone`
+all include them by id — so a renamed repo shows up under its original team name instead
+of silently vanishing.
+
+## course delete
+
+Delete a course from the classroom-meta repo, after showing its recorded state and
+confirming:
+
+```
+gh-class-sak course delete COURSE [--org ORG] [--delete-repo/--no-delete-repo] [--dryrun/--no-dryrun]
+```
+
+An **empty** course (no assignment tsvs) asks for a simple yes/no. One **with
+assignments** lists them and asks you to type the **full name of one of them** — the
+type-to-confirm bar rises with what's at stake. The assignments' GitHub repos survive
+by default; `--delete-repo` deletes every recorded repo too. Like every mutating
+command it previews with `would …` lines until `--no-dryrun` — the confirmation happens
+either way. The course's `<course>-TAs` team is left alone.
+
+## assignment create
+
+Record an assignment and create its repos. The roster comes from a table you wrote —
+just the two columns, emails and logins mixed freely:
 
 ```
 NAME       STUDENTS
@@ -273,75 +326,75 @@ nightowls  /rpatel,/tk-codes
 ```
 
 ```
-gh-class-sak meta assign CLASSROOM project.tsv [--assignment NAME] [--remove-unlisted-contributors] [--dryrun/--no-dryrun]
+gh-class-sak assignment create COURSE NAME --roster FILE [--org ORG] [--template REPO_URL] [--remove-unlisted-contributors] [--dryrun/--no-dryrun]
 ```
 
-The table lands in the classroom directory as an assignment named after the file's
-basename (`project.tsv` → `project`); `--assignment` overrides that. Emails are resolved
-to GitHub logins via the student's Canvas profile link — never a GitHub search; an
-email nothing can resolve is a loud error. Under `--no-dryrun` it creates each missing
-repo (privately, from the template when `classroom.ini` names one), records the URL and
-repo id, and grants the listed students push. It then converges the whole classroom
-exactly as [`meta apply`](#meta-apply)'s passes 2–4 would: students missing from a
-recorded repo are invited, unlisted collaborators are warned about (the same
-`--remove-unlisted-contributors` flag revokes them, with the same safety rule for
-unresolved identities), empty repos are welcome-seeded, drifted branch protection is
-re-applied, and the classroom's TA team is reconciled so new repos are TA-readable
-immediately. Re-importing an updated table changes student lists but **never clobbers
-a recorded repo**.
+The table lands in the course directory as `NAME.tsv`. Emails are resolved to GitHub
+logins via the student's Canvas profile link — never a GitHub search; an email nothing
+can resolve is a loud error. Under `--no-dryrun` it creates each missing repo
+(privately, from the template when there is one), records the URL and repo id, and
+grants the listed students push. It then brings **this assignment's** repos in line
+exactly as [`sync`](#sync)'s passes 2–3 would — students missing from a recorded repo
+are invited, unlisted collaborators are warned about (`--remove-unlisted-contributors`
+revokes them, with the same safety rule for unresolved identities), empty repos are
+welcome-seeded, drifted branch protection is re-applied — and gives the course's
+`<course>-TAs` team read on them, so new repos are TA-readable immediately. The rest of
+the course — other assignments' repos, the TA team's membership, a TA team that
+doesn't exist yet — is left to `sync`. Running it again with an updated roster merges
+the new rows in and changes student lists, but **never clobbers a recorded repo**.
 
 `--template REPO_URL` gives the assignment starter content: the URL is validated first
 (`git ls-remote`; an unreachable repo is an error before anything happens), recorded in
 `classroom.ini`'s `[TEMPLATE]` section as `ASSIGNMENT = REPO_URL`, and every **new**
-repo created for the assignment — now or by a later `meta apply` — is seeded from a
+repo created for the assignment — now or by a later `sync` — is seeded from a
 shallow clone of it, pushed as a single fresh commit so students get the content
 without the template's history. A `[TEMPLATE]` record takes precedence over the
-classroom-wide `template` for its assignment, and `--template` with `--assignment` but
-no table records or updates a template without re-supplying the roster.
+course-wide `template` for its assignment, and `--template` without a roster records
+or updates a template alone.
 
-Instead of a file, `--from-canvas` builds the table from the Canvas roster
-(`--assignment` is required then, since there's no filename to name it):
+Instead of a file, `--from-canvas` builds the roster from Canvas:
 
 ```
-gh-class-sak meta assign CLASSROOM --from-canvas --assignment hw1 [--canvas-group SET] [--remove-dropped]
+gh-class-sak assignment create COURSE NAME --from-canvas [--canvas-group SET] [--remove-dropped]
 ```
 
 Without `--canvas-group`, everyone enrolled in the course — students, instructors, and
 TAs alike — gets a row: the `NAME` is the person's name made GitHub-safe (accents
 stripped, anything a repo name can't hold becomes `-`), and the `STUDENTS` entry is
-their `email/githubid` identity — both halves, as far as Canvas knows them. With `--canvas-group SET`, each **group** in that Canvas group set gets a
-row instead, its members drawn from the roster the same way — and the group set's name
-is recorded in `classroom.ini` under `[GROUP_SETS]` for the assignment. Everything else
-works exactly like a file import: merge, never-clobber, dryrun first.
+their `email/githubid` identity — both halves, as far as Canvas knows them. With
+`--canvas-group SET`, each **group** in that Canvas group set gets a row instead, its
+members drawn from the roster the same way — and the group set's name is recorded in
+`classroom.ini` under `[GROUP_SETS]` for the assignment. Everything else works exactly
+like a file import: merge, never-clobber, dryrun first.
 
 A recorded row whose person (or group) is no longer in Canvas — a student who dropped
 the class — is warned about and left in place; `--remove-dropped` removes the row
 instead. The row's repo is never deleted: it stays on GitHub, untracked, with its
-collaborators intact (the run warns about each repo it leaves behind, and the TA team's
-read grant on it is revoked as the classroom converges). A student who is still
-enrolled but whose Canvas entry carries neither an email nor a GitHub link is never
-treated as dropped.
+collaborators intact (the run warns about each repo it leaves behind, and the next
+`sync` revokes the TA team's read grant on it). A student who is still enrolled but
+whose Canvas entry carries neither an email nor a GitHub link is never treated as
+dropped.
 
-### meta apply
+## sync
 
-Reconcile the org to match the classroom-meta repo:
+Make GitHub match the classroom-meta repo:
 
 ```
-gh-class-sak meta apply CLASSROOM [--remove-unlisted-contributors] [--dryrun/--no-dryrun]
+gh-class-sak sync (COURSE | --org ORG) [--remove-unlisted-contributors] [--dryrun/--no-dryrun]
 ```
 
-Naming a classroom reconciles just that one; naming the org reconciles every classroom
-directory. The files are the source of truth: a run works out what the org is missing
-and changes only that, in four passes per classroom.
+Naming a course syncs just that one; `--org` alone syncs every course in the org. The
+files are the source of truth: a run works out what the org is missing and changes
+only that, in four passes per course.
 
 **1. Every row gets a repo.** A row whose `REPO_ID` is empty — imported or hand-added
 to any assignment's tsv — is realized. If a repo already exists under the row's
 default name (`prefix-assignment-NAME`), it is **adopted**: recorded, contents
 untouched. Otherwise a private repo is created and seeded from the first of: the
 assignment's `[TEMPLATE]` record (its content, as one fresh commit on the repo's
-default branch), the classroom-wide `template` repo, or nothing (an empty repo). An
+default branch), the course-wide `template` repo, or nothing (an empty repo). An
 unreachable `[TEMPLATE]` url fails that row cleanly — the empty shell is deleted so
-the next run retries, the rest of the classroom proceeds, and the run exits 1. The
+the next run retries, the rest of the course proceeds, and the run exits 1. The
 row's listed students get **push** on the new repo.
 
 **2. Students match the rows.** Every row with a recorded repo — found by its
@@ -356,15 +409,15 @@ left entirely alone — a shrunken list must never masquerade as the roster — 
 run exits 1.
 
 **3. Protection matches the settings.** Every recorded repo's default branch carries
-the classroom's `protection`/`linear_history`/`force_push` — mechanics and caveats
+the course's `protection`/`linear_history`/`force_push` — mechanics and caveats
 under [Repo settings](#repo-settings).
 
-**4. The TA team matches `[TAS]`.** Each classroom's **`<classroom>-TAs`** team is
+**4. The TA team matches `[TAS]`.** Each course's **`<course>-TAs`** team is
 created if missing, its membership is made exactly the `[TAS]` identities (pending
 invitations count as membership; members not in `[TAS]` are removed), and it holds
-**read** on exactly the classroom's repos — the per-assignment name matches plus
+**read** on exactly the course's repos — the per-assignment name matches plus
 every recorded id — so TAs accept one org invite ever and never gain access to
-another classroom's repos. Team grants outside the classroom are revoked, the
+another course's repos. Team grants outside the course are revoked, the
 classroom-meta repo itself excepted.
 
 What a run **writes back**: `REPO` and `REPO_ID` on the rows it realized — only the
@@ -374,27 +427,24 @@ touch an org admin, modify the contents of an existing repo, remove branch
 protection, delete a tsv, or delete a repo (beyond rolling back a shell it created
 moments earlier in the seed-failure case above).
 
-Apply is idempotent — run it twice and the second pass prints `nothing to do` — and,
+Sync is idempotent — run it twice and the second pass prints `nothing to do` — and,
 like every mutating command, a preview with ⚠️ until `--no-dryrun`. Exit status: `1`
 when an identity didn't resolve or a template seed failed (the org may be part-way
-reconciled; fix the cause and re-run), `2` when the classroom or its classroom-meta
+synced; fix the cause and re-run), `2` when the course or its classroom-meta
 repo can't be found at all.
 
-### Assign or apply?
+### assignment create or sync?
 
-Both commands end with the same converge passes, so either one leaves the classroom
-matching its files — the difference is what you're holding when something changes.
-Something new to **record** — a team table, a Canvas roster, a template URL — is
-`meta assign`: it imports first, then converges. Nothing to import, just changes that
-need to **land** — a hand-edited tsv row, a new `[TAS]` entry, changed repo settings,
-a student who fixed their Canvas profile link, a fresh
-`migrate-github-classroom` import — is `meta apply`. Apply is also the one that
-takes the whole org in one run (name the org instead of a classroom, and every
-classroom directory reconciles); assign works one classroom at a time.
+`assignment create` is for something new to **record** — a roster table, a Canvas
+roster, a template URL — and it only touches that assignment's repos. `sync` is for
+changes that need to **land** across the course — a hand-edited tsv row, a new `[TAS]`
+entry, changed repo settings, a student who fixed their Canvas profile link, a fresh
+`migrate-github-classroom` import. Sync also takes a whole org in one run (`--org`
+alone, and every course syncs).
 
 ### Repo settings
 
-`classroom.ini` can also carry branch-protection settings for the classroom's repos:
+`classroom.ini` can also carry branch-protection settings for the course's repos:
 
 ```
 [CLASSROOM]
@@ -404,11 +454,12 @@ linear_history = true      # default true: require a linear history
 force_push = false         # default false: block force pushes
 ```
 
-`meta assign` and `meta apply` put the effective settings on each repo's default branch.
-GitHub can't protect a branch that doesn't exist yet, so a repo created without a
-template gets a `WELCOME.md` initial commit first — the branch exists and the
-protection lands in the same run. Both commands repair drift on every recorded repo,
-checking first so an untouched org still reconciles to `nothing to do`.
+(The section keeps its `[CLASSROOM]` name from the tool's GitHub Classroom days.)
+`assignment create` and `sync` put the effective settings on each repo's default
+branch. GitHub can't protect a branch that doesn't exist yet, so a repo created without
+a template gets a `WELCOME.md` initial commit first — the branch exists and the
+protection lands in the same run. Both commands repair drift on every repo they cover,
+checking first so an untouched org still syncs to `nothing to do`.
 
 Two caveats: GitHub can't protect private repos on a free org plan — the tool warns and
 moves on — and a protection write replaces the whole protection object, so hand-set extras
@@ -416,52 +467,19 @@ like required status checks don't survive it. The all-off trio (`protection = no
 `linear_history = false`, `force_push = true`) asks for nothing and skips the protection
 API entirely; existing protection is never removed.
 
-### meta delete
+## Renamed commands
 
-Delete a classroom from the classroom-meta repo, after showing its recorded state and
-confirming:
+Earlier versions named things after GitHub Classroom. The old commands still work —
+unchanged, and hidden from `--help` — and at a terminal each one says what replaced it:
 
-```
-gh-class-sak meta delete CLASSROOM [--delete-repo/--no-delete-repo] [--dryrun/--no-dryrun]
-```
-
-An **empty** classroom (no assignment tsvs) asks for a simple yes/no. One **with
-assignments** lists them and asks you to type the **full name of one of them** — the
-type-to-confirm bar rises with what's at stake. The assignments' GitHub repos survive
-by default; `--delete-repo` deletes every recorded repo too. Like every mutating
-command it previews with `would …` lines until `--no-dryrun` — the confirmation happens
-either way. The classroom's `<classroom>-TAs` team is left alone.
-
-### meta show
-
-Print a classroom's recorded state — prefix, template, TAs, effective repo settings, and
-one table per assignment — checked against the live org:
-
-- each student in the tables carries a membership marker for their repo: ✅ means
-  collaborator, 📧 means invited but not yet accepted, ❌ means not a collaborator at
-  all (rows whose repo isn't created yet stay unmarked; a legend prints whenever
-  markers appear)
-- a `TAS TEAM` line compares the classroom's `<classroom>-TAs` team to the `[TAS]` section:
-  `(matches tas)`, `(not created — run: meta apply)`, or the members that are invited
-  but not yet accepted, missing, or extra
-
-Once repos are recorded, `repos list`, `repos members`, `repos missing`, and `repos clone`
-all include them by id — so a renamed repo shows up under its original team name instead
-of silently vanishing.
-
-### meta list
-
-List the classrooms the classroom-meta repos record — one row per classroom with its
-prefix, TA count, and each assignment with its team count. It reads only the meta repo,
-so it's fast: no live-org checks (that's `meta show`'s job). Without an argument it
-walks every org in `[ORGS]`; the argument names an org or a single classroom:
-
-```console
-$ gh-class-sak meta list cs101-fall
-scanning cs101-fall ...
-CLASSROOM   PREFIX  TAS  ASSIGNMENTS
-cs101_fall  -       0    hw1(2) project(3)
-```
+| Old | New |
+|---|---|
+| `meta init CLASSROOM` | `course init COURSE` |
+| `meta list`, `classrooms` | `course list` |
+| `meta show CLASSROOM` | `course show COURSE` |
+| `meta delete CLASSROOM` | `course delete COURSE` |
+| `meta assign CLASSROOM TABLE` | `assignment create COURSE NAME --roster TABLE` (it covers only that assignment; `sync` does the rest of the course) |
+| `meta apply CLASSROOM` | `sync COURSE`, or `sync --org ORG` for every course in an org |
 
 ## How group matching works
 
