@@ -196,6 +196,13 @@ def _announce_dryrun(ctx, param, value):
     return value
 
 
+def announce_dryrun():
+    """the dryrun option's announcement, for a command that previews only
+    some of the time (a settings command that shows when given nothing)."""
+    ctx = click.get_current_context()
+    _announce_dryrun(ctx, None, True)
+
+
 def _dryrun_footer(ctx):
     if said["would"] and not ctx.meta.get(LEGACY):
         _warning_line("that was a preview: nothing changed. add --no-dryrun to apply")

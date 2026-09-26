@@ -8,17 +8,24 @@ import sys
 
 import click
 
+from gh_class_sak import meta_store as ms
 from gh_class_sak.commands import meta as m
 from gh_class_sak.core import (
+    announce_dryrun,
     config_ini,
     configured_orgs,
     dryrun_option,
     error,
     get_github,
+    get_token,
     gh_class_sak,
     match_org,
+    output,
+    progress,
     resolve_course,
+    warn,
 )
+from gh_class_sak.github_api import get_repo_by_id, list_org_repos
 
 org_option = click.option(
     "--org", default=None,
@@ -112,6 +119,185 @@ def course_delete(course, org, delete_repo, dryrun):
     """
     gh = get_github()
     m._delete(gh, *resolve_course(gh, course, org), course, delete_repo, dryrun)
+
+
+def _open_course(gh, course, org):
+    """(org, classroom dir, meta checkout, recorded data) for COURSE."""
+    org, classroom_dir = resolve_course(gh, course, org)
+    _repo, checkout = m._open_meta(gh, org)
+    return org, classroom_dir, checkout, m._load_classroom(checkout, classroom_dir)
+
+
+def _save_ini(checkout, classroom_dir, data, message):
+    """write classroom.ini (no tsvs) and push it."""
+    ms.save_classroom(checkout, classroom_dir, data["prefix"], data["template"],
+                      tas=data["tas"], **m._ini_settings(data))
+    ms.commit_and_push(checkout, message, get_token())
+
+
+def _identity(entry):
+    """the entry in EMAIL/GITHUBID syntax; bare entries parse the legacy way."""
+    email, github = ms.parse_identity(entry)
+    if not email and not github:
+        error(f'"{entry}" is not an identity: use EMAIL/GITHUBID, EMAIL/,'
+              " or /GITHUBID")
+        sys.exit(2)
+    return ms.format_identity(email, github)
+
+
+def _same_person(a, b):
+    """identities sharing a half (case-insensitive) name the same person."""
+    email_a, github_a = ms.parse_identity(a)
+    email_b, github_b = ms.parse_identity(b)
+    return bool((github_a and github_b and github_a.lower() == github_b.lower())
+                or (email_a and email_b and email_a.lower() == email_b.lower()))
+
+
+@course_group.group("ta")
+def ta_group():
+    """Add or remove a course's TAs: the record and the TAs team together.
+
+    An IDENTITY is EMAIL/GITHUBID, EMAIL/ (resolved via the canvas profile's
+    github link), or /GITHUBID.
+    """
+    pass
+
+
+def _change_tas(gh, org, classroom_dir, checkout, data, tas, dryrun):
+    """record the new [TAS] list, then bring the TAs team in line with it."""
+    actions = []
+    if tas != data["tas"]:
+        data = {**data, "tas": tas}
+        m._perform(dryrun, f"record {classroom_dir} tas: {', '.join(tas) or '-'}",
+                   lambda: _save_ini(checkout, classroom_dir, data,
+                                     f"tas {classroom_dir}"),
+                   actions)
+    resolve = m._make_resolver(org, data["canvas_course"] or classroom_dir)
+    failures = []
+    logins = m._resolve_tas(data["tas"], resolve, failures)
+    all_repos = list_org_repos(gh, org)
+    by_id = {r.id: r for r in all_repos}
+    universe = m._classroom_universe(gh, org, data, all_repos, by_id)
+    m._reconcile_tas_team(gh, org, classroom_dir, logins, universe, dryrun,
+                          actions, failures)
+    if not actions:
+        output("nothing to do")
+    m._summarize(actions, dryrun)
+    if failures:
+        sys.exit(1)
+
+
+@ta_group.command("add")
+@click.argument("course")
+@click.argument("identities", metavar="IDENTITY...", nargs=-1, required=True)
+@org_option
+@dryrun_option
+def ta_add(course, identities, org, dryrun):
+    """Add TAs to COURSE: record them and invite them to its TAs team."""
+    wanted = [_identity(entry) for entry in identities]
+    gh = get_github()
+    org, classroom_dir, checkout, data = _open_course(gh, course, org)
+    tas = list(data["tas"])
+    for entry in wanted:
+        if any(_same_person(entry, ta) for ta in tas):
+            warn(f"{entry} is already a TA of {classroom_dir}")
+        else:
+            tas.append(entry)
+    _change_tas(gh, org, classroom_dir, checkout, data, tas, dryrun)
+
+
+@ta_group.command("remove")
+@click.argument("course")
+@click.argument("identities", metavar="IDENTITY...", nargs=-1, required=True)
+@org_option
+@dryrun_option
+def ta_remove(course, identities, org, dryrun):
+    """Remove TAs from COURSE: from the record and from its TAs team.
+
+    Either half of an identity is enough to name the TA.
+    """
+    unwanted = [_identity(entry) for entry in identities]
+    gh = get_github()
+    org, classroom_dir, checkout, data = _open_course(gh, course, org)
+    tas = list(data["tas"])
+    for entry, typed in zip(unwanted, identities):
+        if not any(_same_person(entry, ta) for ta in tas):
+            error(f'"{typed}" is not a TA of {classroom_dir}.'
+                  f" its TAs: {', '.join(data['tas']) or 'none'}")
+            sys.exit(2)
+        tas = [ta for ta in tas if not _same_person(entry, ta)]
+    _change_tas(gh, org, classroom_dir, checkout, data, tas, dryrun)
+
+
+def _setting_text(value):
+    if value is None:
+        return "-"
+    return str(value).lower() if isinstance(value, bool) else value
+
+
+@course_group.command("settings")
+@click.argument("course")
+@org_option
+@click.option("--protection", type=click.Choice(ms.PROTECTION_VALUES), default=None,
+              help="none, or pr-review: merging needs one approving review")
+@click.option("--linear-history/--no-linear-history", default=None,
+              help="require a linear history on the default branch")
+@click.option("--force-push/--no-force-push", default=None,
+              help="allow force pushes to the default branch")
+@click.option("--template", default=None,
+              help='OWNER/NAME template repo for the course\'s new repos ("" for none)')
+@click.option("--dryrun/--no-dryrun", default=True,
+              help="preview changes (default); --no-dryrun applies them")
+def course_settings(course, org, protection, linear_history, force_push,
+                    template, dryrun):
+    """Show COURSE's repo settings, or change them.
+
+    A change is recorded and the branch protection is put on every recorded
+    repo right away; a template only affects repos created from now on.
+    Existing protection is never removed.
+    """
+    requested = {key: value for key, value in (
+        ("protection", protection), ("linear_history", linear_history),
+        ("force_push", force_push), ("template", template)) if value is not None}
+    gh = get_github()
+    org, classroom_dir, checkout, data = _open_course(gh, course, org)
+    current = dict(zip(m.REPO_SETTING_KEYS, ms.effective_repo_settings(data)),
+                   template=data["template"])
+    if not requested:
+        output(f"{classroom_dir}: " + " ".join(
+            f"{key}={_setting_text(value)}" for key, value in current.items()))
+        return
+
+    if dryrun:
+        announce_dryrun()
+    if "template" in requested:
+        requested["template"] = requested["template"] or None
+    changed = {key: value for key, value in requested.items()
+               if current[key] != value}
+    actions = []
+    if changed:
+        data = {**data, **changed}
+        m._perform(dryrun, f"record {classroom_dir} settings: " + " ".join(
+                       f"{key}={_setting_text(value)}"
+                       for key, value in changed.items()),
+                   lambda: _save_ini(checkout, classroom_dir, data,
+                                     f"settings {classroom_dir}"),
+                   actions)
+    if any(key in changed for key in m.REPO_SETTING_KEYS):
+        desired = ms.effective_repo_settings(data)
+        recorded = [row for rows in data["assignments"].values()
+                    for row in rows if row["repo_id"] is not None]
+        by_id = {r.id: r for r in list_org_repos(gh, org)}
+        for row in progress(recorded, f"protecting {classroom_dir}"):
+            repo = by_id.get(row["repo_id"]) or get_repo_by_id(gh, row["repo_id"])
+            if repo is None:
+                warn(f"recorded repo for {row['name']} (id {row['repo_id']}) is gone")
+                continue
+            if not m._seed_empty_repo(repo, classroom_dir, desired, dryrun, actions):
+                m._reconcile_repo_protection(repo, desired, dryrun, actions)
+    if not actions:
+        output("nothing to do")
+    m._summarize(actions, dryrun)
 
 
 @gh_class_sak.group("assignment")
