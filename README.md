@@ -3,6 +3,11 @@
 **Manage a whole course's GitHub repos from the command line — now that GitHub Classroom
 is gone.**
 
+The name says what it is: **gh** for GitHub, **class** for the class you teach, and
+**SAK** for Swiss Army Knife — one command-line tool with a blade for each course-repo
+chore: setting up repos, keeping access in line, listing, cloning for grading, and
+chasing students on Canvas.
+
 [![CI](https://github.com/breed/gh-class-sak/actions/workflows/ci.yml/badge.svg)](https://github.com/breed/gh-class-sak/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/gh-class-sak)](https://pypi.org/project/gh-class-sak/)
 [![Python](https://img.shields.io/pypi/pyversions/gh-class-sak)](https://pypi.org/project/gh-class-sak/)
