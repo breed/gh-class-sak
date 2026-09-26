@@ -30,6 +30,7 @@ from gh_class_sak.core import (
     normalize_course_name,
     output,
     progress,
+    renamed,
     resolve_classroom,
     warn,
     would,
@@ -568,10 +569,25 @@ def _reconcile_recorded_repos(gh, org, classroom_dir, data, resolve,
     return universe
 
 
-@gh_class_sak.group()
-def meta():
-    """Manage the org's classroom-meta repo: one directory per classroom."""
-    pass
+# the course-centered commands that replace the meta subcommands
+RENAMED = {
+    "init": "gh-class-sak course init COURSE",
+    "list": "gh-class-sak course list",
+    "show": "gh-class-sak course show COURSE",
+    "delete": "gh-class-sak course delete COURSE",
+    "assign": "gh-class-sak assignment create COURSE NAME --roster FILE"
+              " (then gh-class-sak sync COURSE for the rest of the course)",
+    "apply": "gh-class-sak sync COURSE (or --org ORG for every course)",
+}
+
+
+@gh_class_sak.group(hidden=True)
+@click.pass_context
+def meta(ctx):
+    """Renamed: see course, assignment create, and sync."""
+    if ctx.invoked_subcommand in RENAMED:
+        renamed(f"gh-class-sak meta {ctx.invoked_subcommand}",
+                RENAMED[ctx.invoked_subcommand])
 
 
 def _pick_org(org_option, classroom):

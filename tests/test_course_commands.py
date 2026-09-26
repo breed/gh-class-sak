@@ -210,3 +210,33 @@ class TestAssignmentCreateScope:
         assert course_env.org._teams == {}
         assert f'team "{COURSE}-TAs" is missing; run: gh-class-sak sync' \
             f" {COURSE}" in result.output
+
+
+class TestRenamedCommands:
+    """the old names still work, hidden from --help, with a hint for humans."""
+
+    def test_old_names_are_hidden_from_help(self, course_env):
+        result = run(course_env.runner, "--help")
+        commands = result.output.split("Commands:")[1].split()
+        assert "meta" not in commands and "classrooms" not in commands
+        assert "course" in commands and "sync" in commands
+
+    @pytest.mark.parametrize("old, new", [
+        (["meta", "show", ORG], "gh-class-sak course show COURSE"),
+        (["meta", "apply", ORG], "gh-class-sak sync COURSE"),
+        (["meta", "list", ORG], "gh-class-sak course list"),
+        (["classrooms", ORG], "gh-class-sak course list"),
+    ])
+    def test_a_terminal_user_is_told_the_new_name(self, course_env, monkeypatch,
+                                                  old, new):
+        seed_meta(course_env)
+        monkeypatch.setattr(core, "_interactive", lambda: True)
+        result = run(course_env.runner, *old)
+        assert result.exit_code == 0, result.output
+        assert f"is renamed: use {new}" in result.output
+
+    def test_scripts_see_no_hint(self, course_env):
+        seed_meta(course_env)
+        result = run(course_env.runner, "meta", "show", ORG)
+        assert result.exit_code == 0, result.output
+        assert "renamed" not in result.output

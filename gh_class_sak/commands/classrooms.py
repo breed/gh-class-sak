@@ -11,15 +11,17 @@ from gh_class_sak.core import (
     gh_class_sak,
     info,
     output,
+    renamed,
     resolve_classroom,
 )
 from gh_class_sak.meta_store import read_meta_classrooms, report_missing_meta
 
 
-@gh_class_sak.command()
+@gh_class_sak.command(hidden=True)
 @click.argument("classroom", required=False)
 def classrooms(classroom):
-    """List assignments for CLASSROOM, or for every configured classroom."""
+    """Renamed: see course list."""
+    renamed("gh-class-sak classrooms", "gh-class-sak course list")
     gh = get_github()
 
     partial = None

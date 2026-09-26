@@ -419,6 +419,12 @@ def _interactive():
     return sys.stderr.isatty()
 
 
+def renamed(old, new):
+    """point a human at the new name of a renamed command; scripts see nothing."""
+    if _interactive():
+        warn(f'"{old}" is renamed: use {new}')
+
+
 @click.group()
 @click.version_option(version=version("gh-class-sak"), prog_name="gh-class-sak")
 def gh_class_sak():
