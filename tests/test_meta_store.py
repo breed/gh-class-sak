@@ -183,6 +183,11 @@ class TestJoinRepoName:
         assert ms.join_repo_name(None, "hw1", "team-1") == "hw1-team-1"
         assert ms.join_repo_name("", "hw1", "team-1") == "hw1-team-1"
 
+    def test_a_name_past_githubs_limit_is_cut_at_100(self):
+        name = ms.join_repo_name("sp26-195a", "hw1", "x" * 200)
+        assert name == ("sp26-195a-hw1-" + "x" * 200)[:100]
+        assert len(name) == ms.MAX_REPO_NAME_LEN == 100
+
 
 @pytest.fixture
 def bare_origin(tmp_path):

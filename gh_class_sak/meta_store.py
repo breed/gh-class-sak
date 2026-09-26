@@ -33,6 +33,8 @@ META_REPO_NAME = "classroom-meta"
 STUDENTS_HEADERS = ("NAME", "STUDENTS", "REPO", "REPO_ID")
 EMPTY = "-"
 PROTECTION_VALUES = ("none", "pr-review")
+# github refuses a repo name longer than this
+MAX_REPO_NAME_LEN = 100
 
 
 # --- classroom.ini ---------------------------------------------------
@@ -142,8 +144,9 @@ def join_repo_name(*parts):
 
     an unset classroom prefix simply drops its segment, so a repo made for
     row team-1 of assignment hw1 is prefix-hw1-team-1, or hw1-team-1.
+    a name past github's limit is cut off at MAX_REPO_NAME_LEN.
     """
-    return "-".join(part for part in parts if part)
+    return "-".join(part for part in parts if part)[:MAX_REPO_NAME_LEN]
 
 
 # --- tas ------------------------------------------------------------------

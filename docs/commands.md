@@ -228,7 +228,8 @@ suffix) and `STUDENTS`: comma-joined **identities** in `EMAIL/GITHUBID` syntax â
 for a bare GitHub id. A
 repo's default name joins the non-empty parts of classroom `prefix`, assignment, and
 `NAME` with dashes: with `prefix = sp26-195a`, row `team-1` of `hw1.tsv` becomes
-`sp26-195a-hw1-team-1`; with no prefix, just `hw1-team-1`. The tool fills in the last two
+`sp26-195a-hw1-team-1`; with no prefix, just `hw1-team-1`. A default name longer than
+GitHub's 100-character limit is cut off at 100. The tool fills in the last two
 columns when it creates the repo: the URL, and GitHub's **permanent numeric repo id** â€”
 which is how a repo stays tracked even after students rename it.
 
