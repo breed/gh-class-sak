@@ -506,7 +506,7 @@ class UsageOrderGroup(click.Group):
 
 @click.group(cls=UsageOrderGroup, order=(
     "help-me-setup", "course", "assignment", "sync", "repos", "canvas",
-    "migrate-github-classroom"))
+    "migrate-github-classroom", "completion"))
 @click.version_option(version=version("gh-class-sak"), prog_name="gh-class-sak")
 def gh_class_sak():
     """Manage a course's GitHub repos from the command line.

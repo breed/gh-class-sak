@@ -202,3 +202,4 @@ def help_me_setup(create_config):
         error(f"needs attention: {', '.join(problems)}")
         sys.exit(1)
     output("everything looks good")
+    output("tip: tab-completion — gh-class-sak completion --help")

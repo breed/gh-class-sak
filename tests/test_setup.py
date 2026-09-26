@@ -180,3 +180,12 @@ class TestTokenScope:
         assert 'lacks the "repo" scope' in result.output
         assert "gh auth refresh -h github.com -s repo" in result.output
         assert "needs attention: token scope" in result.output
+
+
+def test_a_good_setup_mentions_tab_completion(cli, config_file, fake_canvas,
+                                              monkeypatch):
+    with_token(monkeypatch)
+    monkeypatch.setattr(setup_cmd, "canvas_client", lambda config: fake_canvas)
+    result = run(cli, "help-me-setup")
+    assert result.exit_code == 0, result.output
+    assert "tip: tab-completion — gh-class-sak completion --help" in result.output

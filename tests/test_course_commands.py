@@ -454,7 +454,7 @@ class TestHelpOrder:
     def test_top_level_starts_with_setup(self, course_env):
         assert self.listed(course_env.runner) == [
             "help-me-setup", "course", "assignment", "sync", "repos", "canvas",
-            "migrate-github-classroom"]
+            "migrate-github-classroom", "completion"]
 
     def test_course_starts_with_init(self, course_env):
         assert self.listed(course_env.runner, "course") == [
@@ -626,3 +626,23 @@ class TestInitLike:
         assert result.exit_code == 2
         assert '"cs_101" already exists; --like only seeds a new course' \
             in result.output
+
+
+class TestCompletion:
+    def test_zsh(self, course_env):
+        result = run(course_env.runner, "completion", "zsh")
+        assert result.exit_code == 0, result.output
+        assert "_GH_CLASS_SAK_COMPLETE" in result.output
+        assert "compdef" in result.output
+
+    def test_the_shell_defaults_to_the_login_shell(self, course_env, monkeypatch):
+        monkeypatch.setenv("SHELL", "/usr/bin/bash")
+        result = run(course_env.runner, "completion")
+        assert result.exit_code == 0, result.output
+        assert "complete -o nosort -F" in result.output
+
+    def test_an_unknown_shell_is_an_error(self, course_env, monkeypatch):
+        monkeypatch.setenv("SHELL", "/bin/tcsh")
+        result = run(course_env.runner, "completion")
+        assert result.exit_code == 2
+        assert "bash, zsh, or fish" in result.output
