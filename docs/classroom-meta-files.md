@@ -61,8 +61,9 @@ Every key is optional; unset keys are simply not written back.
   preferred over the directory name for Canvas lookups. `protection`
   (`none`/`pr-review`), `linear_history` (default true), `force_push` (default false):
   branch protection applied to each repo's default branch by `assignment create`/`sync`.
+  `course settings` shows and changes `template` and the three protection keys.
 - **`[TAS]`** — one identity per line (see identities, below). Realized as the TA
-  team.
+  team. `course ta add`/`remove` edit it for you.
 - **`[TEMPLATE]`** — one `ASSIGNMENT = REPO_URL` record each: new repos for that
   assignment are seeded from a shallow clone of the URL, pushed as a single fresh
   commit (content, not history). Takes precedence over the course-wide `template`.
@@ -124,6 +125,8 @@ Each course's `[TAS]` section is realized as an org team named
 **`<course>-TAs`** (GitHub slugs that to lowercase; the tool looks teams up by
 slug, so hand-created `-tas` teams match too):
 
+- **Changed by `course ta add`/`remove`**, which edit `[TAS]` and the team's
+  membership in one step.
 - **Created by `course init`**, with the resolved TA identities as members — so the team
   exists from day one, before any repos do. TAs accept **one org invitation ever**,
   instead of one per repo.

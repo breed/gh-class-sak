@@ -23,6 +23,19 @@ The `repos` and `canvas` commands are more lenient: their `COURSE` may also name
 org, when it hosts a single course — with no config, the argument is used verbatim as
 the org name.
 
+## Previews, summaries, and next steps
+
+Every command that changes something previews by default: it opens with
+`⚠️  dry run: no changes will be made`, prints a `⚠️  would …` line per change, and —
+when it previewed anything — ends with
+`⚠️  that was a preview: nothing changed. add --no-dryrun to apply`, since a long
+preview scrolls the opening line away. `--no-dryrun` applies the changes.
+
+`sync`, `assignment create`, `course ta`, and `course settings` end with a one-line
+summary of what changed (or, in a preview, what would) and how many warnings and errors
+were printed along the way — `summary: 2 repos created, 2 invitations, 1 warning`.
+After a real run, `course init` and `assignment create` name the next step.
+
 ## help-me-setup
 
 Explain the config file and verify the whole setup: the GitHub token, the config's
@@ -238,7 +251,9 @@ gh-class-sak course init COURSE [--org ORG] [--prefix PREFIX] [--template OWNER/
 The argument is the **new course's name**, taken literally — partials only ever
 resolve courses that already exist. The org comes from `--org` (matched partially
 against `[ORGS]`), from the single configured org, or — with no config — from the
-argument itself; with several orgs configured and no `--org`, it's an error.
+argument itself; with several orgs configured and no `--org`, it's an error. An org
+that isn't in the config's `[ORGS]` yet is added (the file is created if needed), so
+every later command finds the course without `--org`.
 
 With a Canvas config, the `[TAS]` section is seeded from the course's TA and
 teacher enrollments. `--prefix` defaults to the course argument itself (made
@@ -316,6 +331,37 @@ type-to-confirm bar rises with what's at stake. The assignments' GitHub repos su
 by default; `--delete-repo` deletes every recorded repo too. Like every mutating
 command it previews with `would …` lines until `--no-dryrun` — the confirmation happens
 either way. The course's `<course>-TAs` team is left alone.
+
+## course ta
+
+Add or remove a course's TAs — the `[TAS]` record and the `<course>-TAs` team change
+together, so there's no `classroom.ini` to edit by hand:
+
+```
+gh-class-sak course ta add COURSE IDENTITY... [--org ORG] [--dryrun/--no-dryrun]
+gh-class-sak course ta remove COURSE IDENTITY... [--org ORG] [--dryrun/--no-dryrun]
+```
+
+An `IDENTITY` is `EMAIL/GITHUBID`, `EMAIL/` (resolved via the Canvas profile's GitHub
+link), or `/GITHUBID`. `add` records the new TAs and invites them to the team, which
+already reads every one of the course's repos; adding a current TA only warns. `remove`
+takes either half of an identity, drops the matching TAs from the record, and removes
+them from the team; naming someone who isn't a TA is an error and changes nothing.
+
+## course settings
+
+Show a course's repo settings, or change them:
+
+```
+gh-class-sak course settings COURSE [--org ORG] [--protection none|pr-review] [--linear-history/--no-linear-history] [--force-push/--no-force-push] [--template OWNER/NAME] [--dryrun/--no-dryrun]
+```
+
+With no options it prints the effective settings. A change is recorded in
+`classroom.ini`, and a protection change is put on the default branch of every recorded
+repo in the same run (empty repos get their welcome commit first) — the mechanics and
+caveats are under [Repo settings](#repo-settings). A `--template` only affects repos
+created from then on; `--template ""` removes it. Setting a value the course already
+has is `nothing to do`.
 
 ## assignment create
 
@@ -458,8 +504,9 @@ force_push = false         # default false: block force pushes
 ```
 
 (The section keeps its `[CLASSROOM]` name from the tool's GitHub Classroom days.)
-`assignment create` and `sync` put the effective settings on each repo's default
-branch. GitHub can't protect a branch that doesn't exist yet, so a repo created without
+[`course settings`](#course-settings) changes them without editing the file.
+`assignment create`, `sync`, and `course settings` put the effective settings on each
+repo's default branch. GitHub can't protect a branch that doesn't exist yet, so a repo created without
 a template gets a `WELCOME.md` initial commit first — the branch exists and the
 protection lands in the same run. Both commands repair drift on every repo they cover,
 checking first so an untouched org still syncs to `nothing to do`.

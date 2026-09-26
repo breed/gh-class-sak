@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- `course init` adds the org to the config's `[ORGS]` when it isn't there,
+  so every later command finds the course without `--org`
+- a dry run that previewed anything now ends with `that was a preview:
+  nothing changed. add --no-dryrun to apply` — a long preview scrolls the
+  opening banner away
+- `sync`, `assignment create`, `course ta`, and `course settings` end with a
+  one-line summary: what changed (or would) by kind, and how many warnings
+  and errors were printed. After a real run, `course init` and
+  `assignment create` name the next step
+- `course ta add/remove COURSE IDENTITY...` changes the course's TAs — the
+  `[TAS]` record and the TAs team together — and `course settings COURSE`
+  shows or changes the repo settings (branch protection, template) and
+  applies new protection to every recorded repo right away. Neither needs
+  a hand edit of `classroom.ini`
 - the commands speak of **courses**, not classrooms, and are named for what
   they do: `course init`, `course list`, `course show`, `course delete`,
   `assignment create COURSE NAME` (with `--roster FILE` or `--from-canvas`),
