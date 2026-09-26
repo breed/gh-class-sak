@@ -367,6 +367,53 @@ def resolve_classroom(gh, name):
     return name, None
 
 
+def resolve_course(gh, name, org=None):
+    """resolve a COURSE argument to (github org, classroom dir).
+
+    unlike resolve_classroom the argument is always a course, never an org:
+    it matches the classroom directories of --org, or else of every
+    configured org. an exact name beats partial overlaps.
+    """
+    from gh_class_sak.meta_store import read_meta_classrooms, report_missing_meta
+
+    if org:
+        orgs = [match_org(org, configured_orgs()) or org]
+    else:
+        orgs = configured_orgs()
+        if not orgs:
+            error(f'which org hosts course "{name}"? pass --org ORG, or list'
+                  f" orgs in the [ORGS] section of {config_ini}")
+            sys.exit(2)
+
+    candidates = []
+    unreadable = []
+    for candidate_org in orgs:
+        classrooms, why = read_meta_classrooms(gh, candidate_org, get_token())
+        if not classrooms:
+            unreadable.append((candidate_org, why))
+        candidates.extend((candidate_org, classroom_dir)
+                          for classroom_dir in classrooms
+                          if _names_overlap(name, classroom_dir))
+    exact = [c for c in candidates if c[1] == normalize_course_name(name)]
+    if len(exact) == 1:
+        return exact[0]
+    if len(candidates) > 1:
+        error(f'ambiguous course "{name}", matches several courses:')
+        for candidate_org, classroom_dir in candidates:
+            error(f"    {candidate_org}: {classroom_dir}")
+        sys.exit(2)
+    if candidates:
+        return candidates[0]
+
+    for candidate_org, why in unreadable:
+        report_missing_meta(gh, candidate_org, why)
+    error(f'no course "{name}" recorded in {", ".join(orgs)}.'
+          " run: course list")
+    if not org and any(_names_overlap(name, o) for o in orgs):
+        error(f'"{name}" looks like an org: pass it as --org {name}')
+    sys.exit(2)
+
+
 def _interactive():
     """warnings are for humans at a terminal, not for pipes or the test suite."""
     return sys.stderr.isatty()

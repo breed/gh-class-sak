@@ -596,6 +596,11 @@ def _pick_org(org_option, classroom):
 @dryrun_option
 def meta_init(classroom, org, prefix, template, canvas_course, dryrun):
     """Create the classroom-meta repo and record CLASSROOM (a course name) in it."""
+    _init(classroom, org, prefix, template, canvas_course, dryrun)
+
+
+def _init(classroom, org, prefix, template, canvas_course, dryrun):
+    """record a new classroom, creating the org's classroom-meta repo if needed."""
     gh = get_github()
     org = _pick_org(org, classroom)
     classroom_dir = normalize_course_name(classroom)
@@ -734,7 +739,11 @@ def _tas_team_line(gh, org, classroom_dir, configured_tas, resolve):
 def meta_show(classroom):
     """Show a classroom's recorded state, checked against the live org."""
     gh = get_github()
-    org, partial = resolve_classroom(gh, classroom)
+    _show(gh, *resolve_classroom(gh, classroom), classroom)
+
+
+def _show(gh, org, partial, classroom):
+    """print the classroom's recorded state, checked against the live org."""
     _repo, checkout = _open_meta(gh, org)
     classroom_dir = _resolve_classroom_dir(checkout, partial, classroom)
     data = _load_classroom(checkout, classroom_dir)
@@ -804,7 +813,11 @@ def meta_list(classroom):
             error(f"pass a classroom (github org), or list orgs in "
                   f"the [ORGS] section of {config_ini}")
             sys.exit(2)
+    _list(gh, orgs, partial)
 
+
+def _list(gh, orgs, partial):
+    """one table row per classroom in the orgs, or just the partial one."""
     missing = False
     for org in orgs:
         info(f"scanning {org} ...")
@@ -842,7 +855,11 @@ def meta_delete(classroom, delete_repo, dryrun):
     --delete-repo says otherwise.
     """
     gh = get_github()
-    org, partial = resolve_classroom(gh, classroom)
+    _delete(gh, *resolve_classroom(gh, classroom), classroom, delete_repo, dryrun)
+
+
+def _delete(gh, org, partial, classroom, delete_repo, dryrun):
+    """confirm, then remove the classroom (and optionally its repos)."""
     _repo, checkout = _open_meta(gh, org)
     classroom_dir = _resolve_classroom_dir(checkout, partial, classroom)
     data = _load_classroom(checkout, classroom_dir)
@@ -995,31 +1012,42 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
     if table_file is None and not from_canvas and not assignment:
         error("--assignment is required to record a template without a table")
         sys.exit(2)
-    if canvas_group and not from_canvas:
-        error("--canvas-group only makes sense with --from-canvas")
-        sys.exit(2)
-    if remove_dropped and not from_canvas:
-        error("--remove-dropped only makes sense with --from-canvas")
-        sys.exit(2)
     if from_canvas and not assignment:
         error("--assignment is required with --from-canvas")
         sys.exit(2)
-    if from_canvas and not has_canvas_config():
-        error(f"--from-canvas needs a [CANVAS] section in {config_ini}")
-        sys.exit(2)
-
-    gh = get_github()
-    org, partial = resolve_classroom(gh, classroom)
-    _repo, checkout = _open_meta(gh, org)
-    classroom_dir = _resolve_classroom_dir(checkout, partial, classroom)
-    data = _load_classroom(checkout, classroom_dir)
-
+    _check_canvas_flags(from_canvas, canvas_group, remove_dropped)
     if assignment is None and table_file is not None \
             and table_file.name in ("-", "<stdin>"):
         error("--assignment is required when the table comes from stdin")
         sys.exit(2)
     name = assignment or os.path.splitext(os.path.basename(table_file.name))[0]
     _check_assignment_name(name)
+
+    gh = get_github()
+    _assign(gh, *resolve_classroom(gh, classroom), classroom, table_file, name,
+            from_canvas, canvas_group, template_url, remove_unlisted,
+            remove_dropped, dryrun)
+
+
+def _check_canvas_flags(from_canvas, canvas_group, remove_dropped):
+    """the flags that only make sense when the roster comes from canvas."""
+    if canvas_group and not from_canvas:
+        error("--canvas-group only makes sense with --from-canvas")
+        sys.exit(2)
+    if remove_dropped and not from_canvas:
+        error("--remove-dropped only makes sense with --from-canvas")
+        sys.exit(2)
+    if from_canvas and not has_canvas_config():
+        error(f"--from-canvas needs a [CANVAS] section in {config_ini}")
+        sys.exit(2)
+
+
+def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
+            canvas_group, template_url, remove_unlisted, remove_dropped, dryrun):
+    """import the roster as assignment NAME, then converge the classroom."""
+    _repo, checkout = _open_meta(gh, org)
+    classroom_dir = _resolve_classroom_dir(checkout, partial, classroom)
+    data = _load_classroom(checkout, classroom_dir)
 
     actions = []
     unresolvable = []
@@ -1187,7 +1215,12 @@ def meta_apply(classroom, remove_unlisted, dryrun):
     --remove-unlisted-contributors revokes them (admins are never touched).
     """
     gh = get_github()
-    org, partial = resolve_classroom(gh, classroom)
+    _apply(gh, *resolve_classroom(gh, classroom), classroom, remove_unlisted,
+           dryrun)
+
+
+def _apply(gh, org, partial, classroom, remove_unlisted, dryrun):
+    """reconcile the partial classroom, or every classroom when it's None."""
     _repo, checkout = _open_meta(gh, org)
     if partial:
         classroom_dirs = [_resolve_classroom_dir(checkout, partial, classroom)]
