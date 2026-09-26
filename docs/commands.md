@@ -29,7 +29,8 @@ Every command that changes something previews by default: it opens with
 `⚠️  dry run: no changes will be made`, prints a `⚠️  would …` line per change, and —
 when it previewed anything — ends with
 `⚠️  that was a preview: nothing changed. add --apply to make these changes`, since a long
-preview scrolls the opening line away. `--no-dryrun` applies the changes.
+preview scrolls the opening line away. `--apply` makes the changes (`--no-dryrun`
+is the same flag, and still works).
 
 `sync`, `assignment create`, `course ta`, and `course settings` end with a one-line
 summary of what changed (or, in a preview, what would) and how many warnings and errors
@@ -38,13 +39,53 @@ After a real run, `course init` and `assignment create` name the next step.
 
 ## help-me-setup
 
-Explain the config file and verify the whole setup: the GitHub token, the config's
-`[ORGS]` (each org's reachability and classroom-meta repo, with its courses), and
-the `[CANVAS]` credentials. With no config file it prints a template to start from.
-Read-only; exits 0 when everything checks out, 1 when something needs attention.
+Explain the config file and verify the whole setup: the GitHub token (including
+whether a classic token has the `repo` scope that private repos need — with the
+`gh auth refresh` command that adds it), the config's `[ORGS]` (each org's reachability
+and classroom-meta repo, with its courses), and the `[CANVAS]` credentials. With no
+config file it prints a template to start from. Exits 0 when everything checks out, 1
+when something needs attention.
 
-```bash
-gh-class-sak help-me-setup
+```
+gh-class-sak help-me-setup [--create-config]
+```
+
+`--create-config` writes the config for you: it asks for the GitHub org and,
+optionally, the Canvas URL and API token (typed hidden), then runs the checks against
+the new file. It only ever adds the sections the config is missing — nothing already
+there changes — and a file holding a Canvas token is made readable by you alone. At a
+terminal, a missing config file prompts the same offer. Otherwise the command is
+read-only.
+
+## demo
+
+Try any command on a made-up course, offline:
+
+```
+gh-class-sak demo [COMMAND...]
+```
+
+The course is the invented one every example in these docs is built on — org
+`cs101-fall`, course `cs101_fall`, assignments `hw1` and `project`. Nothing touches
+GitHub or Canvas, and nothing is kept: each run starts from the same course in a
+temporary directory that is deleted afterwards, so `--apply` is safe (even
+`repos clone --apply` clones real, local git repos). Without a command it describes
+the course and suggests a few. Canvas features need a real Canvas, so they aren't in
+the demo.
+
+```console
+$ gh-class-sak demo course status cs101_fall
+(demo: a made-up course, offline — nothing is kept)
+COURSE    cs101_fall  (org cs101-fall)
+ASSIGNMENT  REPOS  ACCEPTED  INVITED  NOT INVITED
+hw1         0/2    0         0        0
+project     0/3    0         0        0
+TAS TEAM  cs101_fall-TAs (not created — run: gh-class-sak sync)
+
+to do:
+  hw1: 2 rows without a recorded repo → gh-class-sak sync cs101_fall --apply
+  project: 3 rows without a recorded repo → gh-class-sak sync cs101_fall --apply
+  TAs team → gh-class-sak sync cs101_fall --apply
 ```
 
 ## migrate-github-classroom
@@ -73,7 +114,7 @@ The course repo prefix is derived from your answers: when every assignment's nam
 naming.
 
 ```
-gh-class-sak migrate-github-classroom ORG [--dryrun/--no-dryrun]
+gh-class-sak migrate-github-classroom ORG [--apply]
 ```
 
 When the org isn't in the config's `[ORGS]` yet, it is added (the config file is created
@@ -156,7 +197,7 @@ enrolled student against an assignment's repos and sends a Canvas message to eac
 stuck on the way to their repo — one of three texts, each saying exactly what to do:
 
 ```
-gh-class-sak canvas message-missing COURSE ASSIGNMENT [--dryrun/--no-dryrun]
+gh-class-sak canvas message-missing COURSE ASSIGNMENT [--apply]
 ```
 
 - **no-link** — the Canvas profile has no GitHub link: asks them to add
@@ -185,10 +226,17 @@ Clone every repo for an assignment into `--dest`, one directory per team, fast-f
 any that are already there.
 
 ```
-gh-class-sak repos clone COURSE ASSIGNMENT [--dest DIR] [--dryrun/--no-dryrun]
+gh-class-sak repos clone COURSE ASSIGNMENT [--dest DIR] [--before DEADLINE] [--apply]
 ```
 
-It writes to disk, so it previews by default and only acts with `--no-dryrun`:
+It writes to disk, so it previews by default and only acts with `--apply`.
+`--before DEADLINE` leaves each repo at its last commit dated at or before the deadline
+— detached, ready to grade — and adds an `AT` column with that commit's short sha and
+time. A bare date means the end of that day (`--before 2026-10-01`), or give a time
+(`--before "2026-10-01 17:00"`), both local time. A repo with no commit that old is a
+loud error and stays at its latest commit; the next clone returns a detached checkout
+to its branch before pulling. Commit dates are set by the students' machines, so for a
+dispute, check the push times on GitHub.
 
 ```console
 $ gh-class-sak repos clone cs101-fall project --dest grading
@@ -245,7 +293,7 @@ Create the classroom-meta repo (when the org doesn't have one yet) and record a
 course:
 
 ```
-gh-class-sak course init COURSE [--org ORG] [--prefix PREFIX] [--template OWNER/NAME] [--canvas-course NAME] [--dryrun/--no-dryrun]
+gh-class-sak course init COURSE [--org ORG] [--prefix PREFIX] [--template OWNER/NAME] [--canvas-course NAME] [--apply]
 ```
 
 The argument is the **new course's name**, taken literally — partials only ever
@@ -295,6 +343,20 @@ cs101_fall  -       0    hw1(2) project(3)
 Orgs are never discovered from your token — your account may belong to orgs with
 thousands of unrelated repos, and scanning them would take forever.
 
+## course status
+
+What's done and what's left in a course, and the command that does each next step:
+
+```
+gh-class-sak course status COURSE [--org ORG]
+```
+
+Per assignment it counts the rows that have a repo, and the students who have
+accepted their invitation, are still invited, or aren't invited yet. Then the TAs
+team, and a to-do list — each gap with the command that closes it (`sync`, or
+`canvas message-missing` to chase invitations when Canvas is configured) — or
+`all set` when there's nothing left. Read-only.
+
 ## course show
 
 Print a course's recorded state — prefix, template, TAs, effective repo settings, and
@@ -316,20 +378,25 @@ Once repos are recorded, `repos list`, `repos members`, `repos missing`, and `re
 all include them by id — so a renamed repo shows up under its original team name instead
 of silently vanishing.
 
+With `--like OTHER` a new course starts from an existing one — last term's, say: its
+TAs, template, per-assignment starter templates, and repo settings are copied. Never
+its prefix (the repo names would collide) or its assignments; only a new course can be
+seeded that way, and flags you pass beat the copy.
+
 ## course delete
 
 Delete a course from the classroom-meta repo, after showing its recorded state and
 confirming:
 
 ```
-gh-class-sak course delete COURSE [--org ORG] [--delete-repo/--no-delete-repo] [--dryrun/--no-dryrun]
+gh-class-sak course delete COURSE [--org ORG] [--delete-repo/--no-delete-repo] [--apply]
 ```
 
 An **empty** course (no assignment tsvs) asks for a simple yes/no. One **with
 assignments** lists them and asks you to type the **full name of one of them** — the
 type-to-confirm bar rises with what's at stake. The assignments' GitHub repos survive
 by default; `--delete-repo` deletes every recorded repo too. Like every mutating
-command it previews with `would …` lines until `--no-dryrun` — the confirmation happens
+command it previews with `would …` lines until `--apply` — the confirmation happens
 either way. The course's `<course>-TAs` team is left alone.
 
 ## course ta
@@ -338,8 +405,8 @@ Add or remove a course's TAs — the `[TAS]` record and the `<course>-TAs` team 
 together, so there's no `classroom.ini` to edit by hand:
 
 ```
-gh-class-sak course ta add COURSE IDENTITY... [--org ORG] [--dryrun/--no-dryrun]
-gh-class-sak course ta remove COURSE IDENTITY... [--org ORG] [--dryrun/--no-dryrun]
+gh-class-sak course ta add COURSE IDENTITY... [--org ORG] [--apply]
+gh-class-sak course ta remove COURSE IDENTITY... [--org ORG] [--apply]
 ```
 
 An `IDENTITY` is `EMAIL/GITHUBID`, `EMAIL/` (resolved via the Canvas profile's GitHub
@@ -353,7 +420,7 @@ them from the team; naming someone who isn't a TA is an error and changes nothin
 Show a course's repo settings, or change them:
 
 ```
-gh-class-sak course settings COURSE [--org ORG] [--protection none|pr-review] [--linear-history/--no-linear-history] [--force-push/--no-force-push] [--template OWNER/NAME] [--dryrun/--no-dryrun]
+gh-class-sak course settings COURSE [--org ORG] [--protection none|pr-review] [--linear-history/--no-linear-history] [--force-push/--no-force-push] [--template OWNER/NAME] [--apply]
 ```
 
 With no options it prints the effective settings. A change is recorded in
@@ -375,12 +442,17 @@ nightowls  /rpatel,/tk-codes
 ```
 
 ```
-gh-class-sak assignment create COURSE NAME --roster FILE [--org ORG] [--template REPO_URL] [--remove-unlisted-contributors] [--dryrun/--no-dryrun]
+gh-class-sak assignment create COURSE NAME --roster FILE [--org ORG] [--template REPO_URL] [--remove-unlisted-contributors] [--apply]
 ```
+
+A roster can also be a plain list, one person per line — an email, a `/GITHUBID`, or
+both as `EMAIL/GITHUBID` — for one repo per person, named by the GitHub id when known
+or else the email's local part. A roster file that mixes the two formats or has a
+malformed row is an error naming the line, with an example of each format.
 
 The table lands in the course directory as `NAME.tsv`. Emails are resolved to GitHub
 logins via the student's Canvas profile link — never a GitHub search; an email nothing
-can resolve is a loud error. Under `--no-dryrun` it creates each missing repo
+can resolve is a loud error. Under `--apply` it creates each missing repo
 (privately, from the template when there is one), records the URL and repo id, and
 grants the listed students push. It then brings **this assignment's** repos in line
 exactly as [`sync`](#sync)'s passes 2–3 would — students missing from a recorded repo
@@ -429,7 +501,7 @@ dropped.
 Make GitHub match the classroom-meta repo:
 
 ```
-gh-class-sak sync (COURSE | --org ORG) [--remove-unlisted-contributors] [--dryrun/--no-dryrun]
+gh-class-sak sync (COURSE | --org ORG) [--remove-unlisted-contributors] [--apply]
 ```
 
 Naming a course syncs just that one; `--org` alone syncs every course in the org. The
@@ -477,7 +549,7 @@ protection, delete a tsv, or delete a repo (beyond rolling back a shell it creat
 moments earlier in the seed-failure case above).
 
 Sync is idempotent — run it twice and the second pass prints `nothing to do` — and,
-like every mutating command, a preview with ⚠️ until `--no-dryrun`. Exit status: `1`
+like every mutating command, a preview with ⚠️ until `--apply`. Exit status: `1`
 when an identity didn't resolve or a template seed failed (the org may be part-way
 synced; fix the cause and re-run), `2` when the course or its classroom-meta
 repo can't be found at all.
@@ -530,6 +602,23 @@ unchanged, and hidden from `--help` — and at a terminal each one says what rep
 | `meta delete CLASSROOM` | `course delete COURSE` |
 | `meta assign CLASSROOM TABLE` | `assignment create COURSE NAME --roster TABLE` (it covers only that assignment; `sync` does the rest of the course) |
 | `meta apply CLASSROOM` | `sync COURSE`, or `sync --org ORG` for every course in an org |
+
+## completion
+
+Print the tab-completion script for your shell, so commands, subcommands, and flags
+complete on TAB:
+
+```
+gh-class-sak completion [bash|zsh|fish]
+```
+
+Without an argument it uses your login shell. Load it from your shell's startup file:
+
+```bash
+eval "$(gh-class-sak completion zsh)"       # in ~/.zshrc
+eval "$(gh-class-sak completion bash)"      # in ~/.bashrc
+gh-class-sak completion fish | source       # in ~/.config/fish/config.fish
+```
 
 ## How group matching works
 

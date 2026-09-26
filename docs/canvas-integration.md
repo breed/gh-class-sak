@@ -91,7 +91,7 @@ The same plumbing drives `canvas message-missing`, which turns "who is stranded 
 way to their repo?" into a Canvas message to exactly those students:
 
 ```
-gh-class-sak canvas message-missing COURSE ASSIGNMENT [--dryrun/--no-dryrun]
+gh-class-sak canvas message-missing COURSE ASSIGNMENT [--apply]
 ```
 
 Every enrolled student is checked against the assignment's repos and the stuck ones
