@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+- the commands speak of **courses**, not classrooms, and are named for what
+  they do: `course init`, `course list`, `course show`, `course delete`,
+  `assignment create COURSE NAME` (with `--roster FILE` or `--from-canvas`),
+  and `sync`. The top-level `--help` defines the words — a course is one
+  Canvas course hosted in a GitHub org; an assignment is one repo per
+  student or group — and the path from `course init` to `sync`
+- a `COURSE` argument of the new commands is always a course, never an org:
+  it is looked up in `--org`, or in every org in `[ORGS]`, with an exact name
+  beating a partial one. An org name typed where a course belongs says to
+  pass it as `--org`; `sync --org ORG` syncs every course in the org
+- `assignment create` only touches its own assignment's repos (plus the TA
+  team's read on them); everything else across the course — other
+  assignments, TA team membership — is `sync`'s job. `meta assign` keeps
+  converging the whole classroom
+- the old commands (`meta init/list/show/delete/assign/apply` and
+  `classrooms`) still work unchanged but are hidden from `--help`; at a
+  terminal each says which command replaced it. Messages throughout now
+  point at `course init` and `sync`. The stored names — the `classroom-meta`
+  repo, `classroom.ini` and its `[CLASSROOM]` section — are unchanged, so
+  existing orgs keep working as they are
+- a default repo name longer than GitHub's 100-character limit is cut off at
+  100 instead of failing the create with a traceback
+- a row whose repo name another row already holds — two long names that cut
+  to the same 100 characters, or a new row matching a repo another row
+  recorded — is skipped with an error instead of silently sharing that
+  repo. The run carries on, exits 1, and ends with the fix: which tsv row to
+  rename, how long its `NAME` may be, and the `sync` to run after
+
 ## v1.5.0
 
 - a missing `classroom-meta` repo no longer reads as "the course isn't set up".
