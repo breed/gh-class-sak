@@ -505,7 +505,7 @@ class UsageOrderGroup(click.Group):
 
 
 @click.group(cls=UsageOrderGroup, order=(
-    "help-me-setup", "course", "assignment", "sync", "repos", "canvas",
+    "help-me-setup", "demo", "course", "assignment", "sync", "repos", "canvas",
     "migrate-github-classroom", "completion"))
 @click.version_option(version=version("gh-class-sak"), prog_name="gh-class-sak")
 def gh_class_sak():
@@ -516,8 +516,9 @@ def gh_class_sak():
     assignment  one repo per student or group in a course, e.g. hw1 gives
                 cs101-hw1-alice, cs101-hw1-bob
     \b
-    New here? Run help-me-setup to check your setup, then course init, then
-    assignment create, then sync whenever the roster changes.
+    New here? Run help-me-setup to check your setup — or demo to try every
+    command on a made-up course first — then course init, then assignment
+    create, then sync whenever the roster changes.
     """
     for key in said:
         said[key] = 0

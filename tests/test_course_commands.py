@@ -453,8 +453,8 @@ class TestHelpOrder:
 
     def test_top_level_starts_with_setup(self, course_env):
         assert self.listed(course_env.runner) == [
-            "help-me-setup", "course", "assignment", "sync", "repos", "canvas",
-            "migrate-github-classroom", "completion"]
+            "help-me-setup", "demo", "course", "assignment", "sync", "repos",
+            "canvas", "migrate-github-classroom", "completion"]
 
     def test_course_starts_with_init(self, course_env):
         assert self.listed(course_env.runner, "course") == [
@@ -646,3 +646,40 @@ class TestCompletion:
         result = run(course_env.runner, "completion")
         assert result.exit_code == 2
         assert "bash, zsh, or fish" in result.output
+
+
+class TestDemo:
+    def test_without_a_command_it_introduces_the_demo_course(self, course_env):
+        result = run(course_env.runner, "demo")
+        assert result.exit_code == 0, result.output
+        assert "org cs101-fall, course cs101_fall" in result.output
+        assert "gh-class-sak demo course status cs101_fall" in result.output
+
+    def test_runs_a_command_against_the_demo_course(self, course_env):
+        result = run(course_env.runner, "demo", "course", "status", "cs101_fall")
+        assert result.exit_code == 0, result.output
+        assert "COURSE    cs101_fall  (org cs101-fall)" in result.output
+
+    def test_changes_happen_offline_and_are_not_kept(self, course_env, tmp_path):
+        config_before = core.config_ini
+        result = run(course_env.runner, "demo", "sync", "cs101_fall", "--apply")
+        assert result.exit_code == 0, result.output
+        assert "summary: 5 repos adopted" in result.output
+        # the real config and github were never touched
+        assert core.config_ini == config_before
+        assert core.configured_orgs() == []
+        # and a second run starts over from the same made-up course
+        again = run(course_env.runner, "demo", "sync", "cs101_fall", "--apply")
+        assert "summary: 5 repos adopted" in again.output
+
+    def test_clone_really_clones(self, course_env, tmp_path):
+        dest = tmp_path / "grading"
+        result = run(course_env.runner, "demo", "repos", "clone", "cs101_fall",
+                     "project", "--dest", str(dest), "--apply")
+        assert result.exit_code == 0, result.output
+        assert (dest / "team-1" / "README.md").exists()
+
+    def test_help_after_a_command_is_that_commands_help(self, course_env):
+        result = run(course_env.runner, "demo", "sync", "--help")
+        assert result.exit_code == 0, result.output
+        assert "Usage: gh-class-sak sync" in result.output
