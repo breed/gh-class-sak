@@ -148,17 +148,17 @@ def _resolve_classroom_dir(checkout, partial, classroom):
     if key:
         if key in candidates:
             return key
-        error(f'classroom "{key}" is not in the meta repo. classrooms there:')
+        error(f'course "{key}" is not in the meta repo. courses there:')
         for c in candidates:
             error(f"    {c}")
-        error("run: meta init")
+        error("run: gh-class-sak course init")
         sys.exit(2)
     if len(candidates) == 1:
         return candidates[0]
     key = normalize_course_name(classroom)
     if key in candidates:
         return key
-    error(f'cannot tell which classroom "{classroom}" means. classrooms in the meta repo:')
+    error(f'cannot tell which course "{classroom}" means. courses in the meta repo:')
     for c in candidates:
         error(f"    {c}")
     sys.exit(2)
@@ -467,7 +467,7 @@ def _report_clashes(org, clashes):
               f" (clashes with {holder}) to a NAME no other row uses, at most"
               f" {room} characters so it is not cut off")
     for classroom_dir in dict.fromkeys(c[0] for c in clashes):
-        error(f"  then commit, push, and run: gh-class-sak meta apply"
+        error(f"  then commit, push, and run: gh-class-sak sync"
               f" {classroom_dir} --no-dryrun")
 
 
@@ -720,7 +720,7 @@ def _tas_team_line(gh, org, classroom_dir, configured_tas, resolve):
     name = tas_team_name(classroom_dir)
     team = get_team(gh, org, tas_team_slug(classroom_dir))
     if team is None:
-        return f"TAS TEAM  {name} (not created — run: meta apply)"
+        return f"TAS TEAM  {name} (not created — run: gh-class-sak sync)"
     members = {m.login.lower() for m in team.get_members()}
     pending = {u.login.lower() for u in team_pending_invitations(team)}
     configured = {}
@@ -759,7 +759,7 @@ def _show(gh, org, partial, classroom):
 
     protection, linear_history, force_push = ms.effective_repo_settings(data)
     resolve = _make_resolver(org, data["canvas_course"] or classroom_dir)
-    output(f"CLASSROOM {classroom_dir}")
+    output(f"COURSE    {classroom_dir}")
     output(f"PREFIX    {data['prefix'] or '-'}")
     if data["template"]:
         output(f"TEMPLATE  {data['template']}")
@@ -825,7 +825,7 @@ def meta_list(classroom):
     _list(gh, orgs, partial)
 
 
-def _list(gh, orgs, partial):
+def _list(gh, orgs, partial, header="CLASSROOM"):
     """one table row per classroom in the orgs, or just the partial one."""
     missing = False
     for org in orgs:
@@ -846,7 +846,7 @@ def _list(gh, orgs, partial):
                                    for name, rows in data["assignments"].items())
             table.append([classroom_dir, data["prefix"] or ms.EMPTY,
                           str(len(data["tas"])), assignments or ms.EMPTY])
-        print_table(["CLASSROOM", "PREFIX", "TAS", "ASSIGNMENTS"], table)
+        print_table([header, "PREFIX", "TAS", "ASSIGNMENTS"], table)
     if missing:
         sys.exit(2)
 
@@ -874,7 +874,7 @@ def _delete(gh, org, partial, classroom, delete_repo, dryrun):
     data = _load_classroom(checkout, classroom_dir)
 
     protection, linear_history, force_push = ms.effective_repo_settings(data)
-    output(f"CLASSROOM {classroom_dir}")
+    output(f"COURSE    {classroom_dir}")
     output(f"PREFIX    {data['prefix'] or '-'}")
     if data["template"]:
         output(f"TEMPLATE  {data['template']}")
@@ -894,7 +894,7 @@ def _delete(gh, org, partial, classroom, delete_repo, dryrun):
         if answer not in data["assignments"]:
             error(f'"{answer}" is not one of the assignments; nothing deleted')
             sys.exit(2)
-    elif not click.confirm(f'delete the empty classroom "{classroom_dir}"?',
+    elif not click.confirm(f'delete the empty course "{classroom_dir}"?',
                            default=False):
         output("nothing to do")
         return
@@ -919,7 +919,7 @@ def _delete(gh, org, partial, classroom, delete_repo, dryrun):
     def _remove():
         shutil.rmtree(ms.classroom_dir(checkout, classroom_dir))
         ms.commit_and_push(checkout, f"delete {classroom_dir}", get_token())
-    _perform(dryrun, f"delete classroom {classroom_dir}"
+    _perform(dryrun, f"delete course {classroom_dir}"
              f" from {org}/{ms.META_REPO_NAME}", _remove, actions)
 
 
@@ -1260,7 +1260,7 @@ def _apply(gh, org, partial, classroom, remove_unlisted, dryrun):
     else:
         classroom_dirs = ms.list_classrooms(checkout)
     if not classroom_dirs:
-        error("the classroom-meta repo has no classrooms. run: meta init")
+        error("the classroom-meta repo has no courses. run: gh-class-sak course init")
         sys.exit(2)
 
     actions = []

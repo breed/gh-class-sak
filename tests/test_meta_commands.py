@@ -245,7 +245,7 @@ class TestMetaShow:
         seed_meta(env, tas=["ta-one"])
         result = run(env.runner, "meta", "show", ORG)
         assert result.exit_code == 0, result.output
-        assert "TAS TEAM  cmpe_195a-TAs (not created — run: meta apply)" \
+        assert "TAS TEAM  cmpe_195a-TAs (not created — run: gh-class-sak sync)" \
             in result.output
 
     def test_tas_team_matching_the_file_is_reported(self, env):
@@ -365,7 +365,7 @@ class TestMetaDelete:
         result = run(env.runner, "meta", "delete", ORG, "--no-dryrun", input="y\n")
         assert result.exit_code == 0, result.output
         assert f"PREFIX    {PREFIX}" in result.output
-        assert f"delete classroom {COURSE} from {ORG}/classroom-meta" in result.output
+        assert f"delete course {COURSE} from {ORG}/classroom-meta" in result.output
         assert ms.load_meta_classrooms(env.gh, ORG) == {}
 
     def test_declining_deletes_nothing(self, env):
@@ -408,7 +408,7 @@ class TestMetaDelete:
                      input=f"{ASSIGNMENT}\n")
         assert result.exit_code == 0, result.output
         assert f"would delete repo {repo.full_name}" in result.output
-        assert f"would delete classroom {COURSE}" in result.output
+        assert f"would delete course {COURSE}" in result.output
         assert repo.deleted is False
         assert COURSE in ms.load_meta_classrooms(env.gh, ORG)
 
@@ -1203,7 +1203,7 @@ class TestMetaApply:
             f'  - {COURSE}/{ASSIGNMENT}.tsv: rename row "{long}-b" (clashes'
             f" with {ASSIGNMENT}/{long}-a) to a NAME no other row uses, at most"
             f" {room} characters so it is not cut off\n"
-            f"  then commit, push, and run: gh-class-sak meta apply {COURSE}"
+            f"  then commit, push, and run: gh-class-sak sync {COURSE}"
             f" --no-dryrun")
         assert f"1 row(s) got no repo: the repo name is already taken. to fix," \
             f" in the {ORG}/classroom-meta repo:" in result.output

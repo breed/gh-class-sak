@@ -98,10 +98,10 @@ files parse fine.
 
 ```console
 $ gh-class-sak meta show cs101-fall
-CLASSROOM cs101_fall
+COURSE    cs101_fall
 PREFIX    -
 TAS       -
-TAS TEAM  cs101_fall-TAs (not created — run: meta apply)
+TAS TEAM  cs101_fall-TAs (not created — run: gh-class-sak sync)
 SETTINGS  protection=none linear_history=true force_push=false
 
 ASSIGNMENT hw1

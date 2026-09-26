@@ -78,9 +78,9 @@ def course_list(course, org):
     gh = get_github()
     if course:
         org, classroom_dir = resolve_course(gh, course, org)
-        m._list(gh, [org], classroom_dir)
+        m._list(gh, [org], classroom_dir, "COURSE")
     else:
-        m._list(gh, _org_or_configured(org), None)
+        m._list(gh, _org_or_configured(org), None, "COURSE")
 
 
 @course_group.command("show")

@@ -143,7 +143,7 @@ def resolve_assignment_repos(classroom, assignment):
         error(f'assignment "{assignment}" is ambiguous in "{org}". candidates:')
         for classroom_dir, name, _data in candidates:
             error(f"    {classroom_dir}: {name}")
-        error("name the classroom, or use a longer assignment name")
+        error("name the course, or use a longer assignment name")
         sys.exit(2)
     _dir, name, data = candidates[0]
     effective_prefix = join_repo_name(data["prefix"], name)
@@ -177,7 +177,7 @@ def _single_classroom_dir(org):
         report_missing_meta(gh, org, why)
         sys.exit(2)
     if len(meta_classrooms) > 1:
-        error(f'"{org}" hosts several classrooms, so the course is ambiguous:')
+        error(f'"{org}" hosts several courses, so the course is ambiguous:')
         for classroom_dir in meta_classrooms:
             error(f"    {classroom_dir}")
         error("name one of the courses instead of the org")
@@ -368,12 +368,16 @@ def print_table(headers, rows):
 
 @gh_class_sak.group()
 def repos():
-    """Manage classroom assignment repositories."""
+    """Work with an assignment's repos: list, clone, find the missing ones.
+
+    COURSE names a recorded course (or the org, when it hosts just one);
+    ASSIGNMENT is matched by name, a unique substring is enough.
+    """
     pass
 
 
 @repos.command("list")
-@click.argument("classroom")
+@click.argument("classroom", metavar="COURSE")
 @click.argument("assignment")
 @click.option("--repo", is_flag=True, default=False, help="show repo full name")
 @click.option("--members", is_flag=True, default=False, help="show members column")
@@ -386,7 +390,7 @@ def repos():
 @click.option("--show-empty", is_flag=True, default=False, help="include teams with no members")
 def repos_list(classroom, assignment, repo, members, show_instructors, show_name, show_email,
                group_category, show_empty):
-    """List repos for a classroom assignment."""
+    """List the repos of a course's assignment."""
     room, found = resolve_assignment_repos(classroom, assignment)
 
     # resolve the Canvas course once if any Canvas feature is usable —
@@ -495,7 +499,7 @@ def repos_list(classroom, assignment, repo, members, show_instructors, show_name
 
 
 @repos.command("members")
-@click.argument("classroom")
+@click.argument("classroom", metavar="COURSE")
 @click.argument("assignment")
 def repos_members(classroom, assignment):
     """List members and their emails extracted from commit history."""
@@ -517,7 +521,7 @@ def repos_members(classroom, assignment):
 
 
 @repos.command("missing")
-@click.argument("classroom")
+@click.argument("classroom", metavar="COURSE")
 @click.argument("assignment")
 @click.option("--group", "group_category", default=None, type=str,
               help="show Canvas groups with no matching repo")
@@ -569,13 +573,13 @@ def repos_missing(classroom, assignment, group_category):
 
 
 @repos.command("clone")
-@click.argument("classroom")
+@click.argument("classroom", metavar="COURSE")
 @click.argument("assignment")
 @click.option("--dest", default=".", type=click.Path(file_okay=False),
               help="directory to clone into (default: current directory)")
 @dryrun_option
 def repos_clone(classroom, assignment, dest, dryrun):
-    """Clone or fast-forward every repo for a classroom assignment."""
+    """Clone or fast-forward every repo of a course's assignment."""
     from gh_class_sak.git_ops import clone_or_update
 
     _room, found = resolve_assignment_repos(classroom, assignment)

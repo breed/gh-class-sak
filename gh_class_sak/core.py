@@ -358,7 +358,7 @@ def resolve_classroom(gh, name):
             if _names_overlap(name, classroom_dir):
                 candidates.append((org, classroom_dir))
     if len(candidates) > 1:
-        error(f'ambiguous classroom "{name}", matches several classrooms:')
+        error(f'ambiguous course "{name}", matches several courses:')
         for org, classroom_dir in candidates:
             error(f"    {org}: {classroom_dir}")
         sys.exit(2)
@@ -422,6 +422,16 @@ def _interactive():
 @click.group()
 @click.version_option(version=version("gh-class-sak"), prog_name="gh-class-sak")
 def gh_class_sak():
+    """Manage a course's GitHub repos from the command line.
+
+    \b
+    course      one per Canvas course, hosted in a GitHub org
+    assignment  one repo per student or group in a course, e.g. hw1 gives
+                cs101-hw1-alice, cs101-hw1-bob
+    \b
+    Start with: course init, then assignment create, then sync whenever the
+    roster or settings change. Run help-me-setup to check your setup.
+    """
     if not _interactive():
         return
     warn("this is beta code to replace github classroom, which is going away")
