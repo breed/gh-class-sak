@@ -5,6 +5,7 @@ from gh_class_sak import core
 from gh_class_sak import meta_store as ms
 from gh_class_sak.commands import course as course_cmd
 from tests.conftest import ORG, run
+from tests.fakes import FakeNamedUser, FakeRepo, FakeTeam
 from tests.test_meta_commands import (  # noqa: F401  - env is a fixture
     ASSIGNMENT,
     COURSE,
@@ -163,3 +164,49 @@ class TestSync:
         result = run(course_env.runner, "sync")
         assert result.exit_code == 2
         assert "pass a COURSE, or --org ORG" in result.output
+
+
+class TestAssignmentCreateScope:
+    """assignment create sets up its own repos; the rest of the course is
+    sync's job."""
+
+    def roster(self, tmp_path):
+        path = tmp_path / "roster.tsv"
+        path.write_text("NAME\tSTUDENTS\nteam-1\t/msmith\n")
+        return str(path)
+
+    def test_leaves_other_assignments_repos_alone(self, course_env, tmp_path):
+        other = FakeRepo(ORG, f"{PREFIX}-hw0-solo")  # jdoe not invited yet
+        course_env.org._repos.append(other)
+        seed_meta(course_env, assignments={"hw0": [
+            {"name": "solo", "students": ["/jdoe"],
+             "repo": other.html_url, "repo_id": other.id}]})
+        result = run(course_env.runner, "assignment", "create", COURSE, "hw1",
+                     "--org", ORG, "--roster", self.roster(tmp_path),
+                     "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert other.collab_log == []
+
+    def test_the_tas_team_reads_the_new_repos_and_nothing_else_changes(
+            self, course_env, tmp_path):
+        stray = FakeRepo(ORG, "unrelated")
+        team = FakeTeam(course_env.org, f"{COURSE}-tas")
+        team._members["old-ta"] = FakeNamedUser("old-ta")  # not in [TAS]
+        team._repos[stray.full_name] = (stray, "pull")
+        course_env.org._teams[team.slug] = team
+        seed_meta(course_env, tas=["/ta-one"])
+        result = run(course_env.runner, "assignment", "create", COURSE, "hw1",
+                     "--org", ORG, "--roster", self.roster(tmp_path),
+                     "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert team.log == [("grant", f"{ORG}/{PREFIX}-hw1-team-1", "pull")]
+
+    def test_a_missing_tas_team_is_left_to_sync(self, course_env, tmp_path):
+        seed_meta(course_env, tas=["/ta-one"])
+        result = run(course_env.runner, "assignment", "create", COURSE, "hw1",
+                     "--org", ORG, "--roster", self.roster(tmp_path),
+                     "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert course_env.org._teams == {}
+        assert f'team "{COURSE}-TAs" is missing; run: gh-class-sak sync' \
+            f" {COURSE}" in result.output

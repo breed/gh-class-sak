@@ -143,6 +143,9 @@ def assignment_create(course, name, org, roster, from_canvas, canvas_group,
 
     The roster comes from --roster or --from-canvas; running it again merges
     new rows in. --template alone records the starter repo without a roster.
+    Only this assignment's repos are touched: its students are invited and
+    the course's TAs team can read them. The rest of the course is left to
+    sync.
     """
     if roster is not None and from_canvas:
         error("--from-canvas replaces --roster; pass one or the other")
@@ -157,7 +160,7 @@ def assignment_create(course, name, org, roster, from_canvas, canvas_group,
     gh = get_github()
     m._assign(gh, *resolve_course(gh, course, org), course, roster, name,
               from_canvas, canvas_group, template_url, remove_unlisted,
-              remove_dropped, dryrun)
+              remove_dropped, dryrun, whole_classroom=False)
 
 
 @gh_class_sak.command("sync")

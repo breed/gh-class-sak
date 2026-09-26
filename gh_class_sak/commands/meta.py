@@ -330,7 +330,7 @@ def _reconcile_repo_protection(repo, desired, dryrun, actions):
 
 
 def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions,
-                       clashes):
+                       clashes, only=None):
     """create/adopt the repo for every row that has none, and grant push.
 
     covers every assignment in the classroom. a repo realized without a
@@ -339,7 +339,8 @@ def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions,
     --no-dryrun. returns (changed assignment names, unresolved, failures) —
     callers save exactly the named tsvs, so untouched files (and their hand
     comments) are never rewritten. a row skipped because its repo name is
-    taken lands in clashes for _report_clashes.
+    taken lands in clashes for _report_clashes. only names the single
+    assignment to realize; names taken anywhere in the classroom still clash.
     """
     template = _template_repo(gh, data)
     desired = ms.effective_repo_settings(data)
@@ -358,7 +359,8 @@ def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions,
             if row["repo"]:
                 name = row["repo"].rstrip("/").rsplit("/", 1)[-1].lower()
                 taken_by[name] = f"{assignment}/{row['name']}"
-    for assignment, rows in data["assignments"].items():
+    for assignment in _covered(data, only):
+        rows = data["assignments"][assignment]
         content_url = data["templates"].get(assignment)
         for row in rows:
             if row["repo_id"] is not None:
@@ -518,26 +520,33 @@ def _reconcile_row_collaborators(gh, repo, logins, remove_unlisted, dryrun,
                      f" on {repo.full_name}", _cancel, actions)
 
 
+def _covered(data, only):
+    """the assignment names a pass covers: just only, or all of them."""
+    return [only] if only else list(data["assignments"])
+
+
 def _reconcile_recorded_repos(gh, org, classroom_dir, data, resolve,
                               remove_unlisted, dryrun, actions, all_repos,
-                              by_id, unresolved, failures):
+                              by_id, unresolved, failures, only=None):
     """converge every recorded row's repo — assign and apply share this.
 
     per repo: the row's students are exactly its push collaborators, an
     empty repo gets its welcome commit, and either way the default branch
     ends up carrying the classroom's protection. returns the classroom's
     repo universe (per-assignment prefix matches ∪ recorded ids) for the
-    TA team reconcile.
+    TA team reconcile. only names the single assignment to cover.
     """
     desired = ms.effective_repo_settings(data)
+    assignments = _covered(data, only)
     universe = {}
-    for assignment in data["assignments"]:
+    for assignment in assignments:
         joined = ms.join_repo_name(data["prefix"], assignment)
         for r in all_repos:
             if matches_prefix(r.name, joined):
                 universe[r.full_name] = r
-    recorded = [row for rows in data["assignments"].values()
-                for row in rows if row["repo_id"] is not None]
+    recorded = [row for assignment in assignments
+                for row in data["assignments"][assignment]
+                if row["repo_id"] is not None]
     for row in progress(recorded, f"checking {classroom_dir}"):
         repo = by_id.get(row["repo_id"]) or get_repo_by_id(gh, row["repo_id"])
         if repo is None:
@@ -1043,8 +1052,10 @@ def _check_canvas_flags(from_canvas, canvas_group, remove_dropped):
 
 
 def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
-            canvas_group, template_url, remove_unlisted, remove_dropped, dryrun):
-    """import the roster as assignment NAME, then converge the classroom."""
+            canvas_group, template_url, remove_unlisted, remove_dropped, dryrun,
+            whole_classroom=True):
+    """import the roster as assignment NAME, then converge the classroom —
+    or, without whole_classroom, just NAME's repos."""
     _repo, checkout = _open_meta(gh, org)
     classroom_dir = _resolve_classroom_dir(checkout, partial, classroom)
     data = _load_classroom(checkout, classroom_dir)
@@ -1109,23 +1120,28 @@ def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
                  lambda: None, actions)
 
     resolve = _make_resolver(org, course)
+    only = None if whole_classroom else name
     clashes = []
     changed, unresolved, failures = _realize_classroom(gh, org, classroom_dir,
                                                        data, resolve, dryrun,
-                                                       actions, clashes)
+                                                       actions, clashes, only)
     unresolved = unresolvable + unresolved
 
-    # the whole classroom converges like apply: recorded repos get their
+    # the covered repos converge like apply: recorded repos get their
     # missing collaborators, seeding, and protection, and repos created
     # here are TA-readable now, not after the next apply
     all_repos = list_org_repos(gh, org)
     by_id = {r.id: r for r in all_repos}
     universe = _reconcile_recorded_repos(gh, org, classroom_dir, data, resolve,
                                          remove_unlisted, dryrun, actions,
-                                         all_repos, by_id, unresolved, failures)
-    ta_logins = _resolve_tas(data["tas"], resolve, unresolved)
-    _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe,
-                        dryrun, actions, failures)
+                                         all_repos, by_id, unresolved, failures,
+                                         only)
+    if whole_classroom:
+        ta_logins = _resolve_tas(data["tas"], resolve, unresolved)
+        _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe,
+                            dryrun, actions, failures)
+    else:
+        _grant_tas_team(gh, org, classroom_dir, universe, dryrun, actions)
 
     to_save = set(changed)
     if changed_names or removed:
@@ -1143,6 +1159,23 @@ def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
     _report_clashes(org, clashes)
     if unresolved or failures:
         sys.exit(1)
+
+
+def _grant_tas_team(gh, org, classroom_dir, universe, dryrun, actions):
+    """the classroom's team reads the universe's repos. its members and its
+    other repos are sync's business, as is creating a missing team."""
+    name = tas_team_name(classroom_dir)
+    team = get_team(gh, org, tas_team_slug(classroom_dir))
+    if team is None:
+        warn(f'team "{name}" is missing; run: gh-class-sak sync {classroom_dir}')
+        return
+    team_repos = {r.full_name for r in team.get_repos()}
+    for full_name, repo in universe.items():
+        if full_name not in team_repos:
+            def _grant(repo=repo):
+                team.update_team_repository(repo, "pull")
+            _perform(dryrun, f'grant team "{name}" pull on {full_name}',
+                     _grant, actions)
 
 
 def _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe, dryrun,
