@@ -1183,6 +1183,60 @@ class TestMetaApply:
         assert ("add", "msmith", "push") in created.collab_log
         assert meta_state(env)["assignments"][ASSIGNMENT][0]["repo_id"] == created.id
 
+    def test_rows_whose_names_cut_to_the_same_repo_name_clash(self, env):
+        # both names cut to the same 100 characters: the first row gets the
+        # repo, the second is skipped loudly instead of sharing it
+        long = "x" * 120
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": f"{long}-a", "students": ["/msmith"],
+             "repo": None, "repo_id": None},
+            {"name": f"{long}-b", "students": ["/jdoe"],
+             "repo": None, "repo_id": None}]})
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 1
+        repo_name = ms.join_repo_name(PREFIX, ASSIGNMENT, long)
+        assert f'skipping "{long}-b": repo name {repo_name} is already' \
+            f' taken by {ASSIGNMENT}/{long}-a' in result.output
+        # the fix is the run's last word
+        room = ms.MAX_REPO_NAME_LEN - len(REPO_PREFIX) - 1
+        assert result.output.rstrip().endswith(
+            f'  - {COURSE}/{ASSIGNMENT}.tsv: rename row "{long}-b" (clashes'
+            f" with {ASSIGNMENT}/{long}-a) to a NAME no other row uses, at most"
+            f" {room} characters so it is not cut off\n"
+            f"  then commit, push, and run: gh-class-sak meta apply {COURSE}"
+            f" --no-dryrun")
+        assert f"1 row(s) got no repo: the repo name is already taken. to fix," \
+            f" in the {ORG}/classroom-meta repo:" in result.output
+        assert len(env.org.created_repos) == 1
+        created = env.gh.get_repo(f"{ORG}/{repo_name}")
+        assert ("add", "jdoe", "push") not in created.collab_log
+        rows = meta_state(env)["assignments"][ASSIGNMENT]
+        assert rows[0]["repo_id"] == created.id
+        assert rows[1]["repo_id"] is None
+
+    def test_a_row_never_adopts_a_repo_another_row_recorded(self, env):
+        taken = FakeRepo(ORG, f"{REPO_PREFIX}-team-1")
+        env.org._repos.append(taken)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "renamed", "students": ["/msmith"],
+             "repo": taken.html_url, "repo_id": taken.id},
+            {"name": "team-1", "students": ["/jdoe"],
+             "repo": None, "repo_id": None}]})
+        result = run(env.runner, "meta", "apply", ORG)
+        assert result.exit_code == 1
+        assert "already taken by" in result.output
+        assert "adopt existing" not in result.output
+
+    def test_a_hand_recorded_repo_url_is_not_a_clash_with_itself(self, env):
+        mine = FakeRepo(ORG, f"{REPO_PREFIX}-team-1")
+        env.org._repos.append(mine)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["/jdoe"],
+             "repo": mine.html_url, "repo_id": None}]})
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert meta_state(env)["assignments"][ASSIGNMENT][0]["repo_id"] == mine.id
+
     def test_apply_seeds_new_repos_from_the_assignment_template(self, env,
                                                                 tmp_path):
         # a [TEMPLATE] record drives repos realized later by apply, not

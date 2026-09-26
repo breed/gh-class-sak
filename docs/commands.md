@@ -229,8 +229,9 @@ for a bare GitHub id. A
 repo's default name joins the non-empty parts of classroom `prefix`, assignment, and
 `NAME` with dashes: with `prefix = sp26-195a`, row `team-1` of `hw1.tsv` becomes
 `sp26-195a-hw1-team-1`; with no prefix, just `hw1-team-1`. A default name longer than
-GitHub's 100-character limit is cut off at 100. The tool fills in the last two
-columns when it creates the repo: the URL, and GitHub's **permanent numeric repo id** —
+GitHub's 100-character limit is cut off at 100. A row whose name is already taken by another
+row's repo is skipped with an error (exit 1) instead of sharing it; the run ends with
+the fix: give the row a distinct `NAME`. The tool fills in the last two columns when it creates the repo: the URL, and GitHub's **permanent numeric repo id** —
 which is how a repo stays tracked even after students rename it.
 
 ### meta init

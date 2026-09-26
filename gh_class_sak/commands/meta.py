@@ -329,7 +329,8 @@ def _reconcile_repo_protection(repo, desired, dryrun, actions):
              f" ({_protection_summary(desired)})", _protect, actions)
 
 
-def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions):
+def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions,
+                       clashes):
     """create/adopt the repo for every row that has none, and grant push.
 
     covers every assignment in the classroom. a repo realized without a
@@ -337,13 +338,26 @@ def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions):
     here without a default branch. mutates rows in place under
     --no-dryrun. returns (changed assignment names, unresolved, failures) —
     callers save exactly the named tsvs, so untouched files (and their hand
-    comments) are never rewritten.
+    comments) are never rewritten. a row skipped because its repo name is
+    taken lands in clashes for _report_clashes.
     """
     template = _template_repo(gh, data)
     desired = ms.effective_repo_settings(data)
     changed = set()
     all_unresolved = []
     failures = []
+    # a repo name (lowercased — github names are case-insensitive) or id
+    # already held by a row, so two rows never share one repo: names cut at
+    # github's limit can collide
+    taken_by, taken_ids = {}, {}
+    for assignment, rows in data["assignments"].items():
+        for row in rows:
+            if row["repo_id"] is None:
+                continue
+            taken_ids[row["repo_id"]] = f"{assignment}/{row['name']}"
+            if row["repo"]:
+                name = row["repo"].rstrip("/").rsplit("/", 1)[-1].lower()
+                taken_by[name] = f"{assignment}/{row['name']}"
     for assignment, rows in data["assignments"].items():
         content_url = data["templates"].get(assignment)
         for row in rows:
@@ -352,7 +366,21 @@ def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions):
             logins, unresolved = _resolve_row_students(row, resolve)
             all_unresolved.extend(unresolved)
             repo_name = ms.join_repo_name(data["prefix"], assignment, row["name"])
-            existing = get_org_repo(gh, org, repo_name)
+            existing = None
+            holder = taken_by.get(repo_name.lower())
+            if holder is None:
+                existing = get_org_repo(gh, org, repo_name)
+                if existing is not None:
+                    holder = taken_ids.get(existing.id)
+            if holder is not None:
+                error(f"skipping \"{row['name']}\": repo name {repo_name} is"
+                      f" already taken by {holder}")
+                failures.append(repo_name)
+                stem = ms.join_repo_name(data["prefix"], assignment)
+                clashes.append((classroom_dir, assignment, row["name"], holder,
+                                ms.MAX_REPO_NAME_LEN - len(stem) - 1))
+                continue
+            taken_by[repo_name.lower()] = f"{assignment}/{row['name']}"
 
             made = {}
             if existing is not None:
@@ -424,6 +452,21 @@ def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions):
                 row["repo_id"] = made["repo"].id
                 changed.add(assignment)
     return changed, all_unresolved, failures
+
+
+def _report_clashes(org, clashes):
+    """the fix for rows skipped over a taken repo name, as the run's last word."""
+    if not clashes:
+        return
+    error(f"{len(clashes)} row(s) got no repo: the repo name is already taken."
+          f" to fix, in the {org}/{ms.META_REPO_NAME} repo:")
+    for classroom_dir, assignment, name, holder, room in clashes:
+        error(f'  - {classroom_dir}/{assignment}.tsv: rename row "{name}"'
+              f" (clashes with {holder}) to a NAME no other row uses, at most"
+              f" {room} characters so it is not cut off")
+    for classroom_dir in dict.fromkeys(c[0] for c in clashes):
+        error(f"  then commit, push, and run: gh-class-sak meta apply"
+              f" {classroom_dir} --no-dryrun")
 
 
 def _cancel_invitation(repo, login):
@@ -1038,9 +1081,10 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
                  lambda: None, actions)
 
     resolve = _make_resolver(org, course)
+    clashes = []
     changed, unresolved, failures = _realize_classroom(gh, org, classroom_dir,
                                                        data, resolve, dryrun,
-                                                       actions)
+                                                       actions, clashes)
     unresolved = unresolvable + unresolved
 
     # the whole classroom converges like apply: recorded repos get their
@@ -1068,6 +1112,7 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
 
     if not actions:
         output("nothing to do")
+    _report_clashes(org, clashes)
     if unresolved or failures:
         sys.exit(1)
 
@@ -1155,6 +1200,7 @@ def meta_apply(classroom, remove_unlisted, dryrun):
     actions = []
     any_unresolved = []
     any_failures = []
+    clashes = []
     all_repos = list_org_repos(gh, org)
     by_id = {r.id: r for r in all_repos}
 
@@ -1166,7 +1212,7 @@ def meta_apply(classroom, remove_unlisted, dryrun):
         changed, unresolved, failures = _realize_classroom(gh, org,
                                                            classroom_dir, data,
                                                            resolve, dryrun,
-                                                           actions)
+                                                           actions, clashes)
         any_unresolved.extend(unresolved)
         any_failures.extend(failures)
         if changed:
@@ -1191,6 +1237,7 @@ def meta_apply(classroom, remove_unlisted, dryrun):
         ms.commit_and_push(checkout, "apply", get_token())
     if not actions:
         output("nothing to do")
+    _report_clashes(org, clashes)
     if any_unresolved or any_failures:
         sys.exit(1)
 
