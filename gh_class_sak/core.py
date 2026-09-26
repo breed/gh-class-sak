@@ -462,7 +462,24 @@ def renamed(old, new):
         warn(f'"{old}" is renamed: use {new}')
 
 
-@click.group()
+class UsageOrderGroup(click.Group):
+    """a group whose --help lists its commands in the order they're used —
+    setup first — instead of alphabetically. commands the order doesn't
+    name follow, alphabetically."""
+
+    def __init__(self, *args, order=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.order = list(order)
+
+    def list_commands(self, ctx):
+        names = super().list_commands(ctx)
+        return ([name for name in self.order if name in names]
+                + [name for name in names if name not in self.order])
+
+
+@click.group(cls=UsageOrderGroup, order=(
+    "help-me-setup", "course", "assignment", "sync", "repos", "canvas",
+    "migrate-github-classroom"))
 @click.version_option(version=version("gh-class-sak"), prog_name="gh-class-sak")
 def gh_class_sak():
     """Manage a course's GitHub repos from the command line.
@@ -472,8 +489,8 @@ def gh_class_sak():
     assignment  one repo per student or group in a course, e.g. hw1 gives
                 cs101-hw1-alice, cs101-hw1-bob
     \b
-    Start with: course init, then assignment create, then sync whenever the
-    roster or settings change. Run help-me-setup to check your setup.
+    New here? Run help-me-setup to check your setup, then course init, then
+    assignment create, then sync whenever the roster changes.
     """
     for key in said:
         said[key] = 0

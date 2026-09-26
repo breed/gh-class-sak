@@ -440,3 +440,29 @@ class TestCourseSettings:
                      "--protection", "pr-review", "--no-dryrun")
         assert result.exit_code == 0, result.output
         assert "nothing to do" in result.output
+
+
+class TestHelpOrder:
+    """--help lists commands in the order they're used, not alphabetically."""
+
+    def listed(self, runner, *group):
+        result = run(runner, *group, "--help")
+        assert result.exit_code == 0, result.output
+        section = result.output.split("Commands:")[1]
+        return [line.split()[0] for line in section.splitlines() if line.strip()]
+
+    def test_top_level_starts_with_setup(self, course_env):
+        assert self.listed(course_env.runner) == [
+            "help-me-setup", "course", "assignment", "sync", "repos", "canvas",
+            "migrate-github-classroom"]
+
+    def test_course_starts_with_init(self, course_env):
+        assert self.listed(course_env.runner, "course") == [
+            "init", "list", "show", "ta", "settings", "delete"]
+
+    def test_course_ta(self, course_env):
+        assert self.listed(course_env.runner, "course", "ta") == ["add", "remove"]
+
+    def test_repos(self, course_env):
+        assert self.listed(course_env.runner, "repos") == [
+            "list", "clone", "members", "missing"]

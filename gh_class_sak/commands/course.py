@@ -11,6 +11,7 @@ import click
 from gh_class_sak import meta_store as ms
 from gh_class_sak.commands import meta as m
 from gh_class_sak.core import (
+    UsageOrderGroup,
     announce_dryrun,
     config_ini,
     configured_orgs,
@@ -50,7 +51,8 @@ def _org_or_configured(org):
     return orgs
 
 
-@gh_class_sak.group("course")
+@gh_class_sak.group("course", cls=UsageOrderGroup, order=(
+    "init", "list", "show", "ta", "settings", "delete"))
 def course_group():
     """Set up and inspect courses, each hosted in a github org."""
     pass
@@ -153,7 +155,7 @@ def _same_person(a, b):
                 or (email_a and email_b and email_a.lower() == email_b.lower()))
 
 
-@course_group.group("ta")
+@course_group.group("ta", cls=UsageOrderGroup, order=("add", "remove"))
 def ta_group():
     """Add or remove a course's TAs: the record and the TAs team together.
 

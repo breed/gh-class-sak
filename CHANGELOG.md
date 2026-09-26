@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `--help` lists commands in the order you use them — `help-me-setup`,
+  then `course`, `assignment`, `sync` — instead of alphabetically; so do
+  `course --help` (`init` first) and `repos --help`
 - `course init` adds the org to the config's `[ORGS]` when it isn't there,
   so every later command finds the course without `--org`
 - a dry run that previewed anything now ends with `that was a preview:
