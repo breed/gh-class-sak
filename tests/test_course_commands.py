@@ -458,7 +458,7 @@ class TestHelpOrder:
 
     def test_course_starts_with_init(self, course_env):
         assert self.listed(course_env.runner, "course") == [
-            "init", "list", "show", "ta", "settings", "delete"]
+            "init", "list", "status", "show", "ta", "settings", "delete"]
 
     def test_course_ta(self, course_env):
         assert self.listed(course_env.runner, "course", "ta") == ["add", "remove"]
@@ -538,3 +538,51 @@ class TestRosterInput:
         assert "cannot read the roster: line 1: REPO_ID" in result.output
         assert "one person per line" in result.output
         assert "NAME       STUDENTS" in result.output
+
+
+class TestCourseStatus:
+    def test_counts_repos_and_invitations_and_says_what_to_do(self, course_env):
+        done = FakeRepo(ORG, f"{PREFIX}-hw1-msmith", collaborators=[
+            FakeNamedUser("msmith", role_name="write")])
+        waiting = FakeRepo(ORG, f"{PREFIX}-hw1-jdoe", invitations=["jdoe"])
+        course_env.org._repos += [done, waiting]
+        team = FakeTeam(course_env.org, f"{COURSE}-tas")
+        course_env.org._teams[team.slug] = team
+        seed_meta(course_env, assignments={"hw1": [
+            {"name": "msmith", "students": ["/msmith"],
+             "repo": done.html_url, "repo_id": done.id},
+            {"name": "jdoe", "students": ["/jdoe"],
+             "repo": waiting.html_url, "repo_id": waiting.id},
+            {"name": "late", "students": ["/late"], "repo": None, "repo_id": None}]})
+        result = run(course_env.runner, "course", "status", COURSE, "--org", ORG)
+        assert result.exit_code == 0, result.output
+        assert "ASSIGNMENT  REPOS  ACCEPTED  INVITED  NOT INVITED" in result.output
+        assert "hw1         2/3    1         1        0" in result.output
+        assert f"TAS TEAM  {COURSE}-TAs (matches tas)" in result.output
+        assert (f"  hw1: 1 row without a recorded repo → gh-class-sak sync {COURSE} --apply"
+                in result.output)
+        assert (f"  hw1: 1 invitation not accepted yet → gh-class-sak course show"
+                f" {COURSE} lists who" in result.output)
+
+    def test_a_course_with_nothing_left_says_so(self, course_env):
+        done = FakeRepo(ORG, f"{PREFIX}-hw1-msmith", collaborators=[
+            FakeNamedUser("msmith", role_name="write")])
+        course_env.org._repos.append(done)
+        course_env.org._teams[f"{COURSE}-tas"] = FakeTeam(course_env.org,
+                                                          f"{COURSE}-tas")
+        seed_meta(course_env, assignments={"hw1": [
+            {"name": "msmith", "students": ["/msmith"],
+             "repo": done.html_url, "repo_id": done.id}]})
+        result = run(course_env.runner, "course", "status", COURSE, "--org", ORG)
+        assert result.exit_code == 0, result.output
+        assert "all set: every repo exists and every student has accepted" \
+            in result.output
+
+    def test_a_new_course_points_at_assignment_create(self, course_env):
+        seed_meta(course_env)
+        result = run(course_env.runner, "course", "status", COURSE, "--org", ORG)
+        assert result.exit_code == 0, result.output
+        assert (f"no assignments yet → gh-class-sak assignment create {COURSE}"
+                " NAME --from-canvas" in result.output)
+        assert f"TAS TEAM  {COURSE}-TAs (not created" in result.output
+        assert f"TAs team → gh-class-sak sync {COURSE} --apply" in result.output

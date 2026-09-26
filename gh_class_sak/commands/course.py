@@ -22,13 +22,15 @@ from gh_class_sak.core import (
     get_github,
     get_token,
     gh_class_sak,
+    has_canvas_config,
     match_org,
     output,
     progress,
     resolve_course,
     warn,
 )
-from gh_class_sak.github_api import get_repo_by_id, list_org_repos
+from gh_class_sak.commands.repos import print_table
+from gh_class_sak.github_api import get_repo_by_id, list_org_repos, pending_invitees
 
 org_option = click.option(
     "--org", default=None,
@@ -54,7 +56,7 @@ def _org_or_configured(org):
 
 
 @gh_class_sak.group("course", cls=UsageOrderGroup, order=(
-    "init", "list", "show", "ta", "settings", "delete"))
+    "init", "list", "status", "show", "ta", "settings", "delete"))
 def course_group():
     """Set up and inspect courses, each hosted in a github org."""
     pass
@@ -260,6 +262,100 @@ def ta_remove(course, identities, org, dryrun):
             sys.exit(2)
         tas = [ta for ta in tas if not _same_person(entry, ta)]
     _change_tas(gh, org, classroom_dir, checkout, data, tas, dryrun)
+
+
+def _plural(n, one, many):
+    return f"{n} {one if n == 1 else many}"
+
+
+@course_group.command("status")
+@click.argument("course")
+@org_option
+def course_status(course, org):
+    """What's done and what's left in COURSE, and the command for each step.
+
+    Per assignment: how many rows have a repo, and how many students have
+    accepted their invitation, are still invited, or aren't invited yet.
+    Then the TAs team, and a to-do list naming the command that fixes
+    each gap. Read-only.
+
+    \b
+    Examples:
+      gh-class-sak course status CS-101
+    """
+    gh = get_github()
+    org, classroom_dir, _checkout, data = _open_course(gh, course, org)
+    resolve = m._make_resolver(org, data["canvas_course"] or classroom_dir)
+    by_id = {r.id: r for r in list_org_repos(gh, org)}
+    canvas = has_canvas_config()
+    table, todo = [], []
+    for assignment, rows in data["assignments"].items():
+        no_repo = gone = accepted = invited = missing = unresolved = 0
+        for row in progress(rows, f"checking {assignment}"):
+            if row["repo_id"] is None:
+                no_repo += 1
+                continue
+            repo = by_id.get(row["repo_id"]) or get_repo_by_id(gh, row["repo_id"])
+            if repo is None:
+                gone += 1
+                continue
+            logins, bad = m._resolve_row_students(row, resolve)
+            unresolved += len(bad)
+            collaborators = {c.login.lower() for c in repo.get_collaborators()}
+            pending = {login.lower() for login in pending_invitees(repo)}
+            for login in logins:
+                if login.lower() in collaborators:
+                    accepted += 1
+                elif login.lower() in pending:
+                    invited += 1
+                else:
+                    missing += 1
+        have = len(rows) - no_repo - gone
+        table.append([assignment, f"{have}/{len(rows)}", str(accepted),
+                      str(invited), str(missing + unresolved)])
+        sync = f"gh-class-sak sync {classroom_dir} --apply"
+        if no_repo:
+            todo.append(f"{assignment}: {_plural(no_repo, 'row', 'rows')}"
+                        f" without a recorded repo → {sync}")
+        if missing:
+            todo.append(f"{assignment}: {_plural(missing, 'student', 'students')}"
+                        f" not invited yet → {sync}")
+        if gone:
+            todo.append(f"{assignment}: {_plural(gone, 'recorded repo', 'recorded repos')}"
+                        f" gone from github → gh-class-sak course show {classroom_dir}")
+        if invited:
+            chase = (f"gh-class-sak canvas message-missing {classroom_dir} {assignment}"
+                     if canvas else f"gh-class-sak course show {classroom_dir} lists who")
+            todo.append(f"{assignment}:"
+                        f" {_plural(invited, 'invitation', 'invitations')}"
+                        f" not accepted yet → {chase}")
+        if unresolved:
+            fix = (f"gh-class-sak canvas message-missing {classroom_dir} {assignment}"
+                   " asks them to link github" if canvas
+                   else f"add their /GITHUBID in {assignment}.tsv")
+            todo.append(f"{assignment}:"
+                        f" {_plural(unresolved, 'student', 'students')} without a"
+                        f" github id → {fix}")
+
+    output(f"COURSE    {classroom_dir}  (org {org})")
+    if table:
+        print_table(["ASSIGNMENT", "REPOS", "ACCEPTED", "INVITED", "NOT INVITED"],
+                    table)
+    else:
+        todo.append(f"no assignments yet → gh-class-sak assignment create"
+                    f" {classroom_dir} NAME --from-canvas")
+    tas_line = m._tas_team_line(gh, org, classroom_dir, data["tas"], resolve)
+    output(tas_line)
+    if not tas_line.endswith("(matches tas)"):
+        todo.append(f"TAs team → gh-class-sak sync {classroom_dir} --apply")
+
+    output("")
+    if todo:
+        output("to do:")
+        for line in todo:
+            output(f"  {line}")
+    else:
+        output("all set: every repo exists and every student has accepted")
 
 
 def _setting_text(value):
