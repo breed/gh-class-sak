@@ -11,6 +11,8 @@ import click
 from gh_class_sak import meta_store as ms
 from gh_class_sak.commands import meta as m
 from gh_class_sak.core import (
+    DRYRUN_FLAGS,
+    DRYRUN_HELP,
     UsageOrderGroup,
     announce_dryrun,
     config_ini,
@@ -248,8 +250,7 @@ def _setting_text(value):
               help="allow force pushes to the default branch")
 @click.option("--template", default=None,
               help='OWNER/NAME template repo for the course\'s new repos ("" for none)')
-@click.option("--dryrun/--no-dryrun", default=True,
-              help="preview changes (default); --no-dryrun applies them")
+@click.option(*DRYRUN_FLAGS, default=True, help=DRYRUN_HELP)
 def course_settings(course, org, protection, linear_history, force_push,
                     template, dryrun):
     """Show COURSE's repo settings, or change them.

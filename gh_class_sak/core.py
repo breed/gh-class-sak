@@ -191,7 +191,10 @@ def _announce_dryrun(ctx, param, value):
     and, when it previewed anything, the last thing too, since a long
     preview scrolls the first line away."""
     if value:
-        _warning_line("dry run: no changes will be made. add --no-dryrun to apply")
+        if ctx.meta.get(LEGACY):
+            _warning_line("dry run: no changes will be made. add --no-dryrun to apply")
+        else:
+            _warning_line("dry run: no changes will be made. add --apply to make them")
         ctx.call_on_close(lambda: _dryrun_footer(ctx))
     return value
 
@@ -205,12 +208,16 @@ def announce_dryrun():
 
 def _dryrun_footer(ctx):
     if said["would"] and not ctx.meta.get(LEGACY):
-        _warning_line("that was a preview: nothing changed. add --no-dryrun to apply")
+        _warning_line("that was a preview: nothing changed. add --apply to make"
+                      " these changes")
 
+
+# --apply is the plain-words spelling of --no-dryrun; both work
+DRYRUN_FLAGS = ("--dryrun/--no-dryrun", " /--apply")
+DRYRUN_HELP = "preview changes (default); --apply (or --no-dryrun) makes them"
 
 dryrun_option = click.option(
-    "--dryrun/--no-dryrun", default=True, callback=_announce_dryrun,
-    help="preview changes (default); --no-dryrun applies them",
+    *DRYRUN_FLAGS, default=True, callback=_announce_dryrun, help=DRYRUN_HELP,
 )
 
 

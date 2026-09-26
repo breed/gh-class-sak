@@ -49,7 +49,7 @@ differ):
 
 ```
 $ gh-class-sak migrate-github-classroom cs101-fall
-⚠️  dry run: no changes will be made. add --no-dryrun to apply
+⚠️  dry run: no changes will be made. add --apply to make them
 hw1: 2 repos (jdoe, rpatel)
   course for "hw1" (blank to skip): CS-101
   assignment name for "hw1" [hw1]:

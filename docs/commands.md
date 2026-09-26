@@ -28,7 +28,7 @@ the org name.
 Every command that changes something previews by default: it opens with
 `⚠️  dry run: no changes will be made`, prints a `⚠️  would …` line per change, and —
 when it previewed anything — ends with
-`⚠️  that was a preview: nothing changed. add --no-dryrun to apply`, since a long
+`⚠️  that was a preview: nothing changed. add --apply to make these changes`, since a long
 preview scrolls the opening line away. `--no-dryrun` applies the changes.
 
 `sync`, `assignment create`, `course ta`, and `course settings` end with a one-line
@@ -192,11 +192,11 @@ It writes to disk, so it previews by default and only acts with `--no-dryrun`:
 
 ```console
 $ gh-class-sak repos clone cs101-fall project --dest grading
-⚠️  dry run: no changes will be made. add --no-dryrun to apply
+⚠️  dry run: no changes will be made. add --apply to make them
 ⚠️  would clone cs101-fall/project-team-1 -> grading/team-1
 ⚠️  would clone cs101-fall/project-nightowls -> grading/nightowls
 ⚠️  would clone cs101-fall/project-team-3 -> grading/team-3
-⚠️  that was a preview: nothing changed. add --no-dryrun to apply
+⚠️  that was a preview: nothing changed. add --apply to make these changes
 ```
 
 Your token is handed to git through the environment, so it never appears in `ps` output,
@@ -270,12 +270,12 @@ default; in an org with no classroom-meta repo yet, a
 
 ```console
 $ gh-class-sak course init CS-101 --org cs101-fall
-⚠️  dry run: no changes will be made. add --no-dryrun to apply
+⚠️  dry run: no changes will be made. add --apply to make them
 no canvas config; seed the [TAS] section by hand
 ⚠️  would record cs_101: prefix=CS-101 tas=-
 ⚠️  would create team "cs_101-TAs" in cs101-fall
 ⚠️  would add cs101-fall to the config's [ORGS]
-⚠️  that was a preview: nothing changed. add --no-dryrun to apply
+⚠️  that was a preview: nothing changed. add --apply to make these changes
 ```
 
 ## course list

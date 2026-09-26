@@ -274,7 +274,7 @@ class TestInitRemembersTheOrg:
 
 
 PREVIEW_FOOTER = ("that was a preview: nothing changed."
-                  " add --no-dryrun to apply")
+                  " add --apply to make these changes")
 
 
 class TestNextSteps:
@@ -466,3 +466,31 @@ class TestHelpOrder:
     def test_repos(self, course_env):
         assert self.listed(course_env.runner, "repos") == [
             "list", "clone", "members", "missing"]
+
+
+class TestApply:
+    def test_apply_is_the_same_as_no_dryrun(self, course_env):
+        seed_meta(course_env, assignments=team_row())
+        result = run(course_env.runner, "sync", COURSE, "--org", ORG, "--apply")
+        assert result.exit_code == 0, result.output
+        assert "dry run" not in result.output
+        course_env.gh.get_repo(f"{ORG}/{REPO_PREFIX}-team-1")
+
+    def test_the_preview_suggests_apply(self, course_env):
+        seed_meta(course_env, assignments=team_row())
+        result = run(course_env.runner, "sync", COURSE, "--org", ORG)
+        assert result.output.startswith(
+            "⚠️  dry run: no changes will be made. add --apply to make them")
+
+    def test_the_renamed_commands_keep_their_banner(self, course_env):
+        seed_meta(course_env, assignments=team_row())
+        result = run(course_env.runner, "meta", "apply", ORG)
+        assert result.output.startswith(
+            "⚠️  dry run: no changes will be made. add --no-dryrun to apply")
+
+    def test_course_settings_takes_apply(self, course_env):
+        seed_meta(course_env)
+        result = run(course_env.runner, "course", "settings", COURSE, "--org", ORG,
+                     "--template", f"{ORG}/Template", "--apply")
+        assert result.exit_code == 0, result.output
+        assert meta_state(course_env)["template"] == f"{ORG}/Template"

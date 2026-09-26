@@ -109,12 +109,12 @@ work). A new org is added to your config's `[ORGS]`, so no later command needs `
 
 ```console
 $ gh-class-sak course init CS-101 --org cs101-fall
-⚠️  dry run: no changes will be made. add --no-dryrun to apply
+⚠️  dry run: no changes will be made. add --apply to make them
 no canvas config; seed the [TAS] section by hand
 ⚠️  would record cs_101: prefix=CS-101 tas=-
 ⚠️  would create team "cs_101-TAs" in cs101-fall
 ⚠️  would add cs101-fall to the config's [ORGS]
-⚠️  that was a preview: nothing changed. add --no-dryrun to apply
+⚠️  that was a preview: nothing changed. add --apply to make these changes
 ```
 
 **2. Create an assignment's repos.** `assignment create` takes the course, the
@@ -192,11 +192,11 @@ Pull every team's repo down for grading — like all mutating commands, a previe
 
 ```console
 $ gh-class-sak repos clone cs101-fall project --dest grading
-⚠️  dry run: no changes will be made. add --no-dryrun to apply
+⚠️  dry run: no changes will be made. add --apply to make them
 ⚠️  would clone cs101-fall/project-team-1 -> grading/team-1
 ⚠️  would clone cs101-fall/project-nightowls -> grading/nightowls
 ⚠️  would clone cs101-fall/project-team-3 -> grading/team-3
-⚠️  that was a preview: nothing changed. add --no-dryrun to apply
+⚠️  that was a preview: nothing changed. add --apply to make these changes
 ```
 
 Add `--no-dryrun` and it actually clones, fast-forwarding any repo you already have.

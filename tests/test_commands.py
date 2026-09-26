@@ -269,7 +269,7 @@ class TestReposClone:
         assert len(out) == 5
         assert out[0].startswith("\N{WARNING SIGN}\N{VARIATION SELECTOR-16}  dry run")
         assert out[-1].endswith("that was a preview: nothing changed."
-                                " add --no-dryrun to apply")
+                                " add --apply to make these changes")
         assert all(ln.startswith("\N{WARNING SIGN}") for ln in out)
         assert str(dest / "team-12") in out[1]
 
