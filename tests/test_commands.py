@@ -423,3 +423,35 @@ def test_print_table_never_pads_the_last_column(capsys):
     repos_cmd.print_table(["A", "B"], [["x", "y"], ["longer", "z"]])
     out = capsys.readouterr().out.splitlines()
     assert out == ["A       B", "x       y", "longer  z"]
+
+
+class TestReposCloneBefore:
+    def test_a_date_alone_means_the_end_of_that_day(self):
+        from gh_class_sak.commands.repos import _parse_deadline
+        when = _parse_deadline(None, None, "2026-10-01")
+        assert (when.hour, when.minute, when.second) == (23, 59, 59)
+        assert when.tzinfo is not None
+        assert _parse_deadline(None, None, "2026-10-01 17:00").hour == 17
+
+    def test_a_bad_deadline_is_a_usage_error(self, cli, no_config):
+        result = run(cli, "repos", "clone", ORG, "project", "--before", "friday")
+        assert result.exit_code == 2
+        assert "YYYY-MM-DD" in result.output
+
+    def test_each_repo_is_left_at_its_deadline_commit(self, cli, no_config,
+                                                      tmp_path, monkeypatch):
+        from gh_class_sak import git_ops
+        monkeypatch.setattr(git_ops, "clone_or_update", lambda *a, **k: "cloned")
+        at = iter([("1a2b3c4", "2026-10-01 22:00"), None, None, None])
+        monkeypatch.setattr(git_ops, "checkout_before", lambda dest, when: next(at))
+        result = run(cli, "repos", "clone", ORG, "project", "--dest",
+                     str(tmp_path / "grading"), "--before", "2026-10-01", "--apply")
+        assert result.exit_code == 0, result.output
+        assert "1a2b3c4 (2026-10-01 22:00)" in result.output
+        assert "no commit before 2026-10-01 23:59; left at its latest commit" \
+            in result.output
+
+    def test_the_preview_names_the_deadline(self, cli, no_config, tmp_path):
+        result = run(cli, "repos", "clone", ORG, "project", "--dest",
+                     str(tmp_path / "grading"), "--before", "2026-10-01")
+        assert "at its last commit before 2026-10-01 23:59" in result.output
