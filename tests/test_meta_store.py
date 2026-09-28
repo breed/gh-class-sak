@@ -341,3 +341,44 @@ class TestLoadMetaCourses:
         classrooms = ms.load_meta_classrooms(gh, ORG)
         assert list(classrooms) == ["cs101"]
         assert "cs210" in capsys.readouterr().err
+
+
+class TestUniquifyNames:
+    def row(self, name, *students):
+        return {"name": name, "students": list(students), "repo": None,
+                "repo_id": None}
+
+    def names(self, rows):
+        return [(r["name"], r["students"]) for r in rows]
+
+    def test_namesakes_are_numbered_in_roster_order_the_first_time(self):
+        rows = ms.uniquify_names([self.row("Jose-Nunez", "a@x.edu/jose1"),
+                                  self.row("Jose-Nunez", "b@x.edu/jose2")], [])
+        assert [r["name"] for r in rows] == ["Jose-Nunez", "Jose-Nunez-2"]
+
+    def test_a_person_without_a_namesake_keeps_their_row_when_their_id_changes(self):
+        # a fixed github link must not turn into a new row
+        existing = [self.row("Frank-Field", "/frnak")]
+        rows = ms.uniquify_names([self.row("Frank-Field", "/frank")], existing)
+        assert self.names(rows) == [("Frank-Field", ["/frank"])]
+
+    def test_a_departed_namesakes_name_is_never_handed_to_someone_else(self):
+        existing = [self.row("Jose-Nunez", "a@x.edu/jose1"),
+                    self.row("Jose-Nunez-2", "b@x.edu/jose2")]
+        # the first jose dropped; a new third jose enrolled
+        rows = ms.uniquify_names([self.row("Jose-Nunez", "b@x.edu/jose2"),
+                                  self.row("Jose-Nunez", "c@x.edu/jose3")], existing)
+        assert self.names(rows) == [("Jose-Nunez-2", ["b@x.edu/jose2"]),
+                                    ("Jose-Nunez-3", ["c@x.edu/jose3"])]
+
+    def test_one_remaining_namesake_stays_on_their_own_row(self):
+        existing = [self.row("Jose-Nunez", "a@x.edu/jose1"),
+                    self.row("Jose-Nunez-2", "b@x.edu/jose2")]
+        rows = ms.uniquify_names([self.row("Jose-Nunez", "b@x.edu/jose2")], existing)
+        assert [r["name"] for r in rows] == ["Jose-Nunez-2"]
+
+    def test_groups_number_repeats_only(self):
+        rows = ms.uniquify_names([self.row("Team-A", "/a"), self.row("Team-A", "/b"),
+                                  self.row("Team-B", "/c")],
+                                 [self.row("Team-A", "/zzz")], by_person=False)
+        assert [r["name"] for r in rows] == ["Team-A", "Team-A-2", "Team-B"]

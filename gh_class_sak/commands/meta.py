@@ -330,8 +330,61 @@ def _reconcile_repo_protection(repo, desired, dryrun, actions):
              f" ({_protection_summary(desired)})", _protect, actions)
 
 
+class _RepoClaims:
+    """the repo names (lowercased — github names are case-insensitive) and
+    ids already held by a row, across every classroom in the org, so no two
+    rows ever share a repo: names cut at github's limit can collide, and
+    classrooms in one org can share a prefix."""
+
+    def __init__(self, checkout):
+        self.by_name, self.by_id = {}, {}
+        for classroom_dir in ms.list_classrooms(checkout):
+            data = _load_classroom(checkout, classroom_dir)
+            for assignment, rows in data["assignments"].items():
+                for row in rows:
+                    if row["repo_id"] is not None:
+                        self.claim(classroom_dir, assignment, row,
+                                   row["repo"], row["repo_id"])
+
+    def claim(self, classroom_dir, assignment, row, repo, repo_id=None):
+        holder = f"{classroom_dir}/{assignment}/{row['name']}"
+        if repo_id is not None:
+            self.by_id[repo_id] = holder
+        if repo:
+            self.by_name[repo.rstrip("/").rsplit("/", 1)[-1].lower()] = holder
+
+
+def _free_repo_name(gh, org, stem_parts, name, claims):
+    """(repo name, existing repo to adopt or None, holder of the default name)
+    for a row: its default name, or when another row holds that, the first
+    numbered one (-2, -3, …) nobody holds, its NAME part cut to fit github's
+    limit. an unclaimed repo already there under the name is adopted. the
+    repo name is None when not even one character of NAME fits.
+    """
+    stem = ms.join_repo_name(*stem_parts)
+    room = ms.MAX_REPO_NAME_LEN - len(stem) - 1
+    first_holder = None
+    n = 1
+    while True:
+        suffix = "" if n == 1 else f"-{n}"
+        if room - len(suffix) < 1:
+            return None, None, first_holder
+        candidate = ms.join_repo_name(*stem_parts,
+                                      name[:room - len(suffix)] + suffix)
+        holder = claims.by_name.get(candidate.lower())
+        existing = None
+        if holder is None:
+            existing = get_org_repo(gh, org, candidate)
+            if existing is not None:
+                holder = claims.by_id.get(existing.id)
+        if holder is None:
+            return candidate, existing, first_holder
+        first_holder = first_holder or holder
+        n += 1
+
+
 def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions,
-                       clashes, only=None):
+                       claims, only=None):
     """create/adopt the repo for every row that has none, and grant push.
 
     covers every assignment in the classroom. a repo realized without a
@@ -339,51 +392,44 @@ def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions,
     here without a default branch. mutates rows in place under
     --no-dryrun. returns (changed assignment names, unresolved, failures) —
     callers save exactly the named tsvs, so untouched files (and their hand
-    comments) are never rewritten. a row skipped because its repo name is
-    taken lands in clashes for _report_clashes. only names the single
-    assignment to realize; names taken anywhere in the classroom still clash.
+    comments) are never rewritten. claims holds every repo a row already
+    has, org-wide; a row whose default name is taken gets a numbered one.
+    only names the single assignment to realize.
     """
     template = _template_repo(gh, data)
     desired = ms.effective_repo_settings(data)
     changed = set()
     all_unresolved = []
     failures = []
-    # a repo name (lowercased — github names are case-insensitive) or id
-    # already held by a row, so two rows never share one repo: names cut at
-    # github's limit can collide
-    taken_by, taken_ids = {}, {}
-    for assignment, rows in data["assignments"].items():
-        for row in rows:
-            if row["repo_id"] is None:
-                continue
-            taken_ids[row["repo_id"]] = f"{assignment}/{row['name']}"
-            if row["repo"]:
-                name = row["repo"].rstrip("/").rsplit("/", 1)[-1].lower()
-                taken_by[name] = f"{assignment}/{row['name']}"
     for assignment in _covered(data, only):
         rows = data["assignments"][assignment]
         content_url = data["templates"].get(assignment)
+        stem_parts = (data["prefix"], assignment)
+        if len(ms.join_repo_name(*stem_parts)) + 2 > ms.MAX_REPO_NAME_LEN \
+                and any(row["repo_id"] is None for row in rows):
+            error(f"{classroom_dir}/{assignment}: the prefix and assignment name"
+                  " leave no room for team names in GitHub's 100-character"
+                  " repo names; shorten the prefix or the assignment name")
+            failures.append(assignment)
+            continue
         for row in rows:
             if row["repo_id"] is not None:
                 continue
             logins, unresolved = _resolve_row_students(row, resolve)
             all_unresolved.extend(unresolved)
-            repo_name = ms.join_repo_name(data["prefix"], assignment, row["name"])
-            existing = None
-            holder = taken_by.get(repo_name.lower())
-            if holder is None:
-                existing = get_org_repo(gh, org, repo_name)
-                if existing is not None:
-                    holder = taken_ids.get(existing.id)
-            if holder is not None:
-                error(f"skipping \"{row['name']}\": repo name {repo_name} is"
-                      f" already taken by {holder}")
-                failures.append(repo_name)
-                stem = ms.join_repo_name(data["prefix"], assignment)
-                clashes.append((classroom_dir, assignment, row["name"], holder,
-                                ms.MAX_REPO_NAME_LEN - len(stem) - 1))
+            repo_name, existing, holder = _free_repo_name(
+                gh, org, stem_parts, row["name"], claims)
+            if repo_name is None:
+                error(f'{classroom_dir}/{assignment}: no numbered repo name fits'
+                      f' for "{row["name"]}"; shorten the prefix or the'
+                      " assignment name")
+                failures.append(row["name"])
                 continue
-            taken_by[repo_name.lower()] = f"{assignment}/{row['name']}"
+            if holder is not None:
+                default = ms.join_repo_name(*stem_parts, row["name"])
+                warn(f"{default} is taken by {holder}; using {repo_name}")
+            claims.claim(classroom_dir, assignment, row,
+                         f"{org}/{repo_name}")
 
             made = {}
             if existing is not None:
@@ -455,21 +501,6 @@ def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions,
                 row["repo_id"] = made["repo"].id
                 changed.add(assignment)
     return changed, all_unresolved, failures
-
-
-def _report_clashes(org, clashes):
-    """the fix for rows skipped over a taken repo name, as the run's last word."""
-    if not clashes:
-        return
-    error(f"{len(clashes)} row(s) got no repo: the repo name is already taken."
-          f" to fix, in the {org}/{ms.META_REPO_NAME} repo:")
-    for classroom_dir, assignment, name, holder, room in clashes:
-        error(f'  - {classroom_dir}/{assignment}.tsv: rename row "{name}"'
-              f" (clashes with {holder}) to a NAME no other row uses, at most"
-              f" {room} characters so it is not cut off")
-    for classroom_dir in dict.fromkeys(c[0] for c in clashes):
-        error(f"  then commit, push, and run: gh-class-sak sync"
-              f" {classroom_dir} --no-dryrun")
 
 
 def _cancel_invitation(repo, login):
@@ -1095,6 +1126,10 @@ def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
     if from_canvas:
         incoming = _rows_from_canvas(Classroom(org, course), canvas_group,
                                      unresolvable)
+        # namesakes (two Alice Adamses, two "Team A" groups) get numbered
+        # NAMEs, so neither replaces the other's row in the merge
+        incoming = ms.uniquify_names(incoming, data["assignments"].get(name, []),
+                                     by_person=canvas_group is None)
         if canvas_group and data["group_sets"].get(name) != canvas_group:
             group_set_changed = True
             data["group_sets"] = {**data["group_sets"], name: canvas_group}
@@ -1111,8 +1146,11 @@ def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
         # an enrolled person whose canvas entry is unusable never makes it
         # into incoming, but they are still in the class — never treat a
         # recorded row of theirs as dropped
-        still_here = {row["name"] for row in incoming} \
-            | {github_safe_name(n) for n in unresolvable if n}
+        unusable = {github_safe_name(n) for n in unresolvable if n}
+        still_here = {row["name"] for row in incoming} | {
+            row["name"] for row in merged
+            if re.sub(r"-\d+$", "", row["name"]) in unusable
+            or row["name"] in unusable}
         gone = [row for row in merged if row["name"] not in still_here]
         if remove_dropped:
             removed = gone
@@ -1137,10 +1175,10 @@ def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
 
     resolve = _make_resolver(org, course)
     only = None if whole_classroom else name
-    clashes = []
     changed, unresolved, failures = _realize_classroom(gh, org, classroom_dir,
                                                        data, resolve, dryrun,
-                                                       actions, clashes, only)
+                                                       actions,
+                                                       _RepoClaims(checkout), only)
     unresolved = unresolvable + unresolved
 
     # the covered repos converge like apply: recorded repos get their
@@ -1172,7 +1210,6 @@ def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
 
     if not actions:
         output("nothing to do")
-    _report_clashes(org, clashes)
     if unresolved or failures:
         sys.exit(1)
 
@@ -1282,7 +1319,7 @@ def _apply(gh, org, partial, classroom, remove_unlisted, dryrun):
     actions = []
     any_unresolved = []
     any_failures = []
-    clashes = []
+    claims = _RepoClaims(checkout)
     all_repos = list_org_repos(gh, org)
     by_id = {r.id: r for r in all_repos}
 
@@ -1294,7 +1331,7 @@ def _apply(gh, org, partial, classroom, remove_unlisted, dryrun):
         changed, unresolved, failures = _realize_classroom(gh, org,
                                                            classroom_dir, data,
                                                            resolve, dryrun,
-                                                           actions, clashes)
+                                                           actions, claims)
         any_unresolved.extend(unresolved)
         any_failures.extend(failures)
         if changed:
@@ -1319,7 +1356,6 @@ def _apply(gh, org, partial, classroom, remove_unlisted, dryrun):
         ms.commit_and_push(checkout, "apply", get_token())
     if not actions:
         output("nothing to do")
-    _report_clashes(org, clashes)
     if any_unresolved or any_failures:
         sys.exit(1)
 

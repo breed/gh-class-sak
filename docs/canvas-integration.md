@@ -64,7 +64,8 @@ gh-class-sak assignment create COURSE hw1 --from-canvas
 ```
 
 builds one row per **enrolled person** — students, instructors, and TAs alike. The row
-`NAME` is the person's name made GitHub-safe (`José Núñez` → `Jose-Nunez`), and the
+`NAME` is the person's name made GitHub-safe (`José Núñez` → `Jose-Nunez`; a second José
+Núñez becomes `Jose-Nunez-2`, and each keeps their own row on every re-import), and the
 `STUDENTS` entry is their full `EMAIL/GITHUBID` identity, both halves as far as Canvas
 knows them. From there the normal machinery applies: merge, never-clobber, repos
 created under dryrun control, and any `[TEMPLATE]` starter content.
