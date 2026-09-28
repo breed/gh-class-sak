@@ -42,10 +42,14 @@
 - a default repo name longer than GitHub's 100-character limit is cut off at
   100 instead of failing the create with a traceback
 - a row whose repo name another row already holds — two long names that cut
-  to the same 100 characters, or a new row matching a repo another row
-  recorded — is skipped with an error instead of silently sharing that
-  repo. The run carries on, exits 1, and ends with the fix: which tsv row to
-  rename, how long its `NAME` may be, and the `sync` to run after
+  to the same 100 characters, or a repo another row recorded, in any course
+  in the org — gets the first free numbered name (`…-2`, `…-3`) instead of
+  silently sharing that repo, and the run says which. A prefix and
+  assignment that leave no room for team names are a clear error
+- two people (or two Canvas groups) with the same name get numbered rows,
+  `Jose-Nunez` and `Jose-Nunez-2`: before, the second replaced the first's
+  row and one student was left with no repo. Each keeps their own row on
+  every re-import, however Canvas orders them
 
 ## v1.5.0
 
