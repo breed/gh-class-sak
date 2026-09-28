@@ -1226,6 +1226,11 @@ def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
                      lambda: None, actions)
     elif table_file is not None:
         incoming = parse(table_file.read())
+        if parse is not ms.parse_students_tsv:
+            # a --roster's generated NAMEs can repeat; number namesakes by
+            # identity like canvas rows, never by their order in the file
+            incoming = ms.uniquify_names(incoming,
+                                         data["assignments"].get(name, []))
     else:
         incoming = []  # template-only: no roster changes
 

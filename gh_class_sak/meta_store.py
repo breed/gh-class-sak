@@ -217,17 +217,13 @@ def parse_roster(text):
 
 
 def _rows_from_list(entries):
-    """one row per identity, NAMEs unique within the list."""
-    rows, taken = [], set()
+    """one row per identity. namesakes keep the same NAME here: numbering
+    them is uniquify_names's job, by identity, so it survives reordering."""
+    rows = []
     for entry in entries:
         email, github = parse_identity(entry)
-        base = github_safe_name(github or email.partition("@")[0])
-        name, n = base, 1
-        while name.lower() in taken:
-            n += 1
-            name = f"{base}-{n}"
-        taken.add(name.lower())
-        rows.append({"name": name, "students": [format_identity(email, github)],
+        rows.append({"name": github_safe_name(github or email.partition("@")[0]),
+                     "students": [format_identity(email, github)],
                      "repo": None, "repo_id": None})
     return rows
 

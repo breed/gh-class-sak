@@ -683,3 +683,30 @@ class TestDemo:
         result = run(course_env.runner, "demo", "sync", "--help")
         assert result.exit_code == 0, result.output
         assert "Usage: gh-class-sak sync" in result.output
+
+
+class TestRosterNamesakes:
+    def create(self, env, tmp_path, text):
+        roster = tmp_path / "people.txt"
+        roster.write_text(text)
+        return run(env.runner, "assignment", "create", COURSE, "hw1", "--org", ORG,
+                   "--roster", str(roster), "--apply")
+
+    def test_namesakes_in_a_plain_list_keep_their_rows_when_reordered(
+            self, course_env, tmp_path):
+        seed_meta(course_env)
+        self.create(course_env, tmp_path, "jane@a.edu/janea\njane@b.edu/janeb\n")
+        result = self.create(course_env, tmp_path, "jane@b.edu/janeb\njane@a.edu/janea\n")
+        assert result.exit_code == 0, result.output
+        rows = {r["name"]: r["students"]
+                for r in meta_state(course_env)["assignments"]["hw1"]}
+        assert rows == {"janea": ["jane@a.edu/janea"], "janeb": ["jane@b.edu/janeb"]}
+
+    def test_email_only_namesakes_are_numbered_and_stay_put(self, course_env,
+                                                            tmp_path):
+        seed_meta(course_env)
+        self.create(course_env, tmp_path, "jane@a.edu\njane@b.edu\n")
+        self.create(course_env, tmp_path, "jane@b.edu\njane@a.edu\n")
+        rows = {r["name"]: r["students"]
+                for r in meta_state(course_env)["assignments"]["hw1"]}
+        assert rows == {"jane": ["jane@a.edu/"], "jane-2": ["jane@b.edu/"]}

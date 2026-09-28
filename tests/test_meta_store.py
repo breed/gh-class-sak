@@ -354,9 +354,11 @@ class TestParseRoster:
             ("tk-codes", ["/tk-codes"])]
         assert all(r["repo"] is None and r["repo_id"] is None for r in rows)
 
-    def test_plain_list_names_stay_unique(self):
+    def test_plain_list_names_are_left_for_uniquify_names_to_number(self):
+        # numbering by position would swap namesakes when the list is
+        # reordered; assignment create numbers them by identity instead
         rows = ms.parse_roster("jane@a.edu\njane@b.edu\n")
-        assert [r["name"] for r in rows] == ["jane", "jane-2"]
+        assert [r["name"] for r in rows] == ["jane", "jane"]
 
     def test_a_table_parses_as_before(self):
         text = "NAME\tSTUDENTS\nteam-1\tjane@school.edu/,/msmith\n"
