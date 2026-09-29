@@ -21,6 +21,7 @@ from click.testing import CliRunner
 from gh_class_sak import core
 from gh_class_sak import meta_store as ms
 from gh_class_sak.commands import classrooms as classrooms_cmd
+from gh_class_sak.commands import course as course_cmd
 from gh_class_sak.commands import meta as meta_cmd
 from gh_class_sak.commands import repos as repos_cmd
 from gh_class_sak.core import gh_class_sak
@@ -31,7 +32,7 @@ SVG_PATH = Path(__file__).resolve().parent.parent / "docs" / "demo.svg"
 # the story the cast tells: discover the org, inspect a roster, pull it all
 # down for grading
 COMMANDS = [
-    "gh-class-sak classrooms cs101-fall",
+    "gh-class-sak course list --org cs101-fall",
     "gh-class-sak repos list cs101-fall project --members --name",
     "gh-class-sak repos clone cs101-fall project --dest grading",
 ]
@@ -60,7 +61,7 @@ def _outputs():
         # the demo runs with no config file, as a first-time reader would
         stack.enter_context(
             mock.patch.object(core, "config_ini", str(Path(tmp) / "absent.ini")))
-        for mod in (core, classrooms_cmd, repos_cmd, meta_cmd):
+        for mod in (core, classrooms_cmd, course_cmd, repos_cmd, meta_cmd):
             stack.enter_context(
                 mock.patch.object(mod, "get_github", lambda: gh, create=True))
             stack.enter_context(

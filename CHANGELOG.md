@@ -1,5 +1,39 @@
 # Changelog
 
+## Unreleased
+
+- the commands speak of **courses**, not classrooms, and are named for what
+  they do: `course init`, `course list`, `course show`, `course delete`,
+  `assignment create COURSE NAME` (with `--roster FILE` or `--from-canvas`),
+  and `sync`. The top-level `--help` defines the words — a course is one
+  Canvas course hosted in a GitHub org; an assignment is one repo per
+  student or group — and the path from `course init` to `sync`
+- a `COURSE` argument of the new commands is always a course, never an org:
+  it is looked up in `--org`, or in every org in `[ORGS]`, with an exact name
+  beating a partial one. An org name typed where a course belongs says to
+  pass it as `--org`; `sync --org ORG` syncs every course in the org
+- `assignment create` only touches its own assignment's repos (plus the TA
+  team's read on them); everything else across the course — other
+  assignments, TA team membership — is `sync`'s job. `meta assign` keeps
+  converging the whole classroom
+- the old commands (`meta init/list/show/delete/assign/apply` and
+  `classrooms`) still work unchanged but are hidden from `--help`; at a
+  terminal each says which command replaced it. Messages throughout now
+  point at `course init` and `sync`. The stored names — the `classroom-meta`
+  repo, `classroom.ini` and its `[CLASSROOM]` section — are unchanged, so
+  existing orgs keep working as they are
+- a default repo name longer than GitHub's 100-character limit is cut off at
+  100 instead of failing the create with a traceback
+- a row whose repo name another row already holds — two long names that cut
+  to the same 100 characters, or a repo another row recorded, in any course
+  in the org — gets the first free numbered name (`…-2`, `…-3`) instead of
+  silently sharing that repo, and the run says which. A prefix and
+  assignment that leave no room for team names are a clear error
+- two people (or two Canvas groups) with the same name get numbered rows,
+  `Jose-Nunez` and `Jose-Nunez-2`: before, the second replaced the first's
+  row and one student was left with no repo. Each keeps their own row on
+  every re-import, however Canvas orders them
+
 ## v1.5.0
 
 - a missing `classroom-meta` repo no longer reads as "the course isn't set up".

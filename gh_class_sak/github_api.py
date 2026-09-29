@@ -273,7 +273,7 @@ def _warn_unprotectable(repo, exc):
     """the two expected protection failures: branch not born yet, free plan."""
     if exc.status == 404:
         warn(f"{repo.full_name}: no {repo.default_branch} branch to protect yet;"
-             " meta apply will add the welcome commit and protect it")
+             " gh-class-sak sync will add the welcome commit and protect it")
     else:
         warn(f"{repo.full_name}: branch protection needs a public repo or a paid"
              f" plan: {_exc_message(exc)}")

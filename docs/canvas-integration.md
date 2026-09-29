@@ -5,7 +5,7 @@ the two are connected: how GitHub ids are mapped to Canvas accounts, and how ass
 can be built straight from Canvas enrollments or group sets.
 
 Everything here needs a `[CANVAS]` section in the config (see
-[Getting started](getting-started.md#naming-your-classroom-the-org-and-the-config-file)):
+[Getting started](getting-started.md#the-config-file)):
 
 ```ini
 [CANVAS]
@@ -15,9 +15,9 @@ token = YOUR_CANVAS_API_TOKEN
 
 ## Which Canvas course is meant
 
-A classroom maps to a Canvas course by name. The lookup partial is, in order: the
-`canvas_course` recorded in `classroom.ini` (set it with `meta init --canvas-course`),
-or the classroom directory name. Matching is normalized on both sides — case,
+A course maps to a Canvas course by name. The lookup partial is, in order: the
+`canvas_course` recorded in `classroom.ini` (set it with `course init --canvas-course`),
+or the course directory name. Matching is normalized on both sides — case,
 hyphens, underscores, and spaces are all equivalent — so the directory `cs_101`
 matches the Canvas course "FA26: CS-101 Sec 01".
 
@@ -60,7 +60,7 @@ the other thing worth asking of students.
 ## Assignments from enrollments
 
 ```
-gh-class-sak meta assign CLASSROOM --from-canvas --assignment hw1
+gh-class-sak assignment create COURSE hw1 --from-canvas
 ```
 
 builds one row per **enrolled person** — students, instructors, and TAs alike. The row
@@ -73,14 +73,14 @@ created under dryrun control, and any `[TEMPLATE]` starter content.
 ## Assignments from group sets
 
 ```
-gh-class-sak meta assign CLASSROOM --from-canvas --assignment project --canvas-group "Project Groups"
+gh-class-sak assignment create COURSE project --from-canvas --canvas-group "Project Groups"
 ```
 
 builds one row per **group** in that Canvas group set instead: the row `NAME` is the
 GitHub-safe group name, and its `STUDENTS` are the group's members, mapped from the
 group roster to enrollments by normalized name and then to identities. The group set's
 name is recorded in `classroom.ini` under `[GROUP_SETS]` as `project = Project Groups`,
-so the classroom remembers where each assignment's teams came from.
+so the course remembers where each assignment's teams came from.
 
 Group sets also drive the read-side commands: `repos list --group SET` annotates each
 repo with the Canvas group it matches, and `repos missing --group SET` lists the groups
@@ -92,7 +92,7 @@ The same plumbing drives `canvas message-missing`, which turns "who is stranded 
 way to their repo?" into a Canvas message to exactly those students:
 
 ```
-gh-class-sak canvas message-missing CLASSROOM ASSIGNMENT [--dryrun/--no-dryrun]
+gh-class-sak canvas message-missing COURSE ASSIGNMENT [--dryrun/--no-dryrun]
 ```
 
 Every enrolled student is checked against the assignment's repos and the stuck ones
@@ -111,7 +111,7 @@ Students already collaborating on their repo get nothing, and Canvas's Student V
 One case deliberately produces no message: a student whose GitHub account is fine but
 who has neither repo access nor a pending invitation. That gap is yours to fix, not
 theirs — the org has drifted from the meta — so it's a loud, red error pointing at
-`meta apply`, and the run exits 1.
+`sync`, and the run exits 1.
 
 Like every mutating command it previews by default: the dry run lists who would get
 which message and prints the full texts, so nothing goes out sight-unseen. Each real
@@ -123,6 +123,6 @@ texts, and where to reword them, are in the
 
 With `[CANVAS]` configured: `--group`, `--instructors` (matched to students via shared
 course sections), `--email` (preferring the address students actually commit with),
-`repos missing`, TA seeding in `meta init`, and email resolution in `meta assign`.
+`repos missing`, TA seeding in `course init`, and email resolution in `assignment create`.
 `gh-class-sak help-me-setup` verifies the credentials and lists the courses your token
 can see.

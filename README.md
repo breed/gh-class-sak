@@ -3,24 +3,46 @@
 **Manage a whole course's GitHub repos from the command line — now that GitHub Classroom
 is gone.**
 
+The name says what it is: **gh** for GitHub, **class** for the class you teach, and
+**SAK** for Swiss Army Knife — one command-line tool with a blade for each course-repo
+chore: setting up repos, keeping access in line, listing, cloning for grading, and
+chasing students on Canvas.
+
 [![CI](https://github.com/breed/gh-class-sak/actions/workflows/ci.yml/badge.svg)](https://github.com/breed/gh-class-sak/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/gh-class-sak)](https://pypi.org/project/gh-class-sak/)
 [![Python](https://img.shields.io/pypi/pyversions/gh-class-sak)](https://pypi.org/project/gh-class-sak/)
 [![License](https://img.shields.io/pypi/l/gh-class-sak)](https://github.com/breed/gh-class-sak/blob/main/LICENSE)
 [![Discord](https://img.shields.io/badge/discord-join%20the%20server-5865F2?logo=discord&logoColor=white)](https://discord.gg/nyfCHTZJkt)
 
-![Terminal demo: gh-class-sak listing classrooms, showing an assignment's teams and members, and previewing a bulk clone for grading](https://raw.githubusercontent.com/breed/gh-class-sak/main/docs/demo.svg)
+![Terminal demo: gh-class-sak listing courses, showing an assignment's teams and members, and previewing a bulk clone for grading](https://raw.githubusercontent.com/breed/gh-class-sak/main/docs/demo.svg)
 
-A GitHub org hosts your **classrooms**, described by one small versioned state repo:
-[`classroom-meta`](https://github.com/breed/gh-class-sak/blob/main/docs/commands.md#the-classroom-meta-repo) — a directory per classroom,
-a hand-editable tsv file per **assignment**, a row per **team**. Everything else is
-derived from it and the repo names:
+Three words cover the whole tool:
+
+- a **course** is one Canvas course, hosted in a GitHub org (an org can host several)
+- an **assignment** is one repo per student or group in a course: assignment `hw1`
+  gives repos like `hw1-jdoe`, `hw1-rpatel`
+- a **team** is the student or group behind one of those repos
+
+They're recorded in one small versioned state repo in the org,
+[`classroom-meta`](https://github.com/breed/gh-class-sak/blob/main/docs/commands.md#the-classroom-meta-repo) — a directory per course,
+a hand-editable tsv file per assignment, a row per team. Everything else is derived
+from it and the repo names:
 
 ```console
-$ gh-class-sak classrooms cs101-fall
+$ gh-class-sak course list --org cs101-fall
 scanning cs101-fall ...
-cs101_fall: hw1
-cs101_fall: project
+COURSE      PREFIX  TAS  ASSIGNMENTS
+cs101_fall  -       0    hw1(2) project(3)
+```
+
+With your org listed in the config file (`gh-class-sak help-me-setup` shows how),
+setting a course up is three commands — record the course, create an assignment's
+repos, and sync whenever something changes:
+
+```bash
+gh-class-sak course init CS-101 --no-dryrun
+gh-class-sak assignment create CS-101 hw1 --from-canvas --no-dryrun
+gh-class-sak sync CS-101 --no-dryrun
 ```
 
 List the teams on an assignment, with their members and real names:
@@ -47,8 +69,8 @@ Add `--no-dryrun` and it actually clones, fast-forwarding any repo you already h
 
 ## What it does
 
-- **One versioned state repo per org** — classrooms are directories, assignments are tsv
-  files you can hand-edit, diff, and review; an org hosts as many classrooms as you need
+- **One versioned state repo per org** — courses are directories, assignments are tsv
+  files you can hand-edit, diff, and review; an org hosts as many courses as you need
 - **Roster tables built for the shell** — teams, members, instructors, real names, and
   the emails students actually commit with, in columns that `cut` and `awk` parse
 - **Bulk clone for grading** — clone or fast-forward every team's repo into one
@@ -61,7 +83,7 @@ Add `--no-dryrun` and it actually clones, fast-forwarding any repo you already h
   on the way to their repo — no GitHub link on their Canvas profile, a broken one, or
   a repo invitation they never accepted — and sends each a Canvas message saying
   exactly what to fix; a dry run shows every message before anything goes out
-- **Managed classrooms** — `meta apply` reconciles the org to the
+- **Managed courses** — `sync` makes the org match the
   [classroom-meta repo](https://github.com/breed/gh-class-sak/blob/main/docs/commands.md#the-classroom-meta-repo): creates private repos
   (optionally from a template), grants student, TA, and branch-protection state exactly
   as recorded — removing people is opt-in — and tracks repos by permanent id so renames

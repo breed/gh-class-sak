@@ -30,6 +30,7 @@ from gh_class_sak.core import (
     normalize_course_name,
     output,
     progress,
+    renamed,
     resolve_classroom,
     warn,
     would,
@@ -148,17 +149,17 @@ def _resolve_classroom_dir(checkout, partial, classroom):
     if key:
         if key in candidates:
             return key
-        error(f'classroom "{key}" is not in the meta repo. classrooms there:')
+        error(f'course "{key}" is not in the meta repo. courses there:')
         for c in candidates:
             error(f"    {c}")
-        error("run: meta init")
+        error("run: gh-class-sak course init")
         sys.exit(2)
     if len(candidates) == 1:
         return candidates[0]
     key = normalize_course_name(classroom)
     if key in candidates:
         return key
-    error(f'cannot tell which classroom "{classroom}" means. classrooms in the meta repo:')
+    error(f'cannot tell which course "{classroom}" means. courses in the meta repo:')
     for c in candidates:
         error(f"    {c}")
     sys.exit(2)
@@ -383,7 +384,7 @@ def _free_repo_name(gh, org, stem_parts, name, claims):
 
 
 def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions,
-                       claims):
+                       claims, only=None):
     """create/adopt the repo for every row that has none, and grant push.
 
     covers every assignment in the classroom. a repo realized without a
@@ -393,13 +394,15 @@ def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions,
     callers save exactly the named tsvs, so untouched files (and their hand
     comments) are never rewritten. claims holds every repo a row already
     has, org-wide; a row whose default name is taken gets a numbered one.
+    only names the single assignment to realize.
     """
     template = _template_repo(gh, data)
     desired = ms.effective_repo_settings(data)
     changed = set()
     all_unresolved = []
     failures = []
-    for assignment, rows in data["assignments"].items():
+    for assignment in _covered(data, only):
+        rows = data["assignments"][assignment]
         content_url = data["templates"].get(assignment)
         stem_parts = (data["prefix"], assignment)
         if len(ms.join_repo_name(*stem_parts)) + 2 > ms.MAX_REPO_NAME_LEN \
@@ -549,26 +552,33 @@ def _reconcile_row_collaborators(gh, repo, logins, remove_unlisted, dryrun,
                      f" on {repo.full_name}", _cancel, actions)
 
 
+def _covered(data, only):
+    """the assignment names a pass covers: just only, or all of them."""
+    return [only] if only else list(data["assignments"])
+
+
 def _reconcile_recorded_repos(gh, org, classroom_dir, data, resolve,
                               remove_unlisted, dryrun, actions, all_repos,
-                              by_id, unresolved, failures):
+                              by_id, unresolved, failures, only=None):
     """converge every recorded row's repo — assign and apply share this.
 
     per repo: the row's students are exactly its push collaborators, an
     empty repo gets its welcome commit, and either way the default branch
     ends up carrying the classroom's protection. returns the classroom's
     repo universe (per-assignment prefix matches ∪ recorded ids) for the
-    TA team reconcile.
+    TA team reconcile. only names the single assignment to cover.
     """
     desired = ms.effective_repo_settings(data)
+    assignments = _covered(data, only)
     universe = {}
-    for assignment in data["assignments"]:
+    for assignment in assignments:
         joined = ms.join_repo_name(data["prefix"], assignment)
         for r in all_repos:
             if matches_prefix(r.name, joined):
                 universe[r.full_name] = r
-    recorded = [row for rows in data["assignments"].values()
-                for row in rows if row["repo_id"] is not None]
+    recorded = [row for assignment in assignments
+                for row in data["assignments"][assignment]
+                if row["repo_id"] is not None]
     for row in progress(recorded, f"checking {classroom_dir}"):
         repo = by_id.get(row["repo_id"]) or get_repo_by_id(gh, row["repo_id"])
         if repo is None:
@@ -590,10 +600,25 @@ def _reconcile_recorded_repos(gh, org, classroom_dir, data, resolve,
     return universe
 
 
-@gh_class_sak.group()
-def meta():
-    """Manage the org's classroom-meta repo: one directory per classroom."""
-    pass
+# the course-centered commands that replace the meta subcommands
+RENAMED = {
+    "init": "gh-class-sak course init COURSE",
+    "list": "gh-class-sak course list",
+    "show": "gh-class-sak course show COURSE",
+    "delete": "gh-class-sak course delete COURSE",
+    "assign": "gh-class-sak assignment create COURSE NAME --roster FILE"
+              " (then gh-class-sak sync COURSE for the rest of the course)",
+    "apply": "gh-class-sak sync COURSE (or --org ORG for every course)",
+}
+
+
+@gh_class_sak.group(hidden=True)
+@click.pass_context
+def meta(ctx):
+    """Renamed: see course, assignment create, and sync."""
+    if ctx.invoked_subcommand in RENAMED:
+        renamed(f"gh-class-sak meta {ctx.invoked_subcommand}",
+                RENAMED[ctx.invoked_subcommand])
 
 
 def _pick_org(org_option, classroom):
@@ -627,6 +652,11 @@ def _pick_org(org_option, classroom):
 @dryrun_option
 def meta_init(classroom, org, prefix, template, canvas_course, dryrun):
     """Create the classroom-meta repo and record CLASSROOM (a course name) in it."""
+    _init(classroom, org, prefix, template, canvas_course, dryrun)
+
+
+def _init(classroom, org, prefix, template, canvas_course, dryrun):
+    """record a new classroom, creating the org's classroom-meta repo if needed."""
     gh = get_github()
     org = _pick_org(org, classroom)
     classroom_dir = normalize_course_name(classroom)
@@ -737,7 +767,7 @@ def _tas_team_line(gh, org, classroom_dir, configured_tas, resolve):
     name = tas_team_name(classroom_dir)
     team = get_team(gh, org, tas_team_slug(classroom_dir))
     if team is None:
-        return f"TAS TEAM  {name} (not created — run: meta apply)"
+        return f"TAS TEAM  {name} (not created — run: gh-class-sak sync)"
     members = {m.login.lower() for m in team.get_members()}
     pending = {u.login.lower() for u in team_pending_invitations(team)}
     configured = {}
@@ -765,14 +795,18 @@ def _tas_team_line(gh, org, classroom_dir, configured_tas, resolve):
 def meta_show(classroom):
     """Show a classroom's recorded state, checked against the live org."""
     gh = get_github()
-    org, partial = resolve_classroom(gh, classroom)
+    _show(gh, *resolve_classroom(gh, classroom), classroom)
+
+
+def _show(gh, org, partial, classroom):
+    """print the classroom's recorded state, checked against the live org."""
     _repo, checkout = _open_meta(gh, org)
     classroom_dir = _resolve_classroom_dir(checkout, partial, classroom)
     data = _load_classroom(checkout, classroom_dir)
 
     protection, linear_history, force_push = ms.effective_repo_settings(data)
     resolve = _make_resolver(org, data["canvas_course"] or classroom_dir)
-    output(f"CLASSROOM {classroom_dir}")
+    output(f"COURSE    {classroom_dir}")
     output(f"PREFIX    {data['prefix'] or '-'}")
     if data["template"]:
         output(f"TEMPLATE  {data['template']}")
@@ -835,7 +869,11 @@ def meta_list(classroom):
             error(f"pass a classroom (github org), or list orgs in "
                   f"the [ORGS] section of {config_ini}")
             sys.exit(2)
+    _list(gh, orgs, partial)
 
+
+def _list(gh, orgs, partial, header="CLASSROOM"):
+    """one table row per classroom in the orgs, or just the partial one."""
     missing = False
     for org in orgs:
         info(f"scanning {org} ...")
@@ -855,7 +893,7 @@ def meta_list(classroom):
                                    for name, rows in data["assignments"].items())
             table.append([classroom_dir, data["prefix"] or ms.EMPTY,
                           str(len(data["tas"])), assignments or ms.EMPTY])
-        print_table(["CLASSROOM", "PREFIX", "TAS", "ASSIGNMENTS"], table)
+        print_table([header, "PREFIX", "TAS", "ASSIGNMENTS"], table)
     if missing:
         sys.exit(2)
 
@@ -873,13 +911,17 @@ def meta_delete(classroom, delete_repo, dryrun):
     --delete-repo says otherwise.
     """
     gh = get_github()
-    org, partial = resolve_classroom(gh, classroom)
+    _delete(gh, *resolve_classroom(gh, classroom), classroom, delete_repo, dryrun)
+
+
+def _delete(gh, org, partial, classroom, delete_repo, dryrun):
+    """confirm, then remove the classroom (and optionally its repos)."""
     _repo, checkout = _open_meta(gh, org)
     classroom_dir = _resolve_classroom_dir(checkout, partial, classroom)
     data = _load_classroom(checkout, classroom_dir)
 
     protection, linear_history, force_push = ms.effective_repo_settings(data)
-    output(f"CLASSROOM {classroom_dir}")
+    output(f"COURSE    {classroom_dir}")
     output(f"PREFIX    {data['prefix'] or '-'}")
     if data["template"]:
         output(f"TEMPLATE  {data['template']}")
@@ -899,7 +941,7 @@ def meta_delete(classroom, delete_repo, dryrun):
         if answer not in data["assignments"]:
             error(f'"{answer}" is not one of the assignments; nothing deleted')
             sys.exit(2)
-    elif not click.confirm(f'delete the empty classroom "{classroom_dir}"?',
+    elif not click.confirm(f'delete the empty course "{classroom_dir}"?',
                            default=False):
         output("nothing to do")
         return
@@ -924,7 +966,7 @@ def meta_delete(classroom, delete_repo, dryrun):
     def _remove():
         shutil.rmtree(ms.classroom_dir(checkout, classroom_dir))
         ms.commit_and_push(checkout, f"delete {classroom_dir}", get_token())
-    _perform(dryrun, f"delete classroom {classroom_dir}"
+    _perform(dryrun, f"delete course {classroom_dir}"
              f" from {org}/{ms.META_REPO_NAME}", _remove, actions)
 
 
@@ -1026,31 +1068,44 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
     if table_file is None and not from_canvas and not assignment:
         error("--assignment is required to record a template without a table")
         sys.exit(2)
-    if canvas_group and not from_canvas:
-        error("--canvas-group only makes sense with --from-canvas")
-        sys.exit(2)
-    if remove_dropped and not from_canvas:
-        error("--remove-dropped only makes sense with --from-canvas")
-        sys.exit(2)
     if from_canvas and not assignment:
         error("--assignment is required with --from-canvas")
         sys.exit(2)
-    if from_canvas and not has_canvas_config():
-        error(f"--from-canvas needs a [CANVAS] section in {config_ini}")
-        sys.exit(2)
-
-    gh = get_github()
-    org, partial = resolve_classroom(gh, classroom)
-    _repo, checkout = _open_meta(gh, org)
-    classroom_dir = _resolve_classroom_dir(checkout, partial, classroom)
-    data = _load_classroom(checkout, classroom_dir)
-
+    _check_canvas_flags(from_canvas, canvas_group, remove_dropped)
     if assignment is None and table_file is not None \
             and table_file.name in ("-", "<stdin>"):
         error("--assignment is required when the table comes from stdin")
         sys.exit(2)
     name = assignment or os.path.splitext(os.path.basename(table_file.name))[0]
     _check_assignment_name(name)
+
+    gh = get_github()
+    _assign(gh, *resolve_classroom(gh, classroom), classroom, table_file, name,
+            from_canvas, canvas_group, template_url, remove_unlisted,
+            remove_dropped, dryrun)
+
+
+def _check_canvas_flags(from_canvas, canvas_group, remove_dropped):
+    """the flags that only make sense when the roster comes from canvas."""
+    if canvas_group and not from_canvas:
+        error("--canvas-group only makes sense with --from-canvas")
+        sys.exit(2)
+    if remove_dropped and not from_canvas:
+        error("--remove-dropped only makes sense with --from-canvas")
+        sys.exit(2)
+    if from_canvas and not has_canvas_config():
+        error(f"--from-canvas needs a [CANVAS] section in {config_ini}")
+        sys.exit(2)
+
+
+def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
+            canvas_group, template_url, remove_unlisted, remove_dropped, dryrun,
+            whole_classroom=True):
+    """import the roster as assignment NAME, then converge the classroom —
+    or, without whole_classroom, just NAME's repos."""
+    _repo, checkout = _open_meta(gh, org)
+    classroom_dir = _resolve_classroom_dir(checkout, partial, classroom)
+    data = _load_classroom(checkout, classroom_dir)
 
     actions = []
     unresolvable = []
@@ -1119,23 +1174,28 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
                  lambda: None, actions)
 
     resolve = _make_resolver(org, course)
+    only = None if whole_classroom else name
     changed, unresolved, failures = _realize_classroom(gh, org, classroom_dir,
                                                        data, resolve, dryrun,
                                                        actions,
-                                                       _RepoClaims(checkout))
+                                                       _RepoClaims(checkout), only)
     unresolved = unresolvable + unresolved
 
-    # the whole classroom converges like apply: recorded repos get their
+    # the covered repos converge like apply: recorded repos get their
     # missing collaborators, seeding, and protection, and repos created
     # here are TA-readable now, not after the next apply
     all_repos = list_org_repos(gh, org)
     by_id = {r.id: r for r in all_repos}
     universe = _reconcile_recorded_repos(gh, org, classroom_dir, data, resolve,
                                          remove_unlisted, dryrun, actions,
-                                         all_repos, by_id, unresolved, failures)
-    ta_logins = _resolve_tas(data["tas"], resolve, unresolved)
-    _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe,
-                        dryrun, actions, failures)
+                                         all_repos, by_id, unresolved, failures,
+                                         only)
+    if whole_classroom:
+        ta_logins = _resolve_tas(data["tas"], resolve, unresolved)
+        _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe,
+                            dryrun, actions, failures)
+    else:
+        _grant_tas_team(gh, org, classroom_dir, universe, dryrun, actions)
 
     to_save = set(changed)
     if changed_names or removed:
@@ -1152,6 +1212,23 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
         output("nothing to do")
     if unresolved or failures:
         sys.exit(1)
+
+
+def _grant_tas_team(gh, org, classroom_dir, universe, dryrun, actions):
+    """the classroom's team reads the universe's repos. its members and its
+    other repos are sync's business, as is creating a missing team."""
+    name = tas_team_name(classroom_dir)
+    team = get_team(gh, org, tas_team_slug(classroom_dir))
+    if team is None:
+        warn(f'team "{name}" is missing; run: gh-class-sak sync {classroom_dir}')
+        return
+    team_repos = {r.full_name for r in team.get_repos()}
+    for full_name, repo in universe.items():
+        if full_name not in team_repos:
+            def _grant(repo=repo):
+                team.update_team_repository(repo, "pull")
+            _perform(dryrun, f'grant team "{name}" pull on {full_name}',
+                     _grant, actions)
 
 
 def _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe, dryrun,
@@ -1224,14 +1301,19 @@ def meta_apply(classroom, remove_unlisted, dryrun):
     --remove-unlisted-contributors revokes them (admins are never touched).
     """
     gh = get_github()
-    org, partial = resolve_classroom(gh, classroom)
+    _apply(gh, *resolve_classroom(gh, classroom), classroom, remove_unlisted,
+           dryrun)
+
+
+def _apply(gh, org, partial, classroom, remove_unlisted, dryrun):
+    """reconcile the partial classroom, or every classroom when it's None."""
     _repo, checkout = _open_meta(gh, org)
     if partial:
         classroom_dirs = [_resolve_classroom_dir(checkout, partial, classroom)]
     else:
         classroom_dirs = ms.list_classrooms(checkout)
     if not classroom_dirs:
-        error("the classroom-meta repo has no classrooms. run: meta init")
+        error("the classroom-meta repo has no courses. run: gh-class-sak course init")
         sys.exit(2)
 
     actions = []

@@ -66,9 +66,9 @@ def help_me_setup():
         problems.append("config file")
         warn(f"config file    none at {config_ini}")
         _example(CONFIG_TEMPLATE, lead="create it with content like:")
-        output("[ORGS] lists the github orgs hosting your classrooms — it lets you")
-        output("name a classroom by its course name, and `classrooms` with no")
-        output("argument lists every org there. [CANVAS] is optional; it unlocks")
+        output("[ORGS] lists the github orgs hosting your courses — commands then")
+        output("find a course by its name, and `course list` with no argument")
+        output("lists every course in them. [CANVAS] is optional; it unlocks")
         output("the roster features (--group, --instructors, --email, repos")
         output("missing) and resolving student emails to github accounts.")
     else:
@@ -106,8 +106,8 @@ def help_me_setup():
                                             prefix="  ")
                         if why != "unreadable":
                             # a repo that is there but unreadable is a
-                            # checkout to fix, not a classroom to create
-                            _example([f"gh-class-sak meta init YOUR-COURSE --org {org}",
+                            # checkout to fix, not a course to create
+                            _example([f"gh-class-sak course init YOUR-COURSE --org {org}",
                                       "# or import a GitHub Classroom era org wholesale:",
                                       f"gh-class-sak migrate-github-classroom {org}"],
                                      lead="create one with:")

@@ -46,7 +46,7 @@ class TestClassrooms:
         result = run(cli, "classrooms", ORG)
         assert result.exit_code == 2
         assert "no classroom-meta repo" in result.output
-        assert "meta init" in result.output
+        assert "course init" in result.output
 
 
 class TestReposList:
@@ -157,7 +157,7 @@ class TestMissingMetaRepoBlamesTheToken:
         result = run(cli, "classrooms", ORG)
         assert result.exit_code == 2
         assert "no classroom-meta repo" in result.output
-        assert "meta init" in result.output  # still says how to create one
+        assert "course init" in result.output  # still says how to create one
         assert 'acts as "profbeth"' in result.output
         assert "scopes: gist, read:org" in result.output
         assert '"repo" scope' in result.output
@@ -205,7 +205,7 @@ class TestMissingMetaRepoBlamesTheToken:
         shutil.rmtree(os.path.join(ms.meta_checkout_dir(ORG), "cmpe_195a"))
         result = run(cli, "classrooms", ORG)
         assert result.exit_code == 2
-        assert "records no classrooms" in result.output
+        assert "records no courses" in result.output
         assert "token" not in result.output
 
 

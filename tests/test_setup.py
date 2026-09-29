@@ -74,7 +74,7 @@ class TestHelpMeSetup:
         result = run(cli, "help-me-setup")
         assert result.exit_code == 1
         assert "no classroom-meta repo" in result.output
-        assert f"gh-class-sak meta init YOUR-COURSE --org {ORG}" in result.output
+        assert f"gh-class-sak course init YOUR-COURSE --org {ORG}" in result.output
         assert "migrate-github-classroom" in result.output
 
     def test_canvas_is_optional(self, cli, tmp_path, monkeypatch):

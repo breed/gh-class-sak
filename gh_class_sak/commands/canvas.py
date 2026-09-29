@@ -123,7 +123,7 @@ def canvas_group():
 
 
 @canvas_group.command("message-missing")
-@click.argument("classroom")
+@click.argument("classroom", metavar="COURSE")
 @click.argument("assignment")
 @dryrun_option
 def message_missing(classroom, assignment, dryrun):
@@ -176,7 +176,7 @@ def message_missing(classroom, assignment, dryrun):
             stranded.append(
                 f'{student["name"]} ({login}) is not a collaborator on any'
                 " repo for this assignment and has no pending invitation"
-                " — run: meta apply")
+                " — run: gh-class-sak sync")
 
     if not todo and not stranded:
         output("nothing to do")

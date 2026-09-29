@@ -151,7 +151,7 @@ class TestMessageMissing:
                      "--no-dryrun")
         assert result.exit_code == 1
         assert "Frank Field (frank) is not a collaborator" in result.output
-        assert "meta apply" in result.output
+        assert "run: gh-class-sak sync" in result.output
         # frank gets no canvas message: only the instructor can fix this
         recipients = [c["recipients"][0] for c in env.canvas.conversations]
         assert "5" not in recipients

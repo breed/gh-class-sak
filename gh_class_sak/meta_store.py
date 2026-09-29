@@ -400,7 +400,7 @@ def read_meta_classrooms(gh, org, token=None):
         try:
             classrooms[classroom] = load_classroom(checkout, classroom)
         except (ValueError, ConfigParserError) as exc:
-            warn(f"ignoring classroom {classroom} in the classroom-meta repo: {exc}")
+            warn(f"ignoring course {classroom} in the classroom-meta repo: {exc}")
     return classrooms, "ok" if classrooms else "empty"
 
 
@@ -423,14 +423,14 @@ def report_missing_meta(gh, org, why="no-repo", report=error, prefix=""):
     """
     if why == "empty":
         report(f'{prefix}the {META_REPO_NAME} repo in "{org}" records no'
-               " classrooms. create one with: meta init")
+               " courses. create one with: gh-class-sak course init")
         return
     if why == "unreadable":
         report(f'{prefix}cannot read the {META_REPO_NAME} repo in "{org}"'
                " (see the warning above)")
         return
     report(f'{prefix}no {META_REPO_NAME} repo visible in "{org}"')
-    report(f"{prefix}  if it does not exist yet, create one with: meta init")
+    report(f"{prefix}  if it does not exist yet, create one with: gh-class-sak course init")
     report(f"{prefix}  if it does exist, this token cannot see it"
            " (github 404s both alike):")
     for line in token_visibility_hint(gh, org):
