@@ -35,14 +35,15 @@ COURSE      PREFIX  TAS  ASSIGNMENTS
 cs101_fall  -       0    hw1(2) project(3)
 ```
 
-With your org listed in the config file (`gh-class-sak help-me-setup` shows how),
-setting a course up is three commands — record the course, create an assignment's
+Try any of it first on a made-up course, offline — `gh-class-sak demo`. Then
+`gh-class-sak help-me-setup --create-config` writes your config and checks your setup,
+and setting a course up is three commands — record the course, create an assignment's
 repos, and sync whenever something changes:
 
 ```bash
-gh-class-sak course init CS-101 --no-dryrun
-gh-class-sak assignment create CS-101 hw1 --from-canvas --no-dryrun
-gh-class-sak sync CS-101 --no-dryrun
+gh-class-sak course init CS-101 --apply
+gh-class-sak assignment create CS-101 hw1 --from-canvas --apply
+gh-class-sak sync CS-101 --apply
 ```
 
 List the teams on an assignment, with their members and real names:
@@ -59,14 +60,14 @@ Pull every team's repo down for grading — safe by default, so this only *previ
 
 ```console
 $ gh-class-sak repos clone cs101-fall project --dest grading
-⚠️  dry run: no changes will be made. add --no-dryrun to apply
+⚠️  dry run: no changes will be made. add --apply to make them
 ⚠️  would clone cs101-fall/project-team-1 -> grading/team-1
 ⚠️  would clone cs101-fall/project-nightowls -> grading/nightowls
 ⚠️  would clone cs101-fall/project-team-3 -> grading/team-3
-⚠️  that was a preview: nothing changed. add --no-dryrun to apply
+⚠️  that was a preview: nothing changed. add --apply to make these changes
 ```
 
-Add `--no-dryrun` and it actually clones, fast-forwarding any repo you already have.
+Add `--apply` and it actually clones, fast-forwarding any repo you already have.
 
 ## What it does
 
@@ -75,7 +76,10 @@ Add `--no-dryrun` and it actually clones, fast-forwarding any repo you already h
 - **Roster tables built for the shell** — teams, members, instructors, real names, and
   the emails students actually commit with, in columns that `cut` and `awk` parse
 - **Bulk clone for grading** — clone or fast-forward every team's repo into one
-  directory, named by team
+  directory, named by team, optionally at each repo's last commit before the deadline
+- **Always a next step** — `course status` shows what's left in a course and the command
+  that does it; runs end with a one-line summary, and `--help` for every command shows
+  examples
 - **Canvas integration** — map orgs to Canvas courses: build an assignment's repos
   straight from the enrollment roster or a Canvas group set (one repo per person or
   per group), resolve emails to GitHub ids via Canvas profile links, match groups,
@@ -90,7 +94,7 @@ Add `--no-dryrun` and it actually clones, fast-forwarding any repo you already h
   as recorded — removing people is opt-in — and tracks repos by permanent id so renames
   can't hide them
 - **Safe by default** — every mutating command previews with a ⚠️ until you pass
-  `--no-dryrun`, and your token never appears in `ps` output, clone URLs, or
+  `--apply`, and your token never appears in `ps` output, clone URLs, or
   `.git/config`
 
 ## Installation

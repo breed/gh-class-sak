@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- `gh-class-sak demo COMMAND...` runs any command on the invented course
+  the docs are built on — offline, with nothing kept, so even `--apply` is
+  safe to try. `gh-class-sak demo` alone describes the course
+- `help-me-setup --create-config` writes the config file: it asks for the
+  org and the Canvas details and adds only the sections that are missing.
+  At a terminal, a missing config prompts the same offer. `help-me-setup`
+  also flags a GitHub token without the `repo` scope, with the fix
+- `--apply` is a plain-words synonym for `--no-dryrun`, and the preview
+  messages suggest it
+- every command's `--help` ends with examples
+- `--roster` takes a plain list — one person per line, a repo each — as
+  well as the NAME STUDENTS table, and a malformed roster names the line
+  and shows both formats instead of a traceback
+- `course status COURSE` shows what's done and what's left in a course —
+  repos, accepted and pending invitations, the TAs team — with the command
+  for each next step
+- `course init NEW --like OLD` starts a course from last term's TAs,
+  templates, and repo settings
+- `repos clone --before DEADLINE` leaves each repo at its last commit
+  before the deadline, ready to grade
+- `gh-class-sak completion` prints the tab-completion script for bash,
+  zsh, or fish
 - `--help` lists commands in the order you use them — `help-me-setup`,
   then `course`, `assignment`, `sync` — instead of alphabetically; so do
   `course --help` (`init` first) and `repos --help`

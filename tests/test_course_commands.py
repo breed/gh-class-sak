@@ -274,7 +274,7 @@ class TestInitRemembersTheOrg:
 
 
 PREVIEW_FOOTER = ("that was a preview: nothing changed."
-                  " add --no-dryrun to apply")
+                  " add --apply to make these changes")
 
 
 class TestNextSteps:
@@ -453,12 +453,12 @@ class TestHelpOrder:
 
     def test_top_level_starts_with_setup(self, course_env):
         assert self.listed(course_env.runner) == [
-            "help-me-setup", "course", "assignment", "sync", "repos", "canvas",
-            "migrate-github-classroom"]
+            "help-me-setup", "demo", "course", "assignment", "sync", "repos",
+            "canvas", "migrate-github-classroom", "completion"]
 
     def test_course_starts_with_init(self, course_env):
         assert self.listed(course_env.runner, "course") == [
-            "init", "list", "show", "ta", "settings", "delete"]
+            "init", "list", "status", "show", "ta", "settings", "delete"]
 
     def test_course_ta(self, course_env):
         assert self.listed(course_env.runner, "course", "ta") == ["add", "remove"]
@@ -466,3 +466,247 @@ class TestHelpOrder:
     def test_repos(self, course_env):
         assert self.listed(course_env.runner, "repos") == [
             "list", "clone", "members", "missing"]
+
+
+class TestApply:
+    def test_apply_is_the_same_as_no_dryrun(self, course_env):
+        seed_meta(course_env, assignments=team_row())
+        result = run(course_env.runner, "sync", COURSE, "--org", ORG, "--apply")
+        assert result.exit_code == 0, result.output
+        assert "dry run" not in result.output
+        course_env.gh.get_repo(f"{ORG}/{REPO_PREFIX}-team-1")
+
+    def test_the_preview_suggests_apply(self, course_env):
+        seed_meta(course_env, assignments=team_row())
+        result = run(course_env.runner, "sync", COURSE, "--org", ORG)
+        assert result.output.startswith(
+            "⚠️  dry run: no changes will be made. add --apply to make them")
+
+    def test_the_renamed_commands_keep_their_banner(self, course_env):
+        seed_meta(course_env, assignments=team_row())
+        result = run(course_env.runner, "meta", "apply", ORG)
+        assert result.output.startswith(
+            "⚠️  dry run: no changes will be made. add --no-dryrun to apply")
+
+    def test_course_settings_takes_apply(self, course_env):
+        seed_meta(course_env)
+        result = run(course_env.runner, "course", "settings", COURSE, "--org", ORG,
+                     "--template", f"{ORG}/Template", "--apply")
+        assert result.exit_code == 0, result.output
+        assert meta_state(course_env)["template"] == f"{ORG}/Template"
+
+
+def _visible_leaves(group, path=()):
+    for name in group.list_commands(None):
+        cmd = group.get_command(None, name)
+        if cmd.hidden:
+            continue
+        if hasattr(cmd, "list_commands"):
+            yield from _visible_leaves(cmd, path + (name,))
+        else:
+            yield path + (name,)
+
+
+@pytest.mark.parametrize("path", list(_visible_leaves(core.gh_class_sak)),
+                         ids=lambda path: " ".join(path))
+def test_every_command_shows_examples_in_its_help(course_env, path):
+    result = run(course_env.runner, *path, "--help")
+    assert result.exit_code == 0, result.output
+    assert "Examples:" in result.output
+    assert f"  gh-class-sak {' '.join(path)}" in result.output
+
+
+class TestRosterInput:
+    def test_a_plain_list_roster_creates_one_repo_per_person(self, course_env,
+                                                               tmp_path):
+        seed_meta(course_env)
+        roster = tmp_path / "people.txt"
+        roster.write_text("/msmith\n/jdoe\n")
+        result = run(course_env.runner, "assignment", "create", COURSE, "hw1",
+                     "--org", ORG, "--roster", str(roster), "--apply")
+        assert result.exit_code == 0, result.output
+        course_env.gh.get_repo(f"{ORG}/{PREFIX}-hw1-msmith")
+        course_env.gh.get_repo(f"{ORG}/{PREFIX}-hw1-jdoe")
+
+    def test_a_bad_roster_shows_both_formats(self, course_env, tmp_path):
+        seed_meta(course_env)
+        roster = tmp_path / "roster.tsv"
+        roster.write_text("team-1 /jdoe - oops\n")
+        result = run(course_env.runner, "assignment", "create", COURSE, "hw1",
+                     "--org", ORG, "--roster", str(roster))
+        assert result.exit_code == 2
+        assert "cannot read the roster: line 1: REPO_ID" in result.output
+        assert "one person per line" in result.output
+        assert "NAME       STUDENTS" in result.output
+
+
+class TestCourseStatus:
+    def test_counts_repos_and_invitations_and_says_what_to_do(self, course_env):
+        done = FakeRepo(ORG, f"{PREFIX}-hw1-msmith", collaborators=[
+            FakeNamedUser("msmith", role_name="write")])
+        waiting = FakeRepo(ORG, f"{PREFIX}-hw1-jdoe", invitations=["jdoe"])
+        course_env.org._repos += [done, waiting]
+        team = FakeTeam(course_env.org, f"{COURSE}-tas")
+        course_env.org._teams[team.slug] = team
+        seed_meta(course_env, assignments={"hw1": [
+            {"name": "msmith", "students": ["/msmith"],
+             "repo": done.html_url, "repo_id": done.id},
+            {"name": "jdoe", "students": ["/jdoe"],
+             "repo": waiting.html_url, "repo_id": waiting.id},
+            {"name": "late", "students": ["/late"], "repo": None, "repo_id": None}]})
+        result = run(course_env.runner, "course", "status", COURSE, "--org", ORG)
+        assert result.exit_code == 0, result.output
+        assert "ASSIGNMENT  REPOS  ACCEPTED  INVITED  NOT INVITED" in result.output
+        assert "hw1         2/3    1         1        0" in result.output
+        assert f"TAS TEAM  {COURSE}-TAs (matches tas)" in result.output
+        assert (f"  hw1: 1 row without a recorded repo → gh-class-sak sync {COURSE} --apply"
+                in result.output)
+        assert (f"  hw1: 1 invitation not accepted yet → gh-class-sak course show"
+                f" {COURSE} lists who" in result.output)
+
+    def test_a_course_with_nothing_left_says_so(self, course_env):
+        done = FakeRepo(ORG, f"{PREFIX}-hw1-msmith", collaborators=[
+            FakeNamedUser("msmith", role_name="write")])
+        course_env.org._repos.append(done)
+        course_env.org._teams[f"{COURSE}-tas"] = FakeTeam(course_env.org,
+                                                          f"{COURSE}-tas")
+        seed_meta(course_env, assignments={"hw1": [
+            {"name": "msmith", "students": ["/msmith"],
+             "repo": done.html_url, "repo_id": done.id}]})
+        result = run(course_env.runner, "course", "status", COURSE, "--org", ORG)
+        assert result.exit_code == 0, result.output
+        assert "all set: every repo exists and every student has accepted" \
+            in result.output
+
+    def test_a_new_course_points_at_assignment_create(self, course_env):
+        seed_meta(course_env)
+        result = run(course_env.runner, "course", "status", COURSE, "--org", ORG)
+        assert result.exit_code == 0, result.output
+        assert (f"no assignments yet → gh-class-sak assignment create {COURSE}"
+                " NAME --from-canvas" in result.output)
+        assert f"TAS TEAM  {COURSE}-TAs (not created" in result.output
+        assert f"TAs team → gh-class-sak sync {COURSE} --apply" in result.output
+
+
+class TestInitLike:
+    STARTER = "https://github.com/example/hw1-starter"
+
+    def seed_last_term(self, env):
+        seed_meta(env, course="cs_101", prefix="cs101-spring",
+                  template=f"{ORG}/Template", tas=["/ta-one", "ta2@sjsu.edu/ta-two"],
+                  templates={"hw1": self.STARTER}, protection="pr-review",
+                  assignments=team_row("hw1", "solo"))
+
+    def test_copies_tas_templates_and_settings_but_not_prefix_or_rows(
+            self, course_env):
+        self.seed_last_term(course_env)
+        result = run(course_env.runner, "course", "init", "CS-102", "--org", ORG,
+                     "--like", "cs_101", "--apply")
+        assert result.exit_code == 0, result.output
+        new = meta_state(course_env, "cs_102")
+        assert new["tas"] == ["/ta-one", "ta2@sjsu.edu/ta-two"]
+        assert new["template"] == f"{ORG}/Template"
+        assert new["templates"] == {"hw1": self.STARTER}
+        assert new["protection"] == "pr-review"
+        assert new["prefix"] == "CS-102"
+        assert new["assignments"] == {}
+        assert "copying from cs_101: TAs, template, repo settings" in result.output
+
+    def test_an_explicit_flag_beats_the_copy(self, course_env):
+        self.seed_last_term(course_env)
+        result = run(course_env.runner, "course", "init", "CS-102", "--org", ORG,
+                     "--like", "cs_101", "--template", f"{ORG}/Other", "--apply")
+        assert result.exit_code == 0, result.output
+        assert meta_state(course_env, "cs_102")["template"] == f"{ORG}/Other"
+
+    def test_like_only_seeds_a_new_course(self, course_env):
+        self.seed_last_term(course_env)
+        result = run(course_env.runner, "course", "init", "cs_101", "--org", ORG,
+                     "--like", "cs_101")
+        assert result.exit_code == 2
+        assert '"cs_101" already exists; --like only seeds a new course' \
+            in result.output
+
+
+class TestCompletion:
+    def test_zsh(self, course_env):
+        result = run(course_env.runner, "completion", "zsh")
+        assert result.exit_code == 0, result.output
+        assert "_GH_CLASS_SAK_COMPLETE" in result.output
+        assert "compdef" in result.output
+
+    def test_the_shell_defaults_to_the_login_shell(self, course_env, monkeypatch):
+        monkeypatch.setenv("SHELL", "/usr/bin/bash")
+        result = run(course_env.runner, "completion")
+        assert result.exit_code == 0, result.output
+        assert "complete -o nosort -F" in result.output
+
+    def test_an_unknown_shell_is_an_error(self, course_env, monkeypatch):
+        monkeypatch.setenv("SHELL", "/bin/tcsh")
+        result = run(course_env.runner, "completion")
+        assert result.exit_code == 2
+        assert "bash, zsh, or fish" in result.output
+
+
+class TestDemo:
+    def test_without_a_command_it_introduces_the_demo_course(self, course_env):
+        result = run(course_env.runner, "demo")
+        assert result.exit_code == 0, result.output
+        assert "org cs101-fall, course cs101_fall" in result.output
+        assert "gh-class-sak demo course status cs101_fall" in result.output
+
+    def test_runs_a_command_against_the_demo_course(self, course_env):
+        result = run(course_env.runner, "demo", "course", "status", "cs101_fall")
+        assert result.exit_code == 0, result.output
+        assert "COURSE    cs101_fall  (org cs101-fall)" in result.output
+
+    def test_changes_happen_offline_and_are_not_kept(self, course_env, tmp_path):
+        config_before = core.config_ini
+        result = run(course_env.runner, "demo", "sync", "cs101_fall", "--apply")
+        assert result.exit_code == 0, result.output
+        assert "summary: 5 repos adopted" in result.output
+        # the real config and github were never touched
+        assert core.config_ini == config_before
+        assert core.configured_orgs() == []
+        # and a second run starts over from the same made-up course
+        again = run(course_env.runner, "demo", "sync", "cs101_fall", "--apply")
+        assert "summary: 5 repos adopted" in again.output
+
+    def test_clone_really_clones(self, course_env, tmp_path):
+        dest = tmp_path / "grading"
+        result = run(course_env.runner, "demo", "repos", "clone", "cs101_fall",
+                     "project", "--dest", str(dest), "--apply")
+        assert result.exit_code == 0, result.output
+        assert (dest / "team-1" / "README.md").exists()
+
+    def test_help_after_a_command_is_that_commands_help(self, course_env):
+        result = run(course_env.runner, "demo", "sync", "--help")
+        assert result.exit_code == 0, result.output
+        assert "Usage: gh-class-sak sync" in result.output
+
+
+class TestRosterNamesakes:
+    def create(self, env, tmp_path, text):
+        roster = tmp_path / "people.txt"
+        roster.write_text(text)
+        return run(env.runner, "assignment", "create", COURSE, "hw1", "--org", ORG,
+                   "--roster", str(roster), "--apply")
+
+    def test_namesakes_in_a_plain_list_keep_their_rows_when_reordered(
+            self, course_env, tmp_path):
+        seed_meta(course_env)
+        self.create(course_env, tmp_path, "jane@a.edu/janea\njane@b.edu/janeb\n")
+        result = self.create(course_env, tmp_path, "jane@b.edu/janeb\njane@a.edu/janea\n")
+        assert result.exit_code == 0, result.output
+        rows = {r["name"]: r["students"]
+                for r in meta_state(course_env)["assignments"]["hw1"]}
+        assert rows == {"janea": ["jane@a.edu/janea"], "janeb": ["jane@b.edu/janeb"]}
+
+    def test_email_only_namesakes_are_numbered_and_stay_put(self, course_env,
+                                                            tmp_path):
+        seed_meta(course_env)
+        self.create(course_env, tmp_path, "jane@a.edu\njane@b.edu\n")
+        self.create(course_env, tmp_path, "jane@b.edu\njane@a.edu\n")
+        rows = {r["name"]: r["students"]
+                for r in meta_state(course_env)["assignments"]["hw1"]}
+        assert rows == {"jane": ["jane@a.edu/"], "jane-2": ["jane@b.edu/"]}

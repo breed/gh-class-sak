@@ -91,6 +91,41 @@ def push_template(template_url, dest_url, token=None, branch="main"):
         source.git.push(dest_url, f"HEAD:refs/heads/{branch}")
 
 
+def _reattach(repo):
+    """a checkout that checkout_before detached goes back to its branch, so
+    the pull can fast-forward it."""
+    if not repo.head.is_detached:
+        return
+    try:
+        remote_head = repo.git.symbolic_ref("refs/remotes/origin/HEAD")
+    except GitCommandError:
+        return
+    repo.git.checkout("--quiet", remote_head.rsplit("/", 1)[-1])
+
+
+def checkout_before(dest, when):
+    """detach dest at the last commit on its branch dated at or before when.
+
+    when is an aware datetime; the date compared is the commit date, which
+    the committer's machine sets. returns (short sha, "YYYY-MM-DD HH:MM" in
+    local time), or None — leaving the checkout alone — when no commit is
+    that old. raises RuntimeError when the checkout fails (local edits).
+    """
+    with Repo(dest) as repo:
+        if not repo.head.is_valid():
+            return None
+        sha = repo.git.rev_list("-1", f"--before={when.isoformat()}", "HEAD")
+        if not sha:
+            return None
+        try:
+            repo.git.checkout("--quiet", "--detach", sha)
+        except GitCommandError:
+            raise RuntimeError("cannot check out the deadline commit;"
+                               " does the checkout have local edits?") from None
+        committed = repo.commit(sha).committed_datetime.astimezone()
+        return sha[:7], committed.strftime("%Y-%m-%d %H:%M")
+
+
 def clone_or_update(clone_url, dest, token=None):
     """clone into dest, or fast-forward it if it already exists.
 
@@ -124,6 +159,7 @@ def clone_or_update(clone_url, dest, token=None):
         return "not-a-repo"
 
     with repo:
+        _reattach(repo)
         before = repo.head.commit.hexsha if repo.head.is_valid() else None
         try:
             with repo.git.custom_environment(**env):

@@ -18,6 +18,28 @@ pipx install gh-class-sak      # or: uv tool install gh-class-sak
 
 Requires Python 3.9+.
 
+## Try it first
+
+Before pointing the tool at a real org, try any command on a made-up course — offline,
+with nothing kept, so even `--apply` is safe:
+
+```console
+$ gh-class-sak demo course status cs101_fall
+(demo: a made-up course, offline — nothing is kept)
+COURSE    cs101_fall  (org cs101-fall)
+ASSIGNMENT  REPOS  ACCEPTED  INVITED  NOT INVITED
+hw1         0/2    0         0        0
+project     0/3    0         0        0
+TAS TEAM  cs101_fall-TAs (not created — run: gh-class-sak sync)
+
+to do:
+  hw1: 2 rows without a recorded repo → gh-class-sak sync cs101_fall --apply
+  project: 3 rows without a recorded repo → gh-class-sak sync cs101_fall --apply
+  TAs team → gh-class-sak sync cs101_fall --apply
+```
+
+`gh-class-sak demo` alone describes the course and suggests more to try.
+
 ## Authentication
 
 Your GitHub token is resolved in this order:
@@ -84,15 +106,17 @@ enrollments or group sets — is in [Canvas integration](canvas-integration.md).
 > ⚠️ The config file holds your Canvas API token in plain text. Keep it readable only by
 > you.
 
-When in doubt, ask the tool itself:
+Rather than writing it by hand, let the tool write it — it asks for the org and the
+Canvas details, then checks everything:
 
 ```bash
-gh-class-sak help-me-setup
+gh-class-sak help-me-setup --create-config
 ```
 
-It explains the config file (printing a template when none exists) and verifies the
-whole setup: the GitHub token, each configured org and its classroom-meta repo, and
-the Canvas credentials.
+Run `gh-class-sak help-me-setup` any time after to verify the whole setup: the GitHub
+token and its scopes, each configured org and its classroom-meta repo, and the Canvas
+credentials. It also points at `gh-class-sak completion`, which turns on tab-completion
+for your shell.
 
 ## Set up a course: three commands
 
@@ -100,7 +124,7 @@ Everything the tool knows lives in the org's private
 [classroom-meta repo](commands.md#the-classroom-meta-repo) — a small versioned state repo
 that every other command reads. Each course is a directory in it; each assignment is a
 `.tsv` file in that directory, one row per team. Mutating commands are safe by
-default — they *preview* with a ⚠️ until you add `--no-dryrun`.
+default — they *preview* with a ⚠️ until you add `--apply`.
 
 **1. Record the course.** `course init` creates the classroom-meta repo when the org
 doesn't have one yet, and records the course in it. The org is the single configured
@@ -109,17 +133,25 @@ work). A new org is added to your config's `[ORGS]`, so no later command needs `
 
 ```console
 $ gh-class-sak course init CS-101 --org cs101-fall
-⚠️  dry run: no changes will be made. add --no-dryrun to apply
+⚠️  dry run: no changes will be made. add --apply to make them
 no canvas config; seed the [TAS] section by hand
 ⚠️  would record cs_101: prefix=CS-101 tas=-
 ⚠️  would create team "cs_101-TAs" in cs101-fall
 ⚠️  would add cs101-fall to the config's [ORGS]
-⚠️  that was a preview: nothing changed. add --no-dryrun to apply
+⚠️  that was a preview: nothing changed. add --apply to make these changes
 ```
 
 **2. Create an assignment's repos.** `assignment create` takes the course, the
 assignment's name, and its roster — straight from Canvas with `--from-canvas`, or a
-table you wrote with `--roster`. Identities are `EMAIL/GITHUBID`, with either half
+file you wrote with `--roster`. The simplest file is one person per line, for one
+repo each:
+
+```
+jane@sjsu.edu
+/msmith
+```
+
+For teams, write a table instead. Identities are `EMAIL/GITHUBID`, with either half
 omissible (`jane@sjsu.edu/`, `/msmith`):
 
 ```
@@ -129,7 +161,7 @@ nightowls  /rpatel,/tk-codes
 ```
 
 ```bash
-gh-class-sak assignment create CS-101 project --roster project.tsv --no-dryrun
+gh-class-sak assignment create CS-101 project --roster project.tsv --apply
 ```
 
 It creates each repo privately (from a template, if the course names one), invites the
@@ -145,7 +177,7 @@ one-line summary of what it changed. Run it twice — the second pass prints
 `nothing to do`:
 
 ```bash
-gh-class-sak sync CS-101 --no-dryrun
+gh-class-sak sync CS-101 --apply
 ```
 
 The full sync contract — what each pass changes, what only ever happens on request, and
@@ -155,8 +187,8 @@ TAs and repo settings have their own commands, which record the change and apply
 one step:
 
 ```bash
-gh-class-sak course ta add CS-101 jane@sjsu.edu/ /msmith --no-dryrun
-gh-class-sak course settings CS-101 --protection pr-review --no-dryrun
+gh-class-sak course ta add CS-101 jane@sjsu.edu/ /msmith --apply
+gh-class-sak course settings CS-101 --protection pr-review --apply
 ```
 
 Coming from GitHub Classroom? One command imports an org Classroom left behind — see
@@ -174,6 +206,9 @@ COURSE      PREFIX  TAS  ASSIGNMENTS
 cs101_fall  -       0    hw1(2) project(3)
 ```
 
+`gh-class-sak course status CS-101` shows what's left: repos not created yet,
+invitations not accepted, and the command that fixes each.
+
 The `repos` commands take the course and an assignment. With no config, as here, name
 the org instead — it works whenever the org hosts a single course.
 
@@ -188,18 +223,23 @@ team-3     lchen(Lin Chen)
 ```
 
 Pull every team's repo down for grading — like all mutating commands, a preview until
-`--no-dryrun`:
+`--apply`:
 
 ```console
 $ gh-class-sak repos clone cs101-fall project --dest grading
-⚠️  dry run: no changes will be made. add --no-dryrun to apply
+⚠️  dry run: no changes will be made. add --apply to make them
 ⚠️  would clone cs101-fall/project-team-1 -> grading/team-1
 ⚠️  would clone cs101-fall/project-nightowls -> grading/nightowls
 ⚠️  would clone cs101-fall/project-team-3 -> grading/team-3
-⚠️  that was a preview: nothing changed. add --no-dryrun to apply
+⚠️  that was a preview: nothing changed. add --apply to make these changes
 ```
 
-Add `--no-dryrun` and it actually clones, fast-forwarding any repo you already have.
+Add `--apply` and it actually clones, fast-forwarding any repo you already have. Add
+`--before 2026-10-01` too, and each repo is left at its last commit before that
+deadline (the end of that day), ready to grade.
+
+Starting next term's course? `course init CS-101-spring --like CS-101` copies the TAs,
+templates, and repo settings over.
 
 ## Where to next
 

@@ -49,7 +49,7 @@ differ):
 
 ```
 $ gh-class-sak migrate-github-classroom cs101-fall
-⚠️  dry run: no changes will be made. add --no-dryrun to apply
+⚠️  dry run: no changes will be made. add --apply to make them
 hw1: 2 repos (jdoe, rpatel)
   course for "hw1" (blank to skip): CS-101
   assignment name for "hw1" [hw1]:
@@ -65,7 +65,7 @@ project: 3 repos (team-1, nightowls, team-3)
 ```
 
 Everything above is a *preview* — like every mutating command it does nothing until you
-re-run with `--no-dryrun`. What the import records:
+re-run with `--apply`. What the import records:
 
 - **every repo, tracked by permanent id** — Classroom's accepted-assignment list is
   reconstructed as tsv rows with `REPO` and `REPO_ID` filled in, so a team renaming
@@ -120,7 +120,7 @@ Then finish the job:
    the rows don't list — without it, sync only warns about them:
 
    ```
-   gh-class-sak sync --org cs101-fall --remove-unlisted-contributors [--no-dryrun]
+   gh-class-sak sync --org cs101-fall --remove-unlisted-contributors [--apply]
    ```
 
    Run it twice — the second pass prints `nothing to do`.

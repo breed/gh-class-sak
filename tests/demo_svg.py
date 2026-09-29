@@ -8,24 +8,16 @@ asserts the committed file matches a fresh render; when it goes stale:
     python -m tests.demo_svg
 """
 
-import contextlib
 import os
 import shlex
 import tempfile
 from pathlib import Path
-from unittest import mock
 from xml.sax.saxutils import escape
 
 from click.testing import CliRunner
 
-from gh_class_sak import core
-from gh_class_sak import meta_store as ms
-from gh_class_sak.commands import classrooms as classrooms_cmd
-from gh_class_sak.commands import course as course_cmd
-from gh_class_sak.commands import meta as meta_cmd
-from gh_class_sak.commands import repos as repos_cmd
 from gh_class_sak.core import gh_class_sak
-from tests.demo import demo_github, seed_demo_meta
+from gh_class_sak.demo import demo_world
 
 SVG_PATH = Path(__file__).resolve().parent.parent / "docs" / "demo.svg"
 
@@ -54,18 +46,8 @@ BLINK_S = 0.55  # cursor half-period
 
 def _outputs():
     """Run every COMMANDS entry against the demo fixture, fully offline."""
-    with tempfile.TemporaryDirectory() as tmp, contextlib.ExitStack() as stack:
-        stack.enter_context(mock.patch.object(
-            ms, "meta_checkout_dir", lambda org: str(Path(tmp) / "checkouts" / org)))
-        gh = demo_github(seed_demo_meta(Path(tmp) / "origins"))
-        # the demo runs with no config file, as a first-time reader would
-        stack.enter_context(
-            mock.patch.object(core, "config_ini", str(Path(tmp) / "absent.ini")))
-        for mod in (core, classrooms_cmd, course_cmd, repos_cmd, meta_cmd):
-            stack.enter_context(
-                mock.patch.object(mod, "get_github", lambda: gh, create=True))
-            stack.enter_context(
-                mock.patch.object(mod, "get_token", lambda: "ghp_faketoken", create=True))
+    # the cast runs with no config file, as a first-time reader would
+    with tempfile.TemporaryDirectory() as tmp, demo_world(tmp):
         runner = CliRunner()
         cast = []
         for line in COMMANDS:

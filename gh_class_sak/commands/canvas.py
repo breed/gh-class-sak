@@ -136,6 +136,11 @@ def message_missing(classroom, assignment, dryrun):
     invitation is an error aimed at you (exit 1) — the fix is meta apply,
     not a message. A dry run lists who would get what and prints the full
     message texts.
+
+    \b
+    Examples:
+      gh-class-sak canvas message-missing CS-101 hw1
+      gh-class-sak canvas message-missing CS-101 hw1 --apply
     """
     if not has_canvas_config():
         error(f"this command needs a [CANVAS] section in {config_ini}")

@@ -191,7 +191,10 @@ def _announce_dryrun(ctx, param, value):
     and, when it previewed anything, the last thing too, since a long
     preview scrolls the first line away."""
     if value:
-        _warning_line("dry run: no changes will be made. add --no-dryrun to apply")
+        if ctx.meta.get(LEGACY):
+            _warning_line("dry run: no changes will be made. add --no-dryrun to apply")
+        else:
+            _warning_line("dry run: no changes will be made. add --apply to make them")
         ctx.call_on_close(lambda: _dryrun_footer(ctx))
     return value
 
@@ -205,12 +208,16 @@ def announce_dryrun():
 
 def _dryrun_footer(ctx):
     if said["would"] and not ctx.meta.get(LEGACY):
-        _warning_line("that was a preview: nothing changed. add --no-dryrun to apply")
+        _warning_line("that was a preview: nothing changed. add --apply to make"
+                      " these changes")
 
+
+# --apply is the plain-words spelling of --no-dryrun; both work
+DRYRUN_FLAGS = ("--dryrun/--no-dryrun", " /--apply")
+DRYRUN_HELP = "preview changes (default); --apply (or --no-dryrun) makes them"
 
 dryrun_option = click.option(
-    "--dryrun/--no-dryrun", default=True, callback=_announce_dryrun,
-    help="preview changes (default); --no-dryrun applies them",
+    *DRYRUN_FLAGS, default=True, callback=_announce_dryrun, help=DRYRUN_HELP,
 )
 
 
@@ -352,6 +359,26 @@ def add_org_to_config(org):
         f.write(text)
 
 
+def add_canvas_to_config(url, token):
+    """append a [CANVAS] section, creating the file if needed. the token is a
+    secret, so the file is made readable by its owner only."""
+    text = ""
+    if os.path.exists(config_ini):
+        with open(config_ini) as f:
+            text = f.read()
+    if text and not text.endswith("\n"):
+        text += "\n"
+    if text:
+        text += "\n"
+    text += f"[CANVAS]\nurl = {url}\ntoken = {token}\n"
+    parent = os.path.dirname(config_ini)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with open(config_ini, "w") as f:
+        f.write(text)
+    os.chmod(config_ini, 0o600)
+
+
 def match_org(name, orgs):
     """the configured org a partial name means, or None when nothing matches.
 
@@ -478,8 +505,8 @@ class UsageOrderGroup(click.Group):
 
 
 @click.group(cls=UsageOrderGroup, order=(
-    "help-me-setup", "course", "assignment", "sync", "repos", "canvas",
-    "migrate-github-classroom"))
+    "help-me-setup", "demo", "course", "assignment", "sync", "repos", "canvas",
+    "migrate-github-classroom", "completion"))
 @click.version_option(version=version("gh-class-sak"), prog_name="gh-class-sak")
 def gh_class_sak():
     """Manage a course's GitHub repos from the command line.
@@ -489,8 +516,9 @@ def gh_class_sak():
     assignment  one repo per student or group in a course, e.g. hw1 gives
                 cs101-hw1-alice, cs101-hw1-bob
     \b
-    New here? Run help-me-setup to check your setup, then course init, then
-    assignment create, then sync whenever the roster changes.
+    New here? Run help-me-setup to check your setup — or demo to try every
+    command on a made-up course first — then course init, then assignment
+    create, then sync whenever the roster changes.
     """
     for key in said:
         said[key] = 0

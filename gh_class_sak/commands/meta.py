@@ -720,17 +720,28 @@ def meta_init(classroom, org, prefix, template, canvas_course, dryrun):
 
 
 def _init(classroom, org, prefix, template, canvas_course, dryrun,
-          remember_org=False):
+          remember_org=False, like=None):
     """record a new classroom, creating the org's classroom-meta repo if needed.
 
     remember_org adds the org to the config's [ORGS] when it isn't there, so
-    later commands find the course without --org."""
+    later commands find the course without --org. like is (name, data) of a
+    course whose TAs, templates, and repo settings seed this new one — never
+    its prefix (the repo names would collide) or its assignments."""
     gh = get_github()
     org = _pick_org(org, classroom)
     classroom_dir = normalize_course_name(classroom)
 
     meta_repo, checkout = _open_meta(gh, org, required=False)
     existing = _load_classroom(checkout, classroom_dir) if checkout else None
+    if like is not None and existing:
+        error(f'"{classroom_dir}" already exists; --like only seeds a new course')
+        sys.exit(2)
+    if like is not None:
+        like_name, like_data = like
+        output(f"copying from {like_name}: TAs, template, repo settings,"
+               " and assignment templates")
+        if template is None:
+            template = like_data["template"]
 
     if prefix is None and existing:
         prefix = existing["prefix"]
@@ -745,6 +756,8 @@ def _init(classroom, org, prefix, template, canvas_course, dryrun,
         canvas_course = existing["canvas_course"]
 
     tas = list(existing["tas"]) if existing else []
+    if like is not None:
+        tas = list(like_data["tas"])
     if has_canvas_config():
         known_emails, known_githubs = set(), set()
         for entry in tas:
@@ -777,6 +790,8 @@ def _init(classroom, org, prefix, template, canvas_course, dryrun,
         _perform(dryrun, f"create private {org}/{ms.META_REPO_NAME}", _create_meta, actions)
 
     settings = _ini_settings(existing) if existing else {}
+    if like is not None:
+        settings = {key: like_data[key] for key in REPO_SETTING_KEYS + ("templates",)}
     settings["canvas_course"] = canvas_course
 
     def _write():
@@ -1174,7 +1189,7 @@ def _check_canvas_flags(from_canvas, canvas_group, remove_dropped):
 
 def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
             canvas_group, template_url, remove_unlisted, remove_dropped, dryrun,
-            whole_classroom=True):
+            whole_classroom=True, parse=ms.parse_students_tsv):
     """import the roster as assignment NAME, then converge the classroom —
     or, without whole_classroom, just NAME's repos."""
     _repo, checkout = _open_meta(gh, org)
@@ -1210,7 +1225,12 @@ def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
             _perform(dryrun, f"record {name} group set: {canvas_group}",
                      lambda: None, actions)
     elif table_file is not None:
-        incoming = ms.parse_students_tsv(table_file.read())
+        incoming = parse(table_file.read())
+        if parse is not ms.parse_students_tsv:
+            # a --roster's generated NAMEs can repeat; number namesakes by
+            # identity like canvas rows, never by their order in the file
+            incoming = ms.uniquify_names(incoming,
+                                         data["assignments"].get(name, []))
     else:
         incoming = []  # template-only: no roster changes
 
@@ -1455,6 +1475,11 @@ def migrate_github_classroom(org, dryrun):
     what to call it. Every imported row records the repo's collaborators as
     the students plus its url and permanent id, so it is tracked from day
     one. ORG is added to the config's [ORGS] when it isn't there yet.
+
+    \b
+    Examples:
+      gh-class-sak migrate-github-classroom cs101-fall
+      gh-class-sak migrate-github-classroom cs101-fall --apply
     """
     gh = get_github()
     orgs = configured_orgs()
