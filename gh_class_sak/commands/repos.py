@@ -16,6 +16,7 @@ from gh_class_sak.canvas_api import (
     profile_cached,
 )
 from gh_class_sak.core import (
+    UsageOrderGroup,
     dryrun_option,
     error,
     get_canvas,
@@ -366,7 +367,7 @@ def print_table(headers, rows):
         output("  ".join(parts))
 
 
-@gh_class_sak.group()
+@gh_class_sak.group(cls=UsageOrderGroup, order=("list", "clone", "members", "missing"))
 def repos():
     """Work with an assignment's repos: list, clone, find the missing ones.
 

@@ -117,7 +117,17 @@ def _echo(message, fg=None, err=False):
     click.echo(click.style(message, fg=fg) if fg else message, err=err)
 
 
+# what the running command has said so far: the dry-run footer and the
+# end-of-run summaries read it. reset at the start of every invocation
+said = {"would": 0, "warn": 0, "error": 0}
+
+# ctx.meta key set by the renamed (pre-course) commands: their output stays
+# exactly as it was, so no footer, summary, or next-step hint
+LEGACY = "gh_class_sak.legacy"
+
+
 def error(message):
+    said["error"] += 1
     _echo(message, fg="red", err=True)
 
 
@@ -126,6 +136,7 @@ def info(message):
 
 
 def warn(message):
+    said["warn"] += 1
     _echo(message, fg="yellow", err=True)
 
 
@@ -133,9 +144,20 @@ def output(message):
     _echo(message)
 
 
+def _warning_line(message):
+    output(f"\N{WARNING SIGN}\N{VARIATION SELECTOR-16}  {message}")
+
+
 def would(message):
     """print what a mutating command would do, per the --dryrun convention."""
-    output(f"\N{WARNING SIGN}\N{VARIATION SELECTOR-16}  {message}")
+    said["would"] += 1
+    _warning_line(message)
+
+
+def is_legacy():
+    """whether a renamed command is running, whose output must not change."""
+    ctx = click.get_current_context(silent=True)
+    return bool(ctx and ctx.meta.get(LEGACY))
 
 
 def progress(items, label, length=None):
@@ -165,10 +187,25 @@ def progress(items, label, length=None):
 
 
 def _announce_dryrun(ctx, param, value):
-    """the first thing a previewing command says is that it is previewing."""
+    """the first thing a previewing command says is that it is previewing —
+    and, when it previewed anything, the last thing too, since a long
+    preview scrolls the first line away."""
     if value:
-        would("dry run: no changes will be made. add --no-dryrun to apply")
+        _warning_line("dry run: no changes will be made. add --no-dryrun to apply")
+        ctx.call_on_close(lambda: _dryrun_footer(ctx))
     return value
+
+
+def announce_dryrun():
+    """the dryrun option's announcement, for a command that previews only
+    some of the time (a settings command that shows when given nothing)."""
+    ctx = click.get_current_context()
+    _announce_dryrun(ctx, None, True)
+
+
+def _dryrun_footer(ctx):
+    if said["would"] and not ctx.meta.get(LEGACY):
+        _warning_line("that was a preview: nothing changed. add --no-dryrun to apply")
 
 
 dryrun_option = click.option(
@@ -425,7 +462,24 @@ def renamed(old, new):
         warn(f'"{old}" is renamed: use {new}')
 
 
-@click.group()
+class UsageOrderGroup(click.Group):
+    """a group whose --help lists its commands in the order they're used —
+    setup first — instead of alphabetically. commands the order doesn't
+    name follow, alphabetically."""
+
+    def __init__(self, *args, order=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.order = list(order)
+
+    def list_commands(self, ctx):
+        names = super().list_commands(ctx)
+        return ([name for name in self.order if name in names]
+                + [name for name in names if name not in self.order])
+
+
+@click.group(cls=UsageOrderGroup, order=(
+    "help-me-setup", "course", "assignment", "sync", "repos", "canvas",
+    "migrate-github-classroom"))
 @click.version_option(version=version("gh-class-sak"), prog_name="gh-class-sak")
 def gh_class_sak():
     """Manage a course's GitHub repos from the command line.
@@ -435,9 +489,11 @@ def gh_class_sak():
     assignment  one repo per student or group in a course, e.g. hw1 gives
                 cs101-hw1-alice, cs101-hw1-bob
     \b
-    Start with: course init, then assignment create, then sync whenever the
-    roster or settings change. Run help-me-setup to check your setup.
+    New here? Run help-me-setup to check your setup, then course init, then
+    assignment create, then sync whenever the roster changes.
     """
+    for key in said:
+        said[key] = 0
     if not _interactive():
         return
     warn("this is beta code to replace github classroom, which is going away")

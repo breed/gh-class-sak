@@ -16,6 +16,7 @@ from gh_class_sak.commands.repos import (
     print_table,
 )
 from gh_class_sak.core import (
+    LEGACY,
     add_org_to_config,
     config_ini,
     configured_orgs,
@@ -26,12 +27,14 @@ from gh_class_sak.core import (
     gh_class_sak,
     has_canvas_config,
     info,
+    is_legacy,
     match_org,
     normalize_course_name,
     output,
     progress,
     renamed,
     resolve_classroom,
+    said,
     warn,
     would,
 )
@@ -125,6 +128,66 @@ def _perform_grant(dryrun, message, fn, actions, login, failures):
             raise
         error(f'cannot {message}: no github account "{login}"')
         failures.append(login)
+
+
+# the summary's categories, in print order: an action message's prefix,
+# then the singular and plural label
+SUMMARY_KINDS = (
+    ("record ", "record updated", "records updated"),
+    ("remove ", "row removed", "rows removed"),
+    ("create private ", "repo created", "repos created"),
+    ("adopt existing ", "repo adopted", "repos adopted"),
+    (f"add {WELCOME_FILE} ", "welcome commit", "welcome commits"),
+    ("protect ", "branch protected", "branches protected"),
+    ("grant push ", "invitation", "invitations"),
+    ("revoke ", "collaborator removed", "collaborators removed"),
+    ("cancel the invitation ", "invitation cancelled", "invitations cancelled"),
+    ("delete repo ", "repo deleted", "repos deleted"),
+    ("team ", "TA team change", "TA team changes"),
+)
+
+
+def _summary_kind(message):
+    # the TA team's messages name the team mid-sentence
+    if ' team "' in message or message.startswith("create team "):
+        return "team "
+    return next((prefix for prefix, _one, _many in SUMMARY_KINDS
+                 if message.startswith(prefix)), None)
+
+
+def _count(n, one, many):
+    return f"{n} {one if n == 1 else many}"
+
+
+def _summarize(actions, dryrun):
+    """the run's last line: what changed (or would), and the warnings and
+    errors printed along the way — a long run's output scrolls past."""
+    if is_legacy():
+        return
+    counts = {}
+    for message in actions:
+        kind = _summary_kind(message)
+        counts[kind] = counts.get(kind, 0) + 1
+    parts = [_count(counts[prefix], one, many)
+             for prefix, one, many in SUMMARY_KINDS if prefix in counts]
+    if None in counts:
+        parts.append(_count(counts[None], "other change", "other changes"))
+    if not parts:
+        if not said["warn"] and not said["error"]:
+            return
+        parts.append("no changes")
+    if said["warn"]:
+        parts.append(_count(said["warn"], "warning", "warnings"))
+    if said["error"]:
+        parts.append(_count(said["error"], "error", "errors"))
+    label = "summary (preview)" if dryrun else "summary"
+    output(f"{label}: {', '.join(parts)}")
+
+
+def _next(message, dryrun):
+    """point a real run at the next step of the setup."""
+    if not dryrun and not is_legacy():
+        output(f"next: {message}")
 
 
 def _open_meta(gh, org, required=True):
@@ -616,6 +679,7 @@ RENAMED = {
 @click.pass_context
 def meta(ctx):
     """Renamed: see course, assignment create, and sync."""
+    ctx.meta[LEGACY] = True
     if ctx.invoked_subcommand in RENAMED:
         renamed(f"gh-class-sak meta {ctx.invoked_subcommand}",
                 RENAMED[ctx.invoked_subcommand])
@@ -655,8 +719,12 @@ def meta_init(classroom, org, prefix, template, canvas_course, dryrun):
     _init(classroom, org, prefix, template, canvas_course, dryrun)
 
 
-def _init(classroom, org, prefix, template, canvas_course, dryrun):
-    """record a new classroom, creating the org's classroom-meta repo if needed."""
+def _init(classroom, org, prefix, template, canvas_course, dryrun,
+          remember_org=False):
+    """record a new classroom, creating the org's classroom-meta repo if needed.
+
+    remember_org adds the org to the config's [ORGS] when it isn't there, so
+    later commands find the course without --org."""
     gh = get_github()
     org = _pick_org(org, classroom)
     classroom_dir = normalize_course_name(classroom)
@@ -736,8 +804,14 @@ def _init(classroom, org, prefix, template, canvas_course, dryrun):
         universe = _classroom_universe(gh, org, existing, all_repos, by_id)
     _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe, dryrun,
                         actions, unresolved)
+    if remember_org and org.lower() not in {o.lower() for o in configured_orgs()}:
+        def _add_org():
+            add_org_to_config(org)
+        _perform(dryrun, f"add {org} to the config's [ORGS]", _add_org, actions)
     if unresolved:
         sys.exit(1)
+    _next(f"gh-class-sak assignment create {classroom_dir} NAME --roster FILE"
+          " (or --from-canvas)", dryrun)
 
 
 def _mark_students(row, repo, resolve):
@@ -1210,8 +1284,16 @@ def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
 
     if not actions:
         output("nothing to do")
+    _summarize(actions, dryrun)
     if unresolved or failures:
         sys.exit(1)
+    if any(a.startswith("grant push ") for a in actions):
+        if has_canvas_config():
+            chase = (f"gh-class-sak canvas message-missing {classroom_dir}"
+                     f" {name} messages the ones who haven't")
+        else:
+            chase = f"gh-class-sak course show {classroom_dir} shows who hasn't"
+        _next(f"students accept their invitations; {chase}", dryrun)
 
 
 def _grant_tas_team(gh, org, classroom_dir, universe, dryrun, actions):
@@ -1356,6 +1438,7 @@ def _apply(gh, org, partial, classroom, remove_unlisted, dryrun):
         ms.commit_and_push(checkout, "apply", get_token())
     if not actions:
         output("nothing to do")
+    _summarize(actions, dryrun)
     if any_unresolved or any_failures:
         sys.exit(1)
 

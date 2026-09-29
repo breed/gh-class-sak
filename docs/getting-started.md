@@ -105,7 +105,7 @@ default — they *preview* with a ⚠️ until you add `--no-dryrun`.
 **1. Record the course.** `course init` creates the classroom-meta repo when the org
 doesn't have one yet, and records the course in it. The org is the single configured
 `[ORGS]` entry — with several orgs configured, or none, pass `--org` (partial names
-work):
+work). A new org is added to your config's `[ORGS]`, so no later command needs `--org`:
 
 ```console
 $ gh-class-sak course init CS-101 --org cs101-fall
@@ -113,6 +113,8 @@ $ gh-class-sak course init CS-101 --org cs101-fall
 no canvas config; seed the [TAS] section by hand
 ⚠️  would record cs_101: prefix=CS-101 tas=-
 ⚠️  would create team "cs_101-TAs" in cs101-fall
+⚠️  would add cs101-fall to the config's [ORGS]
+⚠️  that was a preview: nothing changed. add --no-dryrun to apply
 ```
 
 **2. Create an assignment's repos.** `assignment create` takes the course, the
@@ -136,10 +138,11 @@ repo's URL and permanent id — so even a renamed repo stays tracked. Run it aga
 longer roster and it merges the new rows in. It only ever touches this assignment's
 repos.
 
-**3. Sync.** Whenever something changes — you hand-edit a tsv, add a TA, change the
-branch protection — `sync` makes GitHub match the record for the whole course: missing
-repos, student access, the TAs team, and branch protection. Run it twice — the second
-pass prints `nothing to do`:
+**3. Sync.** Whenever something changes by hand — you edit a tsv, a student fixes their
+Canvas profile link — `sync` makes GitHub match the record for the whole course:
+missing repos, student access, the TAs team, and branch protection. It ends with a
+one-line summary of what it changed. Run it twice — the second pass prints
+`nothing to do`:
 
 ```bash
 gh-class-sak sync CS-101 --no-dryrun
@@ -147,6 +150,14 @@ gh-class-sak sync CS-101 --no-dryrun
 
 The full sync contract — what each pass changes, what only ever happens on request, and
 what sync never touches — is specified in the [commands reference](commands.md#sync).
+
+TAs and repo settings have their own commands, which record the change and apply it in
+one step:
+
+```bash
+gh-class-sak course ta add CS-101 jane@sjsu.edu/ /msmith --no-dryrun
+gh-class-sak course settings CS-101 --protection pr-review --no-dryrun
+```
 
 Coming from GitHub Classroom? One command imports an org Classroom left behind — see
 [Migrating from GitHub Classroom](migrating-from-github-classroom.md) for where
@@ -185,6 +196,7 @@ $ gh-class-sak repos clone cs101-fall project --dest grading
 ⚠️  would clone cs101-fall/project-team-1 -> grading/team-1
 ⚠️  would clone cs101-fall/project-nightowls -> grading/nightowls
 ⚠️  would clone cs101-fall/project-team-3 -> grading/team-3
+⚠️  that was a preview: nothing changed. add --no-dryrun to apply
 ```
 
 Add `--no-dryrun` and it actually clones, fast-forwarding any repo you already have.
