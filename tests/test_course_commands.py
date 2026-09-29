@@ -6,12 +6,11 @@ from gh_class_sak import meta_store as ms
 from gh_class_sak.commands import course as course_cmd
 from tests.conftest import ORG, run
 from tests.fakes import FakeNamedUser, FakeRepo, FakeTeam
-from tests.test_meta_commands import (  # noqa: F401  - env is a fixture
+from tests.test_meta_commands import (
     ASSIGNMENT,
     COURSE,
     PREFIX,
     REPO_PREFIX,
-    env,
     meta_state,
     seed_meta,
 )

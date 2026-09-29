@@ -10,6 +10,7 @@ import click
 
 from gh_class_sak import meta_store as ms
 from gh_class_sak.commands import meta as m
+from gh_class_sak.commands.repos import print_table
 from gh_class_sak.core import (
     DRYRUN_FLAGS,
     DRYRUN_HELP,
@@ -29,7 +30,6 @@ from gh_class_sak.core import (
     resolve_course,
     warn,
 )
-from gh_class_sak.commands.repos import print_table
 from gh_class_sak.github_api import get_repo_by_id, list_org_repos, pending_invitees
 
 org_option = click.option(
@@ -508,7 +508,7 @@ def assignment_create(course, name, org, roster, from_canvas, canvas_group,
     \b
     Examples:
       gh-class-sak assignment create CS-101 hw1 --from-canvas --apply
-      gh-class-sak assignment create CS-101 project --from-canvas --canvas-group "Project Groups" --apply
+      gh-class-sak assignment create CS-101 project --from-canvas --canvas-group Teams --apply
       gh-class-sak assignment create CS-101 project --roster teams.tsv --apply
       gh-class-sak assignment create CS-101 hw2 --template https://github.com/cs101-fall/hw2-starter
     """

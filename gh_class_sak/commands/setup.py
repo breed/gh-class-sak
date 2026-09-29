@@ -12,9 +12,9 @@ import sys
 import click
 from github import GithubException
 
+from gh_class_sak import core
 from gh_class_sak.canvas_api import get_canvas as canvas_client
 from gh_class_sak.canvas_api import list_courses
-from gh_class_sak import core
 from gh_class_sak.core import (
     add_canvas_to_config,
     add_org_to_config,
