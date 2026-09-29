@@ -54,7 +54,7 @@ Every key is optional; unset keys are simply not written back.
 
 - **`[CLASSROOM]`** — `prefix`: the repo-name namespace; a repo's default name joins
   the non-empty parts of prefix, assignment, and row `NAME` with `-`
-  (`cs210-lab1-team-1`). `template`: an `OWNER/NAME` GitHub template repo used
+  (`cs210-lab1-team-1`), cut off at GitHub's 100-character limit. `template`: an `OWNER/NAME` GitHub template repo used
   when creating any of the classroom's repos. `canvas_course`: the Canvas course name,
   preferred over the directory name for Canvas lookups. `protection`
   (`none`/`pr-review`), `linear_history` (default true), `force_push` (default false):

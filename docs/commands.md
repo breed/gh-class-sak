@@ -228,8 +228,13 @@ suffix) and `STUDENTS`: comma-joined **identities** in `EMAIL/GITHUBID` syntax �
 for a bare GitHub id. A
 repo's default name joins the non-empty parts of classroom `prefix`, assignment, and
 `NAME` with dashes: with `prefix = sp26-195a`, row `team-1` of `hw1.tsv` becomes
-`sp26-195a-hw1-team-1`; with no prefix, just `hw1-team-1`. The tool fills in the last two
-columns when it creates the repo: the URL, and GitHub's **permanent numeric repo id** —
+`sp26-195a-hw1-team-1`; with no prefix, just `hw1-team-1`. A default name longer than
+GitHub's 100-character limit is cut off at 100. When another row — in any classroom of
+the org — already holds that name, the row gets the first free numbered name instead
+(`…-2`, `…-3`, its `NAME` part cut shorter to make room), and the run says so; two rows
+never share a repo. A prefix and assignment that leave no room at all for team names
+are an error. The tool fills in the last two columns when it creates the repo: the URL,
+and GitHub's **permanent numeric repo id** —
 which is how a repo stays tracked even after students rename it.
 
 ### meta init

@@ -18,6 +18,7 @@ git; the git plumbing at the bottom reuses git_ops.
 """
 
 import os
+import re
 from configparser import ConfigParser
 from configparser import Error as ConfigParserError
 
@@ -33,6 +34,8 @@ META_REPO_NAME = "classroom-meta"
 STUDENTS_HEADERS = ("NAME", "STUDENTS", "REPO", "REPO_ID")
 EMPTY = "-"
 PROTECTION_VALUES = ("none", "pr-review")
+# github refuses a repo name longer than this
+MAX_REPO_NAME_LEN = 100
 
 
 # --- classroom.ini ---------------------------------------------------
@@ -142,8 +145,9 @@ def join_repo_name(*parts):
 
     an unset classroom prefix simply drops its segment, so a repo made for
     row team-1 of assignment hw1 is prefix-hw1-team-1, or hw1-team-1.
+    a name past github's limit is cut off at MAX_REPO_NAME_LEN.
     """
-    return "-".join(part for part in parts if part)
+    return "-".join(part for part in parts if part)[:MAX_REPO_NAME_LEN]
 
 
 # --- tas ------------------------------------------------------------------
@@ -182,6 +186,63 @@ def parse_students_tsv(text):
             "repo_id": None if repo_id == EMPTY else int(repo_id),
         })
     return rows
+
+
+def _halves(entry):
+    email, github = parse_identity(entry)
+    return {("email", email.lower()) if email else None,
+            ("github", github.lower()) if github else None} - {None}
+
+
+def uniquify_names(incoming, existing, by_person=True):
+    """give incoming rows NAMEs no other row has, numbering namesakes: two
+    students named Jose Nunez become Jose-Nunez and Jose-Nunez-2.
+
+    a name with no namesake — one such person in incoming and at most one
+    row for it recorded — keeps its plain NAME, so a person whose identity
+    changes (a fixed github link) stays on their row. with by_person,
+    namesakes are told apart by identity instead of roster order: each
+    takes the recorded row whose student shares their email or github id,
+    and the rest take the lowest free numbers, never a recorded namesake's
+    NAME. without it (canvas groups), only repeats within incoming are
+    numbered. returns new row dicts.
+    """
+    families = {}
+    for row in incoming:
+        families.setdefault(row["name"], []).append(row)
+    used = {row["name"].lower() for row in incoming}
+    named = {}
+    for base, rows in families.items():
+        numbered = re.compile(re.escape(base) + r"-\d+", re.IGNORECASE)
+        family = [r for r in existing
+                  if r["name"] == base or numbered.fullmatch(r["name"])] \
+            if by_person else []
+        if len(rows) == 1 and len(family) <= 1:
+            continue
+        taken = set()
+        for row in rows:
+            mine = {half for entry in row["students"] for half in _halves(entry)}
+            match = next((r["name"] for r in family if r["name"] not in taken
+                          and mine & {h for e in r["students"] for h in _halves(e)}),
+                         None)
+            if match:
+                named[id(row)] = match
+                taken.add(match)
+        # never a recorded namesake's NAME — that row is someone else's
+        reserved = {r["name"].lower() for r in family} | (used - {base.lower()})
+        for row in rows:
+            if id(row) in named:
+                continue
+            n = 1
+            while True:
+                candidate = base if n == 1 else f"{base}-{n}"
+                if candidate.lower() not in reserved and candidate not in taken:
+                    break
+                n += 1
+            named[id(row)] = candidate
+            taken.add(candidate)
+            reserved.add(candidate.lower())
+    return [{**row, "name": named.get(id(row), row["name"])} for row in incoming]
 
 
 def serialize_students_tsv(rows):

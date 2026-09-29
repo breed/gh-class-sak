@@ -329,7 +329,61 @@ def _reconcile_repo_protection(repo, desired, dryrun, actions):
              f" ({_protection_summary(desired)})", _protect, actions)
 
 
-def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions):
+class _RepoClaims:
+    """the repo names (lowercased — github names are case-insensitive) and
+    ids already held by a row, across every classroom in the org, so no two
+    rows ever share a repo: names cut at github's limit can collide, and
+    classrooms in one org can share a prefix."""
+
+    def __init__(self, checkout):
+        self.by_name, self.by_id = {}, {}
+        for classroom_dir in ms.list_classrooms(checkout):
+            data = _load_classroom(checkout, classroom_dir)
+            for assignment, rows in data["assignments"].items():
+                for row in rows:
+                    if row["repo_id"] is not None:
+                        self.claim(classroom_dir, assignment, row,
+                                   row["repo"], row["repo_id"])
+
+    def claim(self, classroom_dir, assignment, row, repo, repo_id=None):
+        holder = f"{classroom_dir}/{assignment}/{row['name']}"
+        if repo_id is not None:
+            self.by_id[repo_id] = holder
+        if repo:
+            self.by_name[repo.rstrip("/").rsplit("/", 1)[-1].lower()] = holder
+
+
+def _free_repo_name(gh, org, stem_parts, name, claims):
+    """(repo name, existing repo to adopt or None, holder of the default name)
+    for a row: its default name, or when another row holds that, the first
+    numbered one (-2, -3, …) nobody holds, its NAME part cut to fit github's
+    limit. an unclaimed repo already there under the name is adopted. the
+    repo name is None when not even one character of NAME fits.
+    """
+    stem = ms.join_repo_name(*stem_parts)
+    room = ms.MAX_REPO_NAME_LEN - len(stem) - 1
+    first_holder = None
+    n = 1
+    while True:
+        suffix = "" if n == 1 else f"-{n}"
+        if room - len(suffix) < 1:
+            return None, None, first_holder
+        candidate = ms.join_repo_name(*stem_parts,
+                                      name[:room - len(suffix)] + suffix)
+        holder = claims.by_name.get(candidate.lower())
+        existing = None
+        if holder is None:
+            existing = get_org_repo(gh, org, candidate)
+            if existing is not None:
+                holder = claims.by_id.get(existing.id)
+        if holder is None:
+            return candidate, existing, first_holder
+        first_holder = first_holder or holder
+        n += 1
+
+
+def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions,
+                       claims):
     """create/adopt the repo for every row that has none, and grant push.
 
     covers every assignment in the classroom. a repo realized without a
@@ -337,7 +391,8 @@ def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions):
     here without a default branch. mutates rows in place under
     --no-dryrun. returns (changed assignment names, unresolved, failures) —
     callers save exactly the named tsvs, so untouched files (and their hand
-    comments) are never rewritten.
+    comments) are never rewritten. claims holds every repo a row already
+    has, org-wide; a row whose default name is taken gets a numbered one.
     """
     template = _template_repo(gh, data)
     desired = ms.effective_repo_settings(data)
@@ -346,13 +401,32 @@ def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions):
     failures = []
     for assignment, rows in data["assignments"].items():
         content_url = data["templates"].get(assignment)
+        stem_parts = (data["prefix"], assignment)
+        if len(ms.join_repo_name(*stem_parts)) + 2 > ms.MAX_REPO_NAME_LEN \
+                and any(row["repo_id"] is None for row in rows):
+            error(f"{classroom_dir}/{assignment}: the prefix and assignment name"
+                  " leave no room for team names in GitHub's 100-character"
+                  " repo names; shorten the prefix or the assignment name")
+            failures.append(assignment)
+            continue
         for row in rows:
             if row["repo_id"] is not None:
                 continue
             logins, unresolved = _resolve_row_students(row, resolve)
             all_unresolved.extend(unresolved)
-            repo_name = ms.join_repo_name(data["prefix"], assignment, row["name"])
-            existing = get_org_repo(gh, org, repo_name)
+            repo_name, existing, holder = _free_repo_name(
+                gh, org, stem_parts, row["name"], claims)
+            if repo_name is None:
+                error(f'{classroom_dir}/{assignment}: no numbered repo name fits'
+                      f' for "{row["name"]}"; shorten the prefix or the'
+                      " assignment name")
+                failures.append(row["name"])
+                continue
+            if holder is not None:
+                default = ms.join_repo_name(*stem_parts, row["name"])
+                warn(f"{default} is taken by {holder}; using {repo_name}")
+            claims.claim(classroom_dir, assignment, row,
+                         f"{org}/{repo_name}")
 
             made = {}
             if existing is not None:
@@ -997,6 +1071,10 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
     if from_canvas:
         incoming = _rows_from_canvas(Classroom(org, course), canvas_group,
                                      unresolvable)
+        # namesakes (two Alice Adamses, two "Team A" groups) get numbered
+        # NAMEs, so neither replaces the other's row in the merge
+        incoming = ms.uniquify_names(incoming, data["assignments"].get(name, []),
+                                     by_person=canvas_group is None)
         if canvas_group and data["group_sets"].get(name) != canvas_group:
             group_set_changed = True
             data["group_sets"] = {**data["group_sets"], name: canvas_group}
@@ -1013,8 +1091,11 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
         # an enrolled person whose canvas entry is unusable never makes it
         # into incoming, but they are still in the class — never treat a
         # recorded row of theirs as dropped
-        still_here = {row["name"] for row in incoming} \
-            | {github_safe_name(n) for n in unresolvable if n}
+        unusable = {github_safe_name(n) for n in unresolvable if n}
+        still_here = {row["name"] for row in incoming} | {
+            row["name"] for row in merged
+            if re.sub(r"-\d+$", "", row["name"]) in unusable
+            or row["name"] in unusable}
         gone = [row for row in merged if row["name"] not in still_here]
         if remove_dropped:
             removed = gone
@@ -1040,7 +1121,8 @@ def meta_assign(classroom, table_file, assignment, from_canvas, canvas_group,
     resolve = _make_resolver(org, course)
     changed, unresolved, failures = _realize_classroom(gh, org, classroom_dir,
                                                        data, resolve, dryrun,
-                                                       actions)
+                                                       actions,
+                                                       _RepoClaims(checkout))
     unresolved = unresolvable + unresolved
 
     # the whole classroom converges like apply: recorded repos get their
@@ -1155,6 +1237,7 @@ def meta_apply(classroom, remove_unlisted, dryrun):
     actions = []
     any_unresolved = []
     any_failures = []
+    claims = _RepoClaims(checkout)
     all_repos = list_org_repos(gh, org)
     by_id = {r.id: r for r in all_repos}
 
@@ -1166,7 +1249,7 @@ def meta_apply(classroom, remove_unlisted, dryrun):
         changed, unresolved, failures = _realize_classroom(gh, org,
                                                            classroom_dir, data,
                                                            resolve, dryrun,
-                                                           actions)
+                                                           actions, claims)
         any_unresolved.extend(unresolved)
         any_failures.extend(failures)
         if changed:

@@ -892,6 +892,40 @@ class TestMetaAssignFromCanvas:
         assert rows["Erin-Evans"]["students"] == ["erin@sjsu.edu/"]
         assert 'cannot resolve "erin@sjsu.edu/"' in result.output
 
+    def twin(self, canvas):
+        """a second Alice Adams: same name, a different person."""
+        canvas._enrollments.append(
+            {"role": {"name": "StudentEnrollment"},
+             "user": {"_id": "5", "name": "Alice Adams", "email": "alice2@sjsu.edu"},
+             "courseSectionId": "s2"})
+        canvas._profiles["5"] = {"links": [{"url": "https://github.com/alice2"}]}
+
+    def test_two_students_with_one_name_get_numbered_rows(self, env, canvas):
+        # before, the second Alice replaced the first's row, and one of
+        # them silently had no repo
+        self.twin(canvas)
+        seed_meta(env)
+        run(env.runner, "meta", "assign", ORG, "--from-canvas",
+            "--assignment", "hw1", "--no-dryrun")
+        rows = {row["name"]: row for row in meta_state(env)["assignments"]["hw1"]}
+        assert rows["Alice-Adams"]["students"] == ["alice@sjsu.edu/alice"]
+        assert rows["Alice-Adams-2"]["students"] == ["alice2@sjsu.edu/alice2"]
+        assert env.gh.get_repo(f"{ORG}/{PREFIX}-hw1-Alice-Adams-2") is not None
+
+    def test_a_reimport_keeps_each_namesake_on_their_own_row(self, env, canvas):
+        self.twin(canvas)
+        seed_meta(env)
+        run(env.runner, "meta", "assign", ORG, "--from-canvas",
+            "--assignment", "hw1", "--no-dryrun")
+        # canvas now lists the second Alice first
+        twin = canvas._enrollments.pop()
+        canvas._enrollments.insert(0, twin)
+        run(env.runner, "meta", "assign", ORG, "--from-canvas",
+            "--assignment", "hw1", "--no-dryrun")
+        rows = {row["name"]: row for row in meta_state(env)["assignments"]["hw1"]}
+        assert rows["Alice-Adams"]["students"] == ["alice@sjsu.edu/alice"]
+        assert rows["Alice-Adams-2"]["students"] == ["alice2@sjsu.edu/alice2"]
+
     def test_group_set_makes_a_row_per_group_and_is_recorded(self, env, canvas):
         seed_meta(env)
         result = run(env.runner, "meta", "assign", ORG, "--from-canvas",
@@ -1182,6 +1216,83 @@ class TestMetaApply:
         created = env.gh.get_repo(f"{ORG}/{REPO_PREFIX}-late-team")
         assert ("add", "msmith", "push") in created.collab_log
         assert meta_state(env)["assignments"][ASSIGNMENT][0]["repo_id"] == created.id
+
+    def test_rows_whose_names_cut_to_the_same_repo_name_are_numbered(self, env):
+        # both names cut to the same 100 characters: the first row gets that
+        # name, the second the same cut shortened to fit a -2, never sharing
+        long = "x" * 120
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": f"{long}-a", "students": ["/msmith"],
+             "repo": None, "repo_id": None},
+            {"name": f"{long}-b", "students": ["/jdoe"],
+             "repo": None, "repo_id": None}]})
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        first = ms.join_repo_name(PREFIX, ASSIGNMENT, long)
+        second = first[:ms.MAX_REPO_NAME_LEN - 2] + "-2"
+        assert len(second) == ms.MAX_REPO_NAME_LEN
+        assert f"{first} is taken by {COURSE}/{ASSIGNMENT}/{long}-a; using {second}" \
+            in result.output
+        rows = meta_state(env)["assignments"][ASSIGNMENT]
+        assert rows[0]["repo_id"] == env.gh.get_repo(f"{ORG}/{first}").id
+        numbered = env.gh.get_repo(f"{ORG}/{second}")
+        assert rows[1]["repo_id"] == numbered.id
+        assert ("add", "jdoe", "push") in numbered.collab_log
+
+    def test_a_row_never_adopts_a_repo_another_row_recorded(self, env):
+        taken = FakeRepo(ORG, f"{REPO_PREFIX}-team-1")
+        env.org._repos.append(taken)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "renamed", "students": ["/msmith"],
+             "repo": taken.html_url, "repo_id": taken.id},
+            {"name": "team-1", "students": ["/jdoe"],
+             "repo": None, "repo_id": None}]})
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert "adopt existing" not in result.output
+        numbered = env.gh.get_repo(f"{ORG}/{REPO_PREFIX}-team-1-2")
+        assert meta_state(env)["assignments"][ASSIGNMENT][1]["repo_id"] == numbered.id
+        assert ("add", "jdoe", "push") not in taken.collab_log
+
+    def test_a_name_taken_in_another_course_is_numbered_too(self, env):
+        # two courses in one org sharing a prefix: course two's row must not
+        # adopt the repo course one recorded, even when only course two syncs
+        taken = FakeRepo(ORG, f"{REPO_PREFIX}-team-1")
+        env.org._repos.append(taken)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["/msmith"],
+             "repo": taken.html_url, "repo_id": taken.id}]})
+        seed_meta(env, course="cmpe_195b", assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["/jdoe"],
+             "repo": None, "repo_id": None}]})
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        numbered = env.gh.get_repo(f"{ORG}/{REPO_PREFIX}-team-1-2")
+        assert meta_state(env, "cmpe_195b")["assignments"][ASSIGNMENT][0][
+            "repo_id"] == numbered.id
+        assert ("add", "jdoe", "push") not in taken.collab_log
+
+    def test_a_prefix_and_assignment_with_no_room_left_is_an_error(self, env):
+        prefix = "p" * 97  # "p…p-project" is already past github's limit
+        seed_meta(env, prefix=prefix, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["/jdoe"],
+             "repo": None, "repo_id": None}]})
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 1
+        assert (f"{COURSE}/{ASSIGNMENT}: the prefix and assignment name leave no"
+                " room for team names in GitHub's 100-character repo names;"
+                " shorten the prefix or the assignment name") in result.output
+        assert env.org.created_repos == []
+
+    def test_a_hand_recorded_repo_url_is_not_a_clash_with_itself(self, env):
+        mine = FakeRepo(ORG, f"{REPO_PREFIX}-team-1")
+        env.org._repos.append(mine)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["/jdoe"],
+             "repo": mine.html_url, "repo_id": None}]})
+        result = run(env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert result.exit_code == 0, result.output
+        assert meta_state(env)["assignments"][ASSIGNMENT][0]["repo_id"] == mine.id
 
     def test_apply_seeds_new_repos_from_the_assignment_template(self, env,
                                                                 tmp_path):
