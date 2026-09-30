@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `repos clone --before DEADLINE` goes by GitHub's own push times instead of
+  commit dates: each repo is left at what its last push at or before the
+  deadline put on the branch. A student's clock, a faked commit date, or a
+  force push after the deadline can't change which commit is graded, and a
+  commit a later force push took off the branch is fetched by its id. A repo
+  GitHub has no push record for falls back to commit dates and says so; the
+  `AT` column says `pushed` or `committed`
 - `gh-class-sak demo COMMAND...` runs any command on the invented course
   the docs are built on — offline, with nothing kept, so even `--apply` is
   safe to try. `gh-class-sak demo` alone describes the course

@@ -624,17 +624,19 @@ def _parse_deadline(ctx, param, value):
               help="directory to clone into (default: current directory)")
 @click.option("--before", "deadline", default=None, metavar="DEADLINE",
               callback=_parse_deadline,
-              help='leave each repo at its last commit at or before DEADLINE:'
-                   ' "2026-10-01" (the end of that day) or "2026-10-01 17:00",'
-                   " local time")
+              help='leave each repo at what its last push at or before DEADLINE'
+                   ' left on the branch: "2026-10-01" (the end of that day) or'
+                   ' "2026-10-01 17:00", local time')
 @dryrun_option
 def repos_clone(classroom, assignment, dest, deadline, dryrun):
     """Clone or fast-forward every repo of a course's assignment.
 
-    With --before, each repo is then left (detached) at its last commit
-    dated at or before the deadline, ready to grade; the next run returns it
-    to its branch first. Commit dates come from the students' machines, so
-    for a dispute check the push times on github.
+    With --before, each repo is then left (detached) at the commit its
+    default branch held after its last push at or before the deadline,
+    ready to grade; the next run returns it to its branch first. Push times
+    are github's own, so a student's clock or a later force push can't
+    change which commit that is. A repo github has no push record for falls
+    back to commit dates, which students' machines set, and says so.
 
     \b
     Examples:
@@ -645,7 +647,7 @@ def repos_clone(classroom, assignment, dest, deadline, dryrun):
     from gh_class_sak import git_ops
 
     _room, found = resolve_assignment_repos(classroom, assignment)
-    cutoff = f" at its last commit before {deadline:%Y-%m-%d %H:%M}" \
+    cutoff = f" at its last push before {deadline:%Y-%m-%d %H:%M}" \
         if deadline else ""
 
     if dryrun:
@@ -662,25 +664,46 @@ def repos_clone(classroom, assignment, dest, deadline, dryrun):
         status = git_ops.clone_or_update(gh_repo.clone_url, target, token)
         row = [gh_repo.full_name, target, status]
         if deadline:
-            row.append(_checkout_deadline(git_ops, gh_repo, target, status, deadline))
+            row.append(_checkout_deadline(git_ops, gh_repo, target, status,
+                                          deadline, token))
         rows.append(row)
 
     headers = ["REPO", "PATH", "STATUS"] + (["AT"] if deadline else [])
     print_table(headers, rows)
 
 
-def _checkout_deadline(git_ops, gh_repo, target, status, deadline):
-    """leave the clone at its deadline commit; the AT cell describing it."""
+def _checkout_deadline(git_ops, gh_repo, target, status, deadline, token=None):
+    """leave the clone at its deadline commit; the AT cell describing it.
+
+    github's push record decides which commit that is; commit dates, which
+    students' machines set, are only a said-out-loud fallback for a repo
+    github has no push record for.
+    """
+    from gh_class_sak import github_api
+
     if status not in ("cloned", "updated", "up-to-date"):
         return "-"
+    cutoff = f"{deadline:%Y-%m-%d %H:%M}"
+    pushed = github_api.pushed_before(gh_repo, deadline)
     try:
-        at = git_ops.checkout_before(target, deadline)
+        if pushed is None:
+            warn(f"{gh_repo.full_name}: github has no push record for"
+                 f" {gh_repo.default_branch}; used commit dates, which students'"
+                 " machines set")
+            at = git_ops.checkout_before(target, deadline)
+            if at is None:
+                error(f"{gh_repo.full_name}: no commit before {cutoff};"
+                      " left at its latest commit")
+                return "none before deadline"
+            sha, when = at
+            return f"{sha} (committed {when})"
+        sha, pushed_at = pushed
+        if not sha:
+            error(f"{gh_repo.full_name}: no push before {cutoff};"
+                  " left at its latest commit")
+            return "none before deadline"
+        short = git_ops.checkout_commit(target, sha, token)
     except RuntimeError as exc:
         error(f"{gh_repo.full_name}: {exc}")
         return "checkout failed"
-    if at is None:
-        error(f"{gh_repo.full_name}: no commit before {deadline:%Y-%m-%d %H:%M};"
-              " left at its latest commit")
-        return "none before deadline"
-    sha, when = at
-    return f"{sha} ({when})"
+    return f"{short} (pushed {pushed_at.astimezone():%Y-%m-%d %H:%M})"

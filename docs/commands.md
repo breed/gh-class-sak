@@ -230,14 +230,21 @@ gh-class-sak repos clone COURSE ASSIGNMENT [--dest DIR] [--before DEADLINE] [--a
 ```
 
 It writes to disk, so it previews by default and only acts with `--apply`.
-`--before DEADLINE` leaves each repo at its last commit dated at or before the deadline
-— detached, ready to grade — and adds an `AT` column with that commit's short sha and
-time. A bare date means the end of that day (`--before 2026-10-01`), or give a time
-(`--before "2026-10-01 17:00"`), both local time. A repo with no commit that old is a
-loud error and stays at its latest commit; the next clone returns a detached checkout
-to its branch before pulling (a checkout whose local edits block that is left alone
-and reported as `cannot-reattach`). Commit dates are set by the students' machines, so for a
-dispute, check the push times on GitHub.
+`--before DEADLINE` leaves each repo — detached, ready to grade — at the commit its
+default branch held after its **last push** at or before the deadline, and adds an `AT`
+column with that commit's short sha and push time. A bare date means the end of that
+day (`--before 2026-10-01`), or give a time (`--before "2026-10-01 17:00"`), both local
+time.
+
+The push times come from GitHub's own record of the branch (the repo's Activity view),
+not from commit dates, which students' machines set. So a wrong clock, a faked commit
+date, or a force push after the deadline can't change which commit is graded. A commit
+that a later force push took off the branch is fetched by its id. A repo with no push
+before the deadline is a loud error and stays at its latest commit. A repo GitHub has
+no push record for at all falls back to commit dates, with a warning saying so, and
+its `AT` cell reads `committed` instead of `pushed`. The next clone returns a detached
+checkout to its branch before pulling (a checkout whose local edits block that is left
+alone and reported as `cannot-reattach`).
 
 ```console
 $ gh-class-sak repos clone cs101-fall project --dest grading

@@ -1,6 +1,8 @@
 import os
 import re
 import shutil
+from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -438,20 +440,113 @@ class TestReposCloneBefore:
         assert result.exit_code == 2
         assert "YYYY-MM-DD" in result.output
 
-    def test_each_repo_is_left_at_its_deadline_commit(self, cli, no_config,
-                                                      tmp_path, monkeypatch):
-        from gh_class_sak import git_ops
+    def test_each_repo_is_left_at_its_last_push_before_the_deadline(
+            self, cli, no_config, tmp_path, monkeypatch):
+        # github's push record, not commit dates, decides: team-12 pushed in
+        # time, red-team only after, and github has no record for empty
+        from gh_class_sak import git_ops, github_api
+        pushed = datetime(2026, 10, 1, 20, 0, tzinfo=timezone.utc)
+        records = {"project-team-12": ("a" * 40, pushed),
+                   "project-red-team": ("", None),
+                   "project-empty": None}
+        monkeypatch.setattr(github_api, "pushed_before",
+                            lambda repo, when: records[repo.name])
         monkeypatch.setattr(git_ops, "clone_or_update", lambda *a, **k: "cloned")
-        at = iter([("1a2b3c4", "2026-10-01 22:00"), None, None, None])
-        monkeypatch.setattr(git_ops, "checkout_before", lambda dest, when: next(at))
+        checked_out = []
+        monkeypatch.setattr(git_ops, "checkout_commit",
+                            lambda dest, sha, token=None: checked_out.append(sha)
+                            or sha[:7])
+        monkeypatch.setattr(git_ops, "checkout_before",
+                            lambda dest, when: ("1b2c3d4", "2026-10-01 22:00"))
         result = run(cli, "repos", "clone", ORG, "project", "--dest",
                      str(tmp_path / "grading"), "--before", "2026-10-01", "--apply")
         assert result.exit_code == 0, result.output
-        assert "1a2b3c4 (2026-10-01 22:00)" in result.output
-        assert "no commit before 2026-10-01 23:59; left at its latest commit" \
-            in result.output
+        assert checked_out == ["a" * 40]
+        local = pushed.astimezone().strftime("%Y-%m-%d %H:%M")
+        assert f"aaaaaaa (pushed {local})" in result.output
+        assert (f"{ORG}/project-red-team: no push before 2026-10-01 23:59;"
+                " left at its latest commit") in result.output
+        # no push record at all: commit dates, said out loud
+        assert (f"{ORG}/project-empty: github has no push record for main;"
+                " used commit dates, which students' machines set") in result.output
+        assert "1b2c3d4 (committed 2026-10-01 22:00)" in result.output
+
+    def test_a_pushed_commit_that_cant_be_had_is_an_error(self, cli, no_config,
+                                                           tmp_path, monkeypatch):
+        from gh_class_sak import git_ops, github_api
+        pushed = datetime(2026, 10, 1, 20, 0, tzinfo=timezone.utc)
+        monkeypatch.setattr(github_api, "pushed_before",
+                            lambda repo, when: ("a" * 40, pushed))
+        monkeypatch.setattr(git_ops, "clone_or_update", lambda *a, **k: "cloned")
+
+        def unfetchable(dest, sha, token=None):
+            raise RuntimeError("cannot fetch it")
+        monkeypatch.setattr(git_ops, "checkout_commit", unfetchable)
+        result = run(cli, "repos", "clone", ORG, "project", "--dest",
+                     str(tmp_path / "grading"), "--before", "2026-10-01", "--apply")
+        assert f"{ORG}/project-team-12: cannot fetch it" in result.output
+        assert "checkout failed" in result.output
 
     def test_the_preview_names_the_deadline(self, cli, no_config, tmp_path):
         result = run(cli, "repos", "clone", ORG, "project", "--dest",
                      str(tmp_path / "grading"), "--before", "2026-10-01")
-        assert "at its last commit before 2026-10-01 23:59" in result.output
+        assert "at its last push before 2026-10-01 23:59" in result.output
+
+
+def _push(timestamp, after, kind="push"):
+    return SimpleNamespace(timestamp=datetime.fromisoformat(timestamp),
+                           after=after, activity_type=kind)
+
+
+class TestPushedBefore:
+    """the branch's commit at the deadline, from github's push record: server
+    time, which no student's clock can move."""
+
+    DEADLINE = datetime.fromisoformat("2026-10-01T23:59:59+00:00")
+
+    def lookup(self, monkeypatch, pushes):
+        from gh_class_sak import github_api
+        seen = []
+
+        def branch_pushes(repo, branch):
+            seen.append(branch)
+            if isinstance(pushes, Exception):
+                raise pushes
+            return iter(pushes)  # newest first, like the api
+        monkeypatch.setattr(github_api, "branch_pushes", branch_pushes)
+        got = github_api.pushed_before(SimpleNamespace(default_branch="main"),
+                                       self.DEADLINE)
+        assert seen == ["main"]
+        return got
+
+    def test_the_last_push_before_the_deadline_wins_over_a_later_force_push(
+            self, monkeypatch):
+        got = self.lookup(monkeypatch, [
+            _push("2026-10-03T08:00:00+00:00", "c" * 40, "force_push"),
+            _push("2026-10-01T20:00:00+00:00", "b" * 40),
+            _push("2026-09-28T10:00:00+00:00", "a" * 40)])
+        assert got == ("b" * 40, datetime.fromisoformat("2026-10-01T20:00:00+00:00"))
+
+    def test_a_force_push_before_the_deadline_counts(self, monkeypatch):
+        got = self.lookup(monkeypatch, [
+            _push("2026-10-01T10:00:00+00:00", "f" * 40, "force_push"),
+            _push("2026-09-28T10:00:00+00:00", "a" * 40)])
+        assert got[0] == "f" * 40
+
+    def test_a_branch_deleted_before_the_deadline_had_no_commit(self, monkeypatch):
+        got = self.lookup(monkeypatch, [
+            _push("2026-10-01T10:00:00+00:00", "0" * 40, "branch_deletion"),
+            _push("2026-09-28T10:00:00+00:00", "a" * 40)])
+        assert got == ("", datetime.fromisoformat("2026-10-01T10:00:00+00:00"))
+
+    def test_only_pushes_after_the_deadline(self, monkeypatch):
+        got = self.lookup(monkeypatch, [_push("2026-10-02T10:00:00+00:00", "b" * 40)])
+        assert got == ("", None)
+
+    def test_no_push_record_at_all(self, monkeypatch):
+        assert self.lookup(monkeypatch, []) is None
+
+    def test_github_refusing_the_record_is_no_record(self, monkeypatch):
+        from github import GithubException
+        refused = GithubException(403, {"message": "Forbidden"}, None)
+        assert self.lookup(monkeypatch, refused) is None

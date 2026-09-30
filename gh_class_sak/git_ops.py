@@ -126,6 +126,32 @@ def checkout_before(dest, when):
         return sha[:7], committed.strftime("%Y-%m-%d %H:%M")
 
 
+def checkout_commit(dest, sha, token=None):
+    """detach dest at sha, the commit github's push record names.
+
+    a commit later force-pushed over is on no branch the clone fetched, so
+    it is fetched by its id first. returns the short sha; raises
+    RuntimeError when the commit can't be had or checked out.
+    """
+    with Repo(dest) as repo:
+        try:
+            repo.git.cat_file("-e", f"{sha}^{{commit}}")
+        except GitCommandError:
+            try:
+                with repo.git.custom_environment(**auth_env(token)):
+                    repo.git.fetch("--quiet", "origin", sha)
+            except GitCommandError:
+                raise RuntimeError(f"cannot get the pushed commit {sha[:7]}; it was"
+                                   " force-pushed over and github won't serve"
+                                   " it by id") from None
+        try:
+            repo.git.checkout("--quiet", "--detach", sha)
+        except GitCommandError:
+            raise RuntimeError("cannot check out the deadline commit;"
+                               " does the checkout have local edits?") from None
+        return sha[:7]
+
+
 def clone_or_update(clone_url, dest, token=None):
     """clone into dest, or fast-forward it if it already exists.
 
