@@ -80,12 +80,12 @@ COURSE    cs101_fall  (org cs101-fall)
 ASSIGNMENT  REPOS  ACCEPTED  INVITED  NOT INVITED
 hw1         0/2    0         0        0
 project     0/3    0         0        0
-TAS TEAM  cs101_fall-TAs (not created — run: gh-class-sak sync)
+TAS TEAM  cs101_fall-TAs (not created — run: gh-class-sak sync cs101_fall --org cs101-fall --apply)
 
 to do:
-  hw1: 2 rows without a recorded repo → gh-class-sak sync cs101_fall --apply
-  project: 3 rows without a recorded repo → gh-class-sak sync cs101_fall --apply
-  TAs team → gh-class-sak sync cs101_fall --apply
+  hw1: 2 rows without a recorded repo → gh-class-sak sync cs101_fall --org cs101-fall --apply
+  project: 3 rows without a recorded repo → gh-class-sak sync cs101_fall --org cs101-fall --apply
+  TAs team → gh-class-sak sync cs101_fall --org cs101-fall --apply
 ```
 
 ## migrate-github-classroom
@@ -235,7 +235,8 @@ It writes to disk, so it previews by default and only acts with `--apply`.
 time. A bare date means the end of that day (`--before 2026-10-01`), or give a time
 (`--before "2026-10-01 17:00"`), both local time. A repo with no commit that old is a
 loud error and stays at its latest commit; the next clone returns a detached checkout
-to its branch before pulling. Commit dates are set by the students' machines, so for a
+to its branch before pulling (a checkout whose local edits block that is left alone
+and reported as `cannot-reattach`). Commit dates are set by the students' machines, so for a
 dispute, check the push times on GitHub.
 
 ```console
@@ -374,7 +375,7 @@ gh-class-sak course show COURSE [--org ORG]
   all (rows whose repo isn't created yet stay unmarked; a legend prints whenever
   markers appear)
 - a `TAS TEAM` line compares the course's `<course>-TAs` team to the `[TAS]` section:
-  `(matches tas)`, `(not created — run: gh-class-sak sync)`, or the members that are
+  `(matches tas)`, `(not created — run: gh-class-sak sync COURSE --org ORG --apply)`, or the members that are
   invited but not yet accepted, missing, or extra
 
 Once repos are recorded, `repos list`, `repos members`, `repos missing`, and `repos clone`

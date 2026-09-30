@@ -117,6 +117,24 @@ def _perform(dryrun, message, fn, actions):
         output(message)
 
 
+def _word():
+    """course, or classroom for the renamed meta commands, whose output
+    stays exactly what it was before the rename."""
+    return "classroom" if is_legacy() else "course"
+
+
+def _heading(classroom_dir):
+    return f"CLASSROOM {classroom_dir}" if is_legacy() else f"COURSE    {classroom_dir}"
+
+
+def _sync_hint(classroom_dir, org):
+    """a sync command that runs as printed — COURSE alone needs a config
+    listing the org, so the org is named too."""
+    if is_legacy():
+        return "meta apply"
+    return f"gh-class-sak sync {classroom_dir} --org {org} --apply"
+
+
 def _perform_grant(dryrun, message, fn, actions, login, failures):
     """_perform for access grants: github 404s a grant to a login that
     doesn't exist (a github.com/dashboard pasted into canvas, a typo'd id),
@@ -126,6 +144,10 @@ def _perform_grant(dryrun, message, fn, actions, login, failures):
     except GithubException as exc:
         if exc.status != 404:
             raise
+        # _perform logged the action before trying it; it didn't happen, so
+        # it must not count in the run's summary
+        if actions and actions[-1] == message:
+            actions.pop()
         error(f'cannot {message}: no github account "{login}"')
         failures.append(login)
 
@@ -856,7 +878,8 @@ def _tas_team_line(gh, org, classroom_dir, configured_tas, resolve):
     name = tas_team_name(classroom_dir)
     team = get_team(gh, org, tas_team_slug(classroom_dir))
     if team is None:
-        return f"TAS TEAM  {name} (not created — run: gh-class-sak sync)"
+        return (f"TAS TEAM  {name} (not created — run:"
+                f" {_sync_hint(classroom_dir, org)})")
     members = {m.login.lower() for m in team.get_members()}
     pending = {u.login.lower() for u in team_pending_invitations(team)}
     configured = {}
@@ -895,7 +918,7 @@ def _show(gh, org, partial, classroom):
 
     protection, linear_history, force_push = ms.effective_repo_settings(data)
     resolve = _make_resolver(org, data["canvas_course"] or classroom_dir)
-    output(f"COURSE    {classroom_dir}")
+    output(_heading(classroom_dir))
     output(f"PREFIX    {data['prefix'] or '-'}")
     if data["template"]:
         output(f"TEMPLATE  {data['template']}")
@@ -1010,7 +1033,7 @@ def _delete(gh, org, partial, classroom, delete_repo, dryrun):
     data = _load_classroom(checkout, classroom_dir)
 
     protection, linear_history, force_push = ms.effective_repo_settings(data)
-    output(f"COURSE    {classroom_dir}")
+    output(_heading(classroom_dir))
     output(f"PREFIX    {data['prefix'] or '-'}")
     if data["template"]:
         output(f"TEMPLATE  {data['template']}")
@@ -1030,7 +1053,7 @@ def _delete(gh, org, partial, classroom, delete_repo, dryrun):
         if answer not in data["assignments"]:
             error(f'"{answer}" is not one of the assignments; nothing deleted')
             sys.exit(2)
-    elif not click.confirm(f'delete the empty course "{classroom_dir}"?',
+    elif not click.confirm(f'delete the empty {_word()} "{classroom_dir}"?',
                            default=False):
         output("nothing to do")
         return
@@ -1055,7 +1078,7 @@ def _delete(gh, org, partial, classroom, delete_repo, dryrun):
     def _remove():
         shutil.rmtree(ms.classroom_dir(checkout, classroom_dir))
         ms.commit_and_push(checkout, f"delete {classroom_dir}", get_token())
-    _perform(dryrun, f"delete course {classroom_dir}"
+    _perform(dryrun, f"delete {_word()} {classroom_dir}"
              f" from {org}/{ms.META_REPO_NAME}", _remove, actions)
 
 
@@ -1322,7 +1345,7 @@ def _grant_tas_team(gh, org, classroom_dir, universe, dryrun, actions):
     name = tas_team_name(classroom_dir)
     team = get_team(gh, org, tas_team_slug(classroom_dir))
     if team is None:
-        warn(f'team "{name}" is missing; run: gh-class-sak sync {classroom_dir}')
+        warn(f'team "{name}" is missing; run: {_sync_hint(classroom_dir, org)}')
         return
     team_repos = {r.full_name for r in team.get_repos()}
     for full_name, repo in universe.items():

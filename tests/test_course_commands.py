@@ -209,7 +209,7 @@ class TestAssignmentCreateScope:
         assert result.exit_code == 0, result.output
         assert course_env.org._teams == {}
         assert f'team "{COURSE}-TAs" is missing; run: gh-class-sak sync' \
-            f" {COURSE}" in result.output
+            f" {COURSE} --org {ORG} --apply" in result.output
 
 
 class TestRenamedCommands:
@@ -317,6 +317,18 @@ class TestNextSteps:
 
 
 class TestSummary:
+    def test_a_failed_grant_is_not_counted_as_an_invitation(self, course_env):
+        repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1",
+                        reject_collaborators=["jd0e-typo"])
+        course_env.org._repos.append(repo)
+        seed_meta(course_env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["/jd0e-typo", "/msmith"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        result = run(course_env.runner, "sync", COURSE, "--org", ORG, "--apply")
+        summary = result.output.rstrip().splitlines()[-1]
+        assert summary.startswith("summary: ")
+        assert "1 invitation," in summary and "1 error" in summary
+
     def test_sync_ends_with_a_summary(self, course_env):
         seed_meta(course_env, assignments={ASSIGNMENT: [
             {"name": "team-1", "students": ["/msmith"], "repo": None, "repo_id": None},
@@ -403,7 +415,35 @@ class TestCourseTas:
         assert meta_state(course_env)["tas"] == ["/ta-one"]
 
 
+class TestNewWordingOnlyForNewCommands:
+    """course show/delete say course; the renamed meta ones keep classroom."""
+
+    def test_course_show_heading_and_a_runnable_sync_hint(self, course_env):
+        seed_meta(course_env)
+        result = run(course_env.runner, "course", "show", COURSE, "--org", ORG)
+        assert result.exit_code == 0, result.output
+        assert f"COURSE    {COURSE}\n" in result.output
+        assert (f"TAS TEAM  {COURSE}-TAs (not created — run: gh-class-sak sync"
+                f" {COURSE} --org {ORG} --apply)") in result.output
+
+    def test_course_delete_says_course(self, course_env):
+        seed_meta(course_env)
+        result = run(course_env.runner, "course", "delete", COURSE, "--org", ORG,
+                     "--apply", input="y\n")
+        assert result.exit_code == 0, result.output
+        assert f'delete the empty course "{COURSE}"?' in result.output
+        assert f"delete course {COURSE} from {ORG}/classroom-meta" in result.output
+
+
 class TestCourseSettings:
+    def test_a_value_it_already_has_is_no_preview(self, course_env):
+        seed_meta(course_env)
+        result = run(course_env.runner, "course", "settings", COURSE, "--org", ORG,
+                     "--protection", "none")
+        assert result.exit_code == 0, result.output
+        assert "dry run" not in result.output
+        assert "nothing to do" in result.output
+
     def test_without_options_it_shows_the_settings(self, course_env):
         seed_meta(course_env, template=f"{ORG}/Template")
         result = run(course_env.runner, "course", "settings", COURSE, "--org", ORG)
@@ -558,8 +598,8 @@ class TestCourseStatus:
         assert "ASSIGNMENT  REPOS  ACCEPTED  INVITED  NOT INVITED" in result.output
         assert "hw1         2/3    1         1        0" in result.output
         assert f"TAS TEAM  {COURSE}-TAs (matches tas)" in result.output
-        assert (f"  hw1: 1 row without a recorded repo → gh-class-sak sync {COURSE} --apply"
-                in result.output)
+        assert (f"  hw1: 1 row without a recorded repo → gh-class-sak sync {COURSE}"
+                f" --org {ORG} --apply" in result.output)
         assert (f"  hw1: 1 invitation not accepted yet → gh-class-sak course show"
                 f" {COURSE} lists who" in result.output)
 
@@ -584,7 +624,8 @@ class TestCourseStatus:
         assert (f"no assignments yet → gh-class-sak assignment create {COURSE}"
                 " NAME --from-canvas" in result.output)
         assert f"TAS TEAM  {COURSE}-TAs (not created" in result.output
-        assert f"TAs team → gh-class-sak sync {COURSE} --apply" in result.output
+        assert f"TAs team → gh-class-sak sync {COURSE} --org {ORG} --apply" \
+            in result.output
 
 
 class TestInitLike:

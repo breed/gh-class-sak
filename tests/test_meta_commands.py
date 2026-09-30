@@ -222,7 +222,8 @@ class TestMetaShow:
         seed_meta(env, tas=["ta-one"])
         result = run(env.runner, "meta", "show", ORG)
         assert result.exit_code == 0, result.output
-        assert "TAS TEAM  cmpe_195a-TAs (not created — run: gh-class-sak sync)" \
+        assert f"CLASSROOM {COURSE}\n" in result.output  # meta show's old heading
+        assert "TAS TEAM  cmpe_195a-TAs (not created — run: meta apply)" \
             in result.output
 
     def test_tas_team_matching_the_file_is_reported(self, env):
@@ -342,7 +343,9 @@ class TestMetaDelete:
         result = run(env.runner, "meta", "delete", ORG, "--no-dryrun", input="y\n")
         assert result.exit_code == 0, result.output
         assert f"PREFIX    {PREFIX}" in result.output
-        assert f"delete course {COURSE} from {ORG}/classroom-meta" in result.output
+        assert f"CLASSROOM {COURSE}\n" in result.output
+        assert f'delete the empty classroom "{COURSE}"?' in result.output
+        assert f"delete classroom {COURSE} from {ORG}/classroom-meta" in result.output
         assert ms.load_meta_classrooms(env.gh, ORG) == {}
 
     def test_declining_deletes_nothing(self, env):
@@ -385,7 +388,7 @@ class TestMetaDelete:
                      input=f"{ASSIGNMENT}\n")
         assert result.exit_code == 0, result.output
         assert f"would delete repo {repo.full_name}" in result.output
-        assert f"would delete course {COURSE}" in result.output
+        assert f"would delete classroom {COURSE}" in result.output
         assert repo.deleted is False
         assert COURSE in ms.load_meta_classrooms(env.gh, ORG)
 

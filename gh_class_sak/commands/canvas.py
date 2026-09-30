@@ -181,7 +181,8 @@ def message_missing(classroom, assignment, dryrun):
             stranded.append(
                 f'{student["name"]} ({login}) is not a collaborator on any'
                 " repo for this assignment and has no pending invitation"
-                " — run: gh-class-sak sync")
+                f" — run: gh-class-sak sync {room.classroom_dir or 'COURSE'}"
+                f" --org {room.org} --apply")
 
     if not todo and not stranded:
         output("nothing to do")

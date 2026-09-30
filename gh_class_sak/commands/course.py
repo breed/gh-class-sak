@@ -323,7 +323,7 @@ def course_status(course, org):
         have = len(rows) - no_repo - gone
         table.append([assignment, f"{have}/{len(rows)}", str(accepted),
                       str(invited), str(missing + unresolved)])
-        sync = f"gh-class-sak sync {classroom_dir} --apply"
+        sync = m._sync_hint(classroom_dir, org)
         if no_repo:
             todo.append(f"{assignment}: {_plural(no_repo, 'row', 'rows')}"
                         f" without a recorded repo → {sync}")
@@ -357,7 +357,7 @@ def course_status(course, org):
     tas_line = m._tas_team_line(gh, org, classroom_dir, data["tas"], resolve)
     output(tas_line)
     if not tas_line.endswith("(matches tas)"):
-        todo.append(f"TAs team → gh-class-sak sync {classroom_dir} --apply")
+        todo.append(f"TAs team → {m._sync_hint(classroom_dir, org)}")
 
     output("")
     if todo:
@@ -412,12 +412,13 @@ def course_settings(course, org, protection, linear_history, force_push,
             f"{key}={_setting_text(value)}" for key, value in current.items()))
         return
 
-    if dryrun:
-        announce_dryrun()
     if "template" in requested:
         requested["template"] = requested["template"] or None
     changed = {key: value for key, value in requested.items()
                if current[key] != value}
+    # a preview is announced only when there is something to preview
+    if dryrun and changed:
+        announce_dryrun()
     actions = []
     if changed:
         data = {**data, **changed}

@@ -83,6 +83,18 @@ class TestCheckoutBefore:
         assert git_ops.checkout_before(dest, self.deadline()) is None
         assert GitRepo(dest).head.commit.hexsha == shas[0]
 
+    def test_a_detached_checkout_that_cant_reattach_is_a_status(self, tmp_path):
+        # local edits that conflict with the branch make the checkout back
+        # to it fail; that repo gets a status, the clone run goes on
+        _origin, _shas = dated_origin(tmp_path, "2026-09-28T10:00:00+00:00",
+                                      "2026-10-02T09:00:00+00:00")
+        dest = str(tmp_path / "clone")
+        git_ops.clone_or_update(str(tmp_path / "origin"), dest)
+        git_ops.checkout_before(dest, self.deadline())
+        (tmp_path / "clone" / "work.txt").write_text("grader's notes\n")
+        assert git_ops.clone_or_update(str(tmp_path / "origin"), dest) == \
+            "cannot-reattach"
+
     def test_a_detached_checkout_still_updates(self, tmp_path):
         origin, _shas = dated_origin(tmp_path, "2026-09-28T10:00:00+00:00",
                                      "2026-10-02T09:00:00+00:00")

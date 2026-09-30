@@ -99,9 +99,10 @@ class Classroom:
     argument didn't say which; Canvas lookups then report the ambiguity.
     """
 
-    def __init__(self, org, course_partial):
+    def __init__(self, org, course_partial, classroom_dir=None):
         self.org = org
         self.course_partial = course_partial
+        self.classroom_dir = classroom_dir
 
 
 def resolve_assignment_repos(classroom, assignment):
@@ -168,7 +169,7 @@ def resolve_assignment_repos(classroom, assignment):
         for r in repos:
             error(f"    {r.name}")
         sys.exit(2)
-    return Classroom(org, course_partial), found
+    return Classroom(org, course_partial, classroom_dir=_dir), found
 
 
 def _single_classroom_dir(org):

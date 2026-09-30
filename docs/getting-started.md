@@ -30,12 +30,12 @@ COURSE    cs101_fall  (org cs101-fall)
 ASSIGNMENT  REPOS  ACCEPTED  INVITED  NOT INVITED
 hw1         0/2    0         0        0
 project     0/3    0         0        0
-TAS TEAM  cs101_fall-TAs (not created — run: gh-class-sak sync)
+TAS TEAM  cs101_fall-TAs (not created — run: gh-class-sak sync cs101_fall --org cs101-fall --apply)
 
 to do:
-  hw1: 2 rows without a recorded repo → gh-class-sak sync cs101_fall --apply
-  project: 3 rows without a recorded repo → gh-class-sak sync cs101_fall --apply
-  TAs team → gh-class-sak sync cs101_fall --apply
+  hw1: 2 rows without a recorded repo → gh-class-sak sync cs101_fall --org cs101-fall --apply
+  project: 3 rows without a recorded repo → gh-class-sak sync cs101_fall --org cs101-fall --apply
+  TAs team → gh-class-sak sync cs101_fall --org cs101-fall --apply
 ```
 
 `gh-class-sak demo` alone describes the course and suggests more to try.

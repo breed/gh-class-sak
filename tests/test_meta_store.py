@@ -372,6 +372,10 @@ class TestParseRoster:
         with pytest.raises(ValueError, match="line 2: REPO_ID"):
             ms.parse_roster("NAME STUDENTS REPO REPO_ID\nteam-1 /jdoe - oops\n")
 
+    def test_a_list_line_with_neither_half_is_an_error_not_a_crash(self):
+        with pytest.raises(ValueError, match='line 2: "/" is not an identity'):
+            ms.parse_roster("/msmith\n/\n")
+
     def test_too_many_columns_is_an_error(self):
         with pytest.raises(ValueError, match="line 1: 5 columns"):
             ms.parse_roster("team-1 /jdoe - 1 extra\n")

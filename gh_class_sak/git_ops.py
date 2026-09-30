@@ -137,6 +137,8 @@ def clone_or_update(clone_url, dest, token=None):
       "diverged"     local commits the remote doesn't have; not touched
       "pull-failed"  network, auth, or other pull error
       "not-a-repo"   dest exists but isn't a git checkout
+      "cannot-reattach"  left detached by --before, and local edits keep it
+                     from going back to its branch; not touched
       "failed"       clone error
 
     errors are reduced to a status rather than raised, because git's messages
@@ -159,7 +161,10 @@ def clone_or_update(clone_url, dest, token=None):
         return "not-a-repo"
 
     with repo:
-        _reattach(repo)
+        try:
+            _reattach(repo)
+        except GitCommandError:
+            return "cannot-reattach"
         before = repo.head.commit.hexsha if repo.head.is_valid() else None
         try:
             with repo.git.custom_environment(**env):

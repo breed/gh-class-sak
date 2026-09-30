@@ -104,7 +104,7 @@ $ gh-class-sak course show cs101_fall --org cs101-fall
 COURSE    cs101_fall
 PREFIX    -
 TAS       -
-TAS TEAM  cs101_fall-TAs (not created — run: gh-class-sak sync)
+TAS TEAM  cs101_fall-TAs (not created — run: gh-class-sak sync cs101_fall --org cs101-fall --apply)
 SETTINGS  protection=none linear_history=true force_push=false
 
 ASSIGNMENT hw1
@@ -144,6 +144,7 @@ slug, so hand-created `-tas` teams match too):
   repos, even in a shared org.
 
 `course show`'s `TAS TEAM` line is the health check: `(matches tas)`,
-`(not created — run: gh-class-sak sync)`, or the invited/missing/extra members. New
+`(not created — run: gh-class-sak sync COURSE --org ORG --apply)`, or the
+invited/missing/extra members. New
 repos from `assignment create` get the team's read right away; everything else about
 the team is `sync`'s job.

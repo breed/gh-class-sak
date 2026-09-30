@@ -201,6 +201,10 @@ def parse_roster(text):
     lines = [(n, line.split()) for n, line in enumerate(text.splitlines(), 1)
              if line.strip() and not line.lstrip().startswith("#")]
     if lines and all(len(cols) == 1 for _n, cols in lines):
+        for n, (entry,) in lines:
+            if parse_identity(entry) == (None, None):
+                raise ValueError(f'line {n}: "{entry}" is not an identity; use an'
+                                 " email, a /GITHUBID, or EMAIL/GITHUBID")
         return _rows_from_list([cols[0] for _n, cols in lines])
     for n, cols in lines:
         if [c.upper() for c in cols[:2]] == ["NAME", "STUDENTS"]:
