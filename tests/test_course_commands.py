@@ -750,3 +750,24 @@ class TestRosterNamesakes:
         rows = {r["name"]: r["students"]
                 for r in meta_state(course_env)["assignments"]["hw1"]}
         assert rows == {"jane": ["jane@a.edu/"], "jane-2": ["jane@b.edu/"]}
+
+
+class TestAssignmentHelpNamesTheRoster:
+    """a roster source is required, so the help says so where people look first."""
+
+    CHOICES = ("--from-canvas ", "--from-canvas --canvas-group SET", "--roster FILE")
+
+    def test_the_group_page_lists_the_roster_choices(self, course_env):
+        for args in (("assignment",), ("assignment", "--help")):
+            result = run(course_env.runner, *args)
+            assert "Every assignment needs a roster" in result.output
+            for choice in self.CHOICES:
+                assert choice in result.output
+            assert '--canvas-group "Project Groups"' in result.output
+
+    def test_create_says_a_roster_is_required(self, course_env):
+        result = run(course_env.runner, "assignment", "create", "--help")
+        assert result.exit_code == 0, result.output
+        assert "A roster is required" in result.output
+        for choice in self.CHOICES:
+            assert choice in result.output
