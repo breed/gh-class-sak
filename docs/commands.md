@@ -436,8 +436,24 @@ has is `nothing to do`.
 
 ## assignment create
 
-Record an assignment and create its repos. The roster comes from a table you wrote —
-just the two columns, emails and logins mixed freely:
+Record an assignment and create its repos. A roster is required to create repos — it
+says who gets one, and comes from one of:
+
+| Roster | Repos |
+|---|---|
+| `--from-canvas` | one per enrolled person — students, instructors, and TAs |
+| `--from-canvas --canvas-group SET` | one per group in a Canvas group set |
+| `--roster FILE` | one per person or team listed in the file |
+
+A team project from a Canvas group set, seeded from a starter repo:
+
+```bash
+gh-class-sak assignment create CS-101 project --from-canvas \
+    --canvas-group "Project Groups" --template URL --apply
+```
+
+A `--roster` file can be a table you wrote — just the two columns, emails and logins
+mixed freely:
 
 ```
 NAME       STUDENTS
