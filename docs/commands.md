@@ -441,7 +441,7 @@ says who gets one, and comes from one of:
 
 | Roster | Repos |
 |---|---|
-| `--from-canvas` | one per enrolled student |
+| `--from-canvas` | one per enrolled person — students, instructors, and TAs |
 | `--from-canvas --canvas-group SET` | one per group in a Canvas group set |
 | `--roster FILE` | one per person or team listed in the file |
 

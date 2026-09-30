@@ -475,8 +475,8 @@ def assignment_group():
     cs101-hw1-alice, cs101-hw1-bob.
 
     \b
-    Every assignment needs a roster — who gets a repo:
-      --from-canvas                     one repo per enrolled student
+    A roster is required to create repos — it says who gets one:
+      --from-canvas                     one repo per enrolled person
       --from-canvas --canvas-group SET  one repo per group in a Canvas group set
       --roster FILE                     people or teams listed in a file
 
@@ -514,7 +514,7 @@ def assignment_create(course, name, org, roster, from_canvas, canvas_group,
 
     \b
     A roster is required to create repos — it says who gets one:
-      --from-canvas                     one repo per enrolled student
+      --from-canvas                     one repo per enrolled person
       --from-canvas --canvas-group SET  one repo per group in a Canvas group set
       --roster FILE                     people or teams listed in a file
 
