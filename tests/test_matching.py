@@ -112,6 +112,14 @@ class TestExtractGithubUsername:
             {"url": "https://github.com/student-login", "title": "GitHub"}]}
         assert extract_github_username(profile) == "student-login"
 
+    def test_a_lookalike_host_is_not_github(self):
+        for url in ("https://notgithub.com/stranger",
+                    "https://evil-github.com/stranger",
+                    "https://github.com.example.net/stranger",
+                    "https://gist.github.com/stranger"):
+            assert extract_github_username({"links": [{"url": url}]}) is None, url
+        assert extract_github_username({"bio": "see notgithub.com/stranger"}) is None
+
     def test_an_account_link_may_end_in_a_slash_or_query(self):
         for url in ("https://github.com/student-login/",
                     "https://www.github.com/student-login?tab=repositories",

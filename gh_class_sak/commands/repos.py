@@ -222,8 +222,12 @@ def fetch_canvas_groups(room, group_category, canvas_ctx=None):
 
 
 # github.com/NAME, then whatever path follows it: an account link has none
-# (or just "/"); github.com/OWNER/REPO/… points into OWNER's repo instead
-_github_re = re.compile(r'github\.com/([a-zA-Z0-9_-]+)(/[^\s?#"\'<>()]*)?')
+# (or just "/"); github.com/OWNER/REPO/… points into OWNER's repo instead.
+# the host must be github.com itself (or www.): nothing that could be part
+# of a hostname may come right before it, so notgithub.com and
+# gist.github.com never match
+_github_re = re.compile(
+    r'(?<![\w.-])(?:www\.)?github\.com/([a-zA-Z0-9_-]+)(/[^\s?#"\'<>()]*)?')
 
 
 def _github_accounts(text):
