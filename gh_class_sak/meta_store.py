@@ -481,6 +481,25 @@ def report_missing_meta(gh, org, why="no-repo", report=error, prefix=""):
         report(f"{prefix}    {line}")
 
 
+def commit_paths_and_push(checkout, paths, message, token=None):
+    """commit only the named paths (relative to the checkout) and push.
+
+    for saving the audit log from a run that stopped early: whatever else
+    the run left half-edited in the checkout is not committed.
+    """
+    from git import Actor, Repo
+
+    from gh_class_sak.git_ops import auth_env
+
+    with Repo(checkout) as repo:
+        repo.git.add("--", *paths)
+        actor = Actor("gh-class-sak", "gh-class-sak@localhost")
+        # commit the index as staged: only these paths were added to it
+        repo.index.commit(message, author=actor, committer=actor)
+        with repo.git.custom_environment(**auth_env(token)):
+            repo.git.push("--set-upstream", "origin", "HEAD")
+
+
 def commit_and_push(checkout, message, token=None):
     """commit every change in the checkout and push; no-op when clean."""
     from git import Actor, Repo

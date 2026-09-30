@@ -7,13 +7,15 @@
   invitations, TA team changes — is appended to the course's `audit.log` in
   the classroom-meta repo with who ran it, the command, and why: the tsv row
   and identity it came from, and whether the GitHub id was read off a Canvas
-  profile link. Committed with each run; dry runs log nothing
+  profile link. Committed with each run — even a run that stops partway
+  commits the entries for what it did; dry runs log nothing
 - `course audit COURSE` checks the live repos against the rows: someone with
   access (or an invitation) whom no row lists, one account on rows for
-  different people, and — with Canvas — an account whose GitHub name isn't
-  the student's, or a recorded id the student's Canvas profile no longer
-  links. Each problem comes with its fix; exit 1 when there is one. A real
-  `sync` runs it at the end without changing its exit status
+  different people, and — with Canvas — an account that shares no part of the
+  enrolled person's name (student, instructor, or TA; any script), or a
+  recorded id their Canvas profile no longer links. Each problem comes with
+  its fix; exit 1 when there is one. A real `sync` runs it at the end without
+  changing its exit status
 - `gh-class-sak demo COMMAND...` runs any command on the invented course
   the docs are built on — offline, with nothing kept, so even `--apply` is
   safe to try. `gh-class-sak demo` alone describes the course

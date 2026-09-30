@@ -373,12 +373,13 @@ It flags, each with the command or edit that fixes it:
 
 - someone who has access to a repo, or an invitation to it, whom no row lists
 - one GitHub account on rows for different people
-- with a `[CANVAS]` config: an account that shares no part of the student's Canvas name
-  — no word of it in the GitHub profile name, and no 3+-letter word of it in the login —
-  the telltale of a wrong account; and a recorded GitHub id the student's Canvas profile
-  no longer links. GitHub names are free-form, so a first name, nickname, or handle that
-  shares anything with the student's name passes; what's left is worth a look, not
-  necessarily wrong
+- with a `[CANVAS]` config: an account that shares no part of the enrolled person's
+  Canvas name — no word of it in the GitHub profile name, and no 3+-letter word of it in
+  the login — the telltale of a wrong account; and a recorded GitHub id the person's
+  Canvas profile no longer links. Rows cover everyone Canvas enrolls — students,
+  instructors, and TAs — so all of them are checked. GitHub names are free-form, so a
+  first name, nickname, or handle that shares anything with the person's name passes;
+  names in any script count. What's left is worth a look, not necessarily wrong
 
 A row whose identities don't all resolve is skipped for the first check, since a partial
 list would misjudge who belongs. Without Canvas, the last two checks are skipped and the

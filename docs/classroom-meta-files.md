@@ -43,9 +43,11 @@ TIME                  BY          COMMAND            ACTION  REPO               
 
 `BY` is the account the tool ran as. `WHY` is the reason the tool had for the change:
 the tsv row and identity an invitation came from, and whether the GitHub id was read
-off the student's Canvas profile link — the usual way a wrong account gets in. Only real
-runs log; a dry run changed nothing. The log is committed with the rest of each run, so
-its history can't be quietly rewritten. It ends in `.log`, not `.tsv`, because every
+off the person's Canvas profile link (students, instructors, and TAs can all be on
+rows) — the usual way a wrong account gets in. Only real runs log; a dry run changed
+nothing. The log is committed with the rest of each run, so its history can't be
+quietly rewritten; a run that stops partway still commits the entries for the changes
+it made, and only those — not its half-finished edits to the rosters. It ends in `.log`, not `.tsv`, because every
 `.tsv` here is an assignment. `gh-class-sak course audit` checks the live repos against
 the rows ([commands reference](commands.md#course-audit)).
 

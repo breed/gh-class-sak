@@ -105,6 +105,30 @@ class TestAuditTrail:
         assert added["ta-two"]["WHY"] == "[TAS] /ta-two"
         assert added["ta-two"]["COMMAND"] == "gh-class-sak course ta add"
 
+    def test_a_run_that_fails_midway_still_logs_what_it_did(self, course_env,
+                                                            monkeypatch):
+        # the first invite happens, then github fails the second: that invite
+        # is real and must be logged, but the half-done roster isn't committed
+        from github import GithubException
+        real = meta_cmd.add_collaborator
+        calls = []
+
+        def flaky(repo, login, permission):
+            calls.append(login)
+            if len(calls) > 1:
+                raise GithubException(500, {"message": "Server Error"}, None)
+            return real(repo, login, permission)
+        monkeypatch.setattr(meta_cmd, "add_collaborator", flaky)
+        seed_meta(course_env, assignments={ASSIGNMENT: [
+            row("team-1", "/msmith", "/jdoe")]})
+        result = run(course_env.runner, "sync", COURSE, "--org", ORG, "--apply")
+        assert result.exit_code != 0
+        lines = audit_lines(course_env)
+        assert [x["WHO"] for x in lines if x["ACTION"] == "invite"] == ["msmith"]
+        assert any(x["ACTION"] == "create repo" for x in lines)
+        data = ms.load_meta_classrooms(course_env.gh, ORG)[COURSE]
+        assert data["assignments"][ASSIGNMENT][0]["repo_id"] is None
+
     def test_the_log_is_never_read_as_an_assignment(self, course_env):
         seed_meta(course_env, assignments={ASSIGNMENT: [row("team-1", "/msmith")]})
         run(course_env.runner, "sync", COURSE, "--org", ORG, "--apply")
@@ -149,8 +173,9 @@ class TestCourseAudit:
                              "github": "stranger"})
         result = run(course_env.runner, "course", "audit", COURSE, "--org", ORG)
         assert result.exit_code == 1
+        # canvas rows can be instructors and TAs too: "person", not "student"
         assert (f'{ASSIGNMENT}/team-1: stranger is named "Bob Stone" on GitHub,'
-                ' but the student is "Jane Doe" (jane@sjsu.edu)') in result.output
+                ' but Canvas has them as "Jane Doe" (jane@sjsu.edu)') in result.output
 
     def test_a_recorded_id_canvas_no_longer_links_is_flagged(
             self, course_env, monkeypatch):
@@ -201,6 +226,8 @@ class TestNameCheckOnlyFlagsNoOverlap:
         ("pkandala0103", "Px_0103", "Priya Kandala"),    # handle; name in the login
         ("Jose-Nunez", "José Núñez", "Jose Nunez"),      # accents
         ("pixel2018", "minan", "Mina Nall"),             # name run together
+        ("wxm2024", "王小明", "王小明"),                     # non-latin scripts
+        ("ivan-p", "Иван Петров", "Иван Петров"),
     ])
     def test_a_plausible_account_is_not_flagged(self, login, github_name,
                                                 canvas_name):

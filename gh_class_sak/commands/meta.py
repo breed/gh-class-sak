@@ -239,10 +239,13 @@ def _open_meta(gh, org, required=True):
             sys.exit(2)
         return None, None
     try:
-        return repo, ms.checkout_meta(repo.clone_url, org, get_token())
+        checkout = ms.checkout_meta(repo.clone_url, org, get_token())
     except RuntimeError as exc:
         error(str(exc))
         sys.exit(2)
+    # the audit trail's entries belong here, even if the command stops early
+    audit.bind(checkout, gh)
+    return repo, checkout
 
 
 def _resolve_classroom_dir(checkout, partial, classroom):
@@ -356,7 +359,7 @@ def _resolve_tas(tas, resolve, unresolved):
 def _row_reasons(assignment, row, resolve):
     """login (lowercased) -> why that account belongs on the row's repo, for
     the audit trail: the row and identity it came from, and whether the
-    github id was read off the student's canvas profile link."""
+    github id was read off the person's canvas profile link."""
     reasons = {}
     for entry in row["students"]:
         login = resolve(entry)
@@ -883,6 +886,8 @@ def _init(classroom, org, prefix, template, canvas_course, dryrun,
 
     # the classroom's TA team exists from day one, with read access to
     # whatever repos the classroom already has (usually none yet)
+    if not dryrun:
+        audit.bind(ms.meta_checkout_dir(org), gh)  # a new meta repo's checkout
     resolve = _make_resolver(org, canvas_course or classroom_dir)
     unresolved = []
     ta_logins = _resolve_tas(tas, resolve, unresolved)
@@ -927,10 +932,11 @@ def _mark_students(row, repo, resolve):
 
 
 def _name_words(text):
-    """a name's words: lowercased, accents dropped, split on anything else."""
+    """a name's words: lowercased, accents dropped, split on anything that
+    isn't a letter or digit in any script — 王小明 and Иван keep theirs."""
     plain = unicodedata.normalize("NFKD", text or "")
     plain = "".join(ch for ch in plain if not unicodedata.combining(ch)).lower()
-    return {word for word in re.split(r"[^a-z0-9]+", plain) if word}
+    return {word for word in re.split(r"[\W_]+", plain) if word}
 
 
 def _looks_like(github_name, login, canvas_name):
@@ -963,8 +969,9 @@ def _audit_course(gh, org, classroom_dir, data, by_id):
     returns (problems, notes): each problem is (what is wrong, the command
     or edit that fixes it). flagged: someone on a repo (or invited) whom no
     row lists; one account on rows for different people; and, with canvas,
-    an account whose github name isn't the student's, or a recorded id the
-    student's canvas profile no longer links. read-only.
+    an account sharing no part of the person's canvas name, or a recorded id
+    their canvas profile no longer links. rows cover whoever canvas enrolls —
+    students, instructors, TAs — so "person", not "student". read-only.
     """
     course = data["canvas_course"] or classroom_dir
     resolve = _make_resolver(org, course)
@@ -1019,11 +1026,11 @@ def _audit_course(gh, org, classroom_dir, data, by_id):
                 if named and person.get("name") \
                         and not _looks_like(named, login, person["name"]):
                     problems.append((
-                        f'{where}: {login} is named "{named}" on GitHub, but the'
-                        f' student is "{person["name"]}"'
+                        f'{where}: {login} is named "{named}" on GitHub, but'
+                        f' Canvas has them as "{person["name"]}"'
                         + (f" ({email})" if email else ""),
-                        f"check the student's Canvas GitHub link; if the account"
-                        f" is wrong, fix the row in {assignment}.tsv, then"
+                        f"check their Canvas GitHub link; if the account is"
+                        f" wrong, fix the row in {assignment}.tsv, then"
                         f" {sync_unlisted}"))
             if row["repo_id"] is None or unresolved:
                 continue  # no repo yet, or a partial list that would misjudge

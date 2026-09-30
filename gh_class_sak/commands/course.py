@@ -130,8 +130,9 @@ def course_audit(course, org):
 
     Flags anyone on a repo, or invited to one, whom no row lists; one
     account on rows for different people; and, with a [CANVAS] config, an
-    account whose GitHub name isn't the student's or a recorded id their
-    Canvas profile no longer links. Each problem comes with its fix.
+    account sharing no part of the enrolled person's name (student,
+    instructor, or TA) or a recorded id their Canvas profile no longer
+    links. Each problem comes with its fix.
     Read-only; exits 1 when it finds a problem. A real sync runs it too.
     What the tool itself changed, and why, is in the course's audit.log in
     the classroom-meta repo.
