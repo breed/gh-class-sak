@@ -473,6 +473,18 @@ def assignment_group():
 
     Assignment hw1 of a course with prefix cs101 gets repos like
     cs101-hw1-alice, cs101-hw1-bob.
+
+    \b
+    Every assignment needs a roster — who gets a repo:
+      --from-canvas                     one repo per enrolled student
+      --from-canvas --canvas-group SET  one repo per group in a Canvas group set
+      --roster FILE                     people or teams listed in a file
+
+    \b
+    Examples:
+      gh-class-sak assignment create CS-101 hw1 --from-canvas --apply
+      gh-class-sak assignment create CS-101 project --from-canvas \\
+          --canvas-group "Project Groups" --template URL --apply
     """
     pass
 
@@ -500,16 +512,23 @@ def assignment_create(course, name, org, roster, from_canvas, canvas_group,
                       template_url, remove_unlisted, remove_dropped, dryrun):
     """Record assignment NAME in COURSE and create its repos.
 
-    The roster comes from --roster or --from-canvas; running it again merges
-    new rows in. --template alone records the starter repo without a roster.
-    Only this assignment's repos are touched: its students are invited and
-    the course's TAs team can read them. The rest of the course is left to
-    sync.
+    \b
+    A roster is required to create repos — it says who gets one:
+      --from-canvas                     one repo per enrolled student
+      --from-canvas --canvas-group SET  one repo per group in a Canvas group set
+      --roster FILE                     people or teams listed in a file
+
+    Running it again merges new rows in. --template sets the starter repo
+    new repos are seeded from; given alone, it records the template without
+    a roster. Only this assignment's repos are touched: its students are
+    invited and the course's TAs team can read them. The rest of the
+    course is left to sync.
 
     \b
     Examples:
+      gh-class-sak assignment create CS-101 project --from-canvas \\
+          --canvas-group "Project Groups" --template URL --apply
       gh-class-sak assignment create CS-101 hw1 --from-canvas --apply
-      gh-class-sak assignment create CS-101 project --from-canvas --canvas-group Teams --apply
       gh-class-sak assignment create CS-101 project --roster teams.tsv --apply
       gh-class-sak assignment create CS-101 hw2 --template https://github.com/cs101-fall/hw2-starter
     """
