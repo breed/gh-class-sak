@@ -86,6 +86,38 @@ class TestExtractGithubUsername:
     def test_returns_none_for_an_empty_profile(self):
         assert extract_github_username({}) is None
 
+    # a link into someone else's repo names that repo's owner, not the
+    # student: read as an account, it invited a stranger to a team repo
+
+    def test_a_link_into_someone_elses_repo_is_not_the_account(self):
+        profile = {"links": [
+            {"url": "https://github.com/some-maintainer/some-tool/releases",
+             "title": "linkedin"},
+            {"url": "https://github.com/student-login", "title": "github"}]}
+        assert extract_github_username(profile) == "student-login"
+
+    def test_a_repo_link_alone_names_no_account(self):
+        profile = {"links": [{"url": "https://github.com/some-maintainer/some-tool"}]}
+        assert extract_github_username(profile) is None
+
+    def test_a_repo_mentioned_in_the_bio_names_no_account(self):
+        bio = "I contribute to github.com/some-maintainer/some-tool"
+        assert extract_github_username({"bio": bio}) is None
+        bio += " and I am github.com/student-login."
+        assert extract_github_username({"bio": bio}) == "student-login"
+
+    def test_a_link_titled_github_beats_other_account_links(self):
+        profile = {"links": [
+            {"url": "https://github.com/some-class-org", "title": "team"},
+            {"url": "https://github.com/student-login", "title": "GitHub"}]}
+        assert extract_github_username(profile) == "student-login"
+
+    def test_an_account_link_may_end_in_a_slash_or_query(self):
+        for url in ("https://github.com/student-login/",
+                    "https://www.github.com/student-login?tab=repositories",
+                    "http://github.com/student-login#top"):
+            assert extract_github_username({"links": [{"url": url}]}) == "student-login"
+
 
 class TestFormatLabel:
     def test_bare_login(self):
