@@ -17,13 +17,8 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from gh_class_sak import core
-from gh_class_sak import meta_store as ms
-from gh_class_sak.commands import classrooms as classrooms_cmd
-from gh_class_sak.commands import meta as meta_cmd
-from gh_class_sak.commands import repos as repos_cmd
 from gh_class_sak.core import gh_class_sak
-from tests.demo import demo_github, seed_demo_meta
+from gh_class_sak.demo import demo_world
 
 ROOT = Path(__file__).resolve().parent.parent
 DOC_PAGES = [ROOT / "README.md", *sorted((ROOT / "docs").glob("*.md"))]
@@ -50,21 +45,15 @@ BLOCKS = _console_blocks()
 
 
 @pytest.fixture
-def demo_cli(monkeypatch, tmp_path):
-    monkeypatch.setattr(ms, "meta_checkout_dir",
-                        lambda org: str(tmp_path / "checkouts" / org))
-    gh = demo_github(seed_demo_meta(tmp_path / "origins"))
-    for mod in (core, classrooms_cmd, repos_cmd, meta_cmd):
-        monkeypatch.setattr(mod, "get_github", lambda: gh, raising=False)
-        monkeypatch.setattr(mod, "get_token", lambda: "ghp_faketoken", raising=False)
-    # the demo runs with no config file, as a first-time reader would
-    monkeypatch.setattr(core, "config_ini", str(tmp_path / "absent.ini"))
-    return CliRunner()
+def demo_cli(tmp_path):
+    # the docs run with no config file, as a first-time reader would
+    with demo_world(tmp_path):
+        yield CliRunner()
 
 
 def test_docs_document_the_core_commands():
     documented = {tuple(args[:2]) for _page, args, _ in BLOCKS}
-    assert any(args[0] == "classrooms" for args in documented)
+    assert ("course", "list") in documented
     assert ("repos", "list") in documented
     assert ("repos", "clone") in documented
 

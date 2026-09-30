@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 import pytest
 from git import GitCommandError
@@ -40,3 +41,68 @@ class TestPushTemplate:
             push_template(str(tmp_path / "no-such-template"),
                           str(tmp_path / "dest.git"))
         assert made and not os.path.exists(made[0])
+
+
+def dated_origin(tmp_path, *dates):
+    """a repo with one commit per date (committer and author dates both)."""
+    origin = tmp_path / "origin"
+    origin.mkdir(exist_ok=True)
+    repo = GitRepo.init(origin)
+    shas = []
+    for n, date in enumerate(dates):
+        (origin / "work.txt").write_text(f"version {n}\n")
+        repo.index.add(["work.txt"])
+        raw = f"{int(datetime.fromisoformat(date).timestamp())} +0000"
+        shas.append(repo.index.commit(f"v{n}", author_date=raw,
+                                      commit_date=raw).hexsha)
+    return repo, shas
+
+
+class TestCheckoutBefore:
+    DEADLINE = "2026-10-01T23:59:59+00:00"
+
+    def deadline(self):
+        return datetime.fromisoformat(self.DEADLINE)
+
+    def test_detaches_at_the_last_commit_before_the_deadline(self, tmp_path):
+        _origin, shas = dated_origin(tmp_path, "2026-09-28T10:00:00+00:00",
+                                     "2026-10-01T22:00:00+00:00",
+                                     "2026-10-02T09:00:00+00:00")
+        dest = str(tmp_path / "clone")
+        assert git_ops.clone_or_update(str(tmp_path / "origin"), dest) == "cloned"
+        # the commit's date is reported in local time
+        local = datetime.fromisoformat("2026-10-01T22:00:00+00:00").astimezone()
+        assert git_ops.checkout_before(dest, self.deadline()) == (
+            shas[1][:7], local.strftime("%Y-%m-%d %H:%M"))
+        assert GitRepo(dest).head.commit.hexsha == shas[1]
+
+    def test_no_commit_that_old_leaves_the_checkout_alone(self, tmp_path):
+        _origin, shas = dated_origin(tmp_path, "2026-10-05T10:00:00+00:00")
+        dest = str(tmp_path / "clone")
+        git_ops.clone_or_update(str(tmp_path / "origin"), dest)
+        assert git_ops.checkout_before(dest, self.deadline()) is None
+        assert GitRepo(dest).head.commit.hexsha == shas[0]
+
+    def test_a_detached_checkout_that_cant_reattach_is_a_status(self, tmp_path):
+        # local edits that conflict with the branch make the checkout back
+        # to it fail; that repo gets a status, the clone run goes on
+        _origin, _shas = dated_origin(tmp_path, "2026-09-28T10:00:00+00:00",
+                                      "2026-10-02T09:00:00+00:00")
+        dest = str(tmp_path / "clone")
+        git_ops.clone_or_update(str(tmp_path / "origin"), dest)
+        git_ops.checkout_before(dest, self.deadline())
+        (tmp_path / "clone" / "work.txt").write_text("grader's notes\n")
+        assert git_ops.clone_or_update(str(tmp_path / "origin"), dest) == \
+            "cannot-reattach"
+
+    def test_a_detached_checkout_still_updates(self, tmp_path):
+        origin, _shas = dated_origin(tmp_path, "2026-09-28T10:00:00+00:00",
+                                     "2026-10-02T09:00:00+00:00")
+        dest = str(tmp_path / "clone")
+        git_ops.clone_or_update(str(tmp_path / "origin"), dest)
+        git_ops.checkout_before(dest, self.deadline())
+        (tmp_path / "origin" / "work.txt").write_text("late\n")
+        origin.index.add(["work.txt"])
+        late = origin.index.commit("late").hexsha
+        assert git_ops.clone_or_update(str(tmp_path / "origin"), dest) == "updated"
+        assert GitRepo(dest).head.commit.hexsha == late

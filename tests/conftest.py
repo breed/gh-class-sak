@@ -1,8 +1,12 @@
+from types import SimpleNamespace
+
 import pytest
 from click.testing import CliRunner
 
 from gh_class_sak import core
+from gh_class_sak import meta_store as ms
 from gh_class_sak.commands import classrooms as classrooms_cmd
+from gh_class_sak.commands import meta as meta_cmd
 from gh_class_sak.commands import repos as repos_cmd
 from tests.fakes import (
     FakeCanvas,
@@ -167,3 +171,22 @@ def cli(monkeypatch, fake_github, fake_canvas):
 def run(cli, *args, input=None):
     from gh_class_sak.core import gh_class_sak
     return cli.invoke(gh_class_sak, list(args), input=input)
+
+
+@pytest.fixture
+def env(tmp_path, monkeypatch):
+    """a fake org whose created repos and classroom-meta repo are real local bare gits."""
+    root = tmp_path / "origins"
+    root.mkdir()
+    checkouts = tmp_path / "checkouts"
+    monkeypatch.setattr(ms, "meta_checkout_dir", lambda name: str(checkouts / name))
+
+    template = FakeRepo(ORG, "Template")
+    org = FakeOrg(ORG, [template], local_git_root=str(root))
+    gh = FakeGithub(orgs=[org])
+    for mod in (core, repos_cmd, classrooms_cmd, meta_cmd):
+        monkeypatch.setattr(mod, "get_github", lambda: gh, raising=False)
+        monkeypatch.setattr(mod, "get_token", lambda: None, raising=False)
+    monkeypatch.setattr(core, "config_ini", str(tmp_path / "absent.ini"))
+    return SimpleNamespace(gh=gh, org=org, root=root, checkouts=checkouts,
+                           template=template, runner=CliRunner())

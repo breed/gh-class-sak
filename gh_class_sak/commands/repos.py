@@ -3,6 +3,7 @@ import os
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 
 import click
 
@@ -16,6 +17,7 @@ from gh_class_sak.canvas_api import (
     profile_cached,
 )
 from gh_class_sak.core import (
+    UsageOrderGroup,
     dryrun_option,
     error,
     get_canvas,
@@ -97,9 +99,10 @@ class Classroom:
     argument didn't say which; Canvas lookups then report the ambiguity.
     """
 
-    def __init__(self, org, course_partial):
+    def __init__(self, org, course_partial, classroom_dir=None):
         self.org = org
         self.course_partial = course_partial
+        self.classroom_dir = classroom_dir
 
 
 def resolve_assignment_repos(classroom, assignment):
@@ -143,7 +146,7 @@ def resolve_assignment_repos(classroom, assignment):
         error(f'assignment "{assignment}" is ambiguous in "{org}". candidates:')
         for classroom_dir, name, _data in candidates:
             error(f"    {classroom_dir}: {name}")
-        error("name the classroom, or use a longer assignment name")
+        error("name the course, or use a longer assignment name")
         sys.exit(2)
     _dir, name, data = candidates[0]
     effective_prefix = join_repo_name(data["prefix"], name)
@@ -166,7 +169,7 @@ def resolve_assignment_repos(classroom, assignment):
         for r in repos:
             error(f"    {r.name}")
         sys.exit(2)
-    return Classroom(org, course_partial), found
+    return Classroom(org, course_partial, classroom_dir=_dir), found
 
 
 def _single_classroom_dir(org):
@@ -177,7 +180,7 @@ def _single_classroom_dir(org):
         report_missing_meta(gh, org, why)
         sys.exit(2)
     if len(meta_classrooms) > 1:
-        error(f'"{org}" hosts several classrooms, so the course is ambiguous:')
+        error(f'"{org}" hosts several courses, so the course is ambiguous:')
         for classroom_dir in meta_classrooms:
             error(f"    {classroom_dir}")
         error("name one of the courses instead of the org")
@@ -366,14 +369,18 @@ def print_table(headers, rows):
         output("  ".join(parts))
 
 
-@gh_class_sak.group()
+@gh_class_sak.group(cls=UsageOrderGroup, order=("list", "clone", "members", "missing"))
 def repos():
-    """Manage classroom assignment repositories."""
+    """Work with an assignment's repos: list, clone, find the missing ones.
+
+    COURSE names a recorded course (or the org, when it hosts just one);
+    ASSIGNMENT is matched by name, a unique substring is enough.
+    """
     pass
 
 
 @repos.command("list")
-@click.argument("classroom")
+@click.argument("classroom", metavar="COURSE")
 @click.argument("assignment")
 @click.option("--repo", is_flag=True, default=False, help="show repo full name")
 @click.option("--members", is_flag=True, default=False, help="show members column")
@@ -386,7 +393,13 @@ def repos():
 @click.option("--show-empty", is_flag=True, default=False, help="include teams with no members")
 def repos_list(classroom, assignment, repo, members, show_instructors, show_name, show_email,
                group_category, show_empty):
-    """List repos for a classroom assignment."""
+    """List the repos of a course's assignment.
+
+    \b
+    Examples:
+      gh-class-sak repos list CS-101 hw1
+      gh-class-sak repos list CS-101 project --members --name
+    """
     room, found = resolve_assignment_repos(classroom, assignment)
 
     # resolve the Canvas course once if any Canvas feature is usable —
@@ -495,10 +508,15 @@ def repos_list(classroom, assignment, repo, members, show_instructors, show_name
 
 
 @repos.command("members")
-@click.argument("classroom")
+@click.argument("classroom", metavar="COURSE")
 @click.argument("assignment")
 def repos_members(classroom, assignment):
-    """List members and their emails extracted from commit history."""
+    """List members and their emails extracted from commit history.
+
+    \b
+    Examples:
+      gh-class-sak repos members CS-101 project
+    """
     _room, found = resolve_assignment_repos(classroom, assignment)
 
     rows = []
@@ -517,12 +535,18 @@ def repos_members(classroom, assignment):
 
 
 @repos.command("missing")
-@click.argument("classroom")
+@click.argument("classroom", metavar="COURSE")
 @click.argument("assignment")
 @click.option("--group", "group_category", default=None, type=str,
               help="show Canvas groups with no matching repo")
 def repos_missing(classroom, assignment, group_category):
-    """List Canvas students or groups without repos."""
+    """List Canvas students or groups without repos.
+
+    \b
+    Examples:
+      gh-class-sak repos missing CS-101 hw1
+      gh-class-sak repos missing CS-101 project --group "Project Groups"
+    """
     room, found = resolve_assignment_repos(classroom, assignment)
 
     if group_category:
@@ -568,21 +592,66 @@ def repos_missing(classroom, assignment, group_category):
     print_table(["NAME", "EMAIL", "GITHUB_ID"], rows)
 
 
+DEADLINE_FORMATS = ("%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S",
+                    "%Y-%m-%dT%H:%M:%S")
+
+
+def _parse_deadline(ctx, param, value):
+    """--before as an aware local datetime; a bare date is the end of that day."""
+    if value is None:
+        return None
+    try:
+        when = datetime.strptime(value, "%Y-%m-%d").replace(
+            hour=23, minute=59, second=59)
+    except ValueError:
+        for fmt in DEADLINE_FORMATS:
+            try:
+                when = datetime.strptime(value, fmt)
+                break
+            except ValueError:
+                continue
+        else:
+            raise click.BadParameter(
+                f'"{value}": use YYYY-MM-DD (the end of that day) or'
+                ' "YYYY-MM-DD HH:MM", in local time')
+    return when.astimezone()
+
+
 @repos.command("clone")
-@click.argument("classroom")
+@click.argument("classroom", metavar="COURSE")
 @click.argument("assignment")
 @click.option("--dest", default=".", type=click.Path(file_okay=False),
               help="directory to clone into (default: current directory)")
+@click.option("--before", "deadline", default=None, metavar="DEADLINE",
+              callback=_parse_deadline,
+              help='leave each repo at its last commit at or before DEADLINE:'
+                   ' "2026-10-01" (the end of that day) or "2026-10-01 17:00",'
+                   " local time")
 @dryrun_option
-def repos_clone(classroom, assignment, dest, dryrun):
-    """Clone or fast-forward every repo for a classroom assignment."""
-    from gh_class_sak.git_ops import clone_or_update
+def repos_clone(classroom, assignment, dest, deadline, dryrun):
+    """Clone or fast-forward every repo of a course's assignment.
+
+    With --before, each repo is then left (detached) at its last commit
+    dated at or before the deadline, ready to grade; the next run returns it
+    to its branch first. Commit dates come from the students' machines, so
+    for a dispute check the push times on github.
+
+    \b
+    Examples:
+      gh-class-sak repos clone CS-101 hw1 --dest grading
+      gh-class-sak repos clone CS-101 hw1 --dest grading --apply
+      gh-class-sak repos clone CS-101 hw1 --dest grading --before 2026-10-01 --apply
+    """
+    from gh_class_sak import git_ops
 
     _room, found = resolve_assignment_repos(classroom, assignment)
+    cutoff = f" at its last commit before {deadline:%Y-%m-%d %H:%M}" \
+        if deadline else ""
 
     if dryrun:
         for team, gh_repo in found:
-            would(f"would clone {gh_repo.full_name} -> {os.path.join(dest, team)}")
+            would(f"would clone {gh_repo.full_name} -> {os.path.join(dest, team)}"
+                  f"{cutoff}")
         return
 
     token = get_token()
@@ -590,7 +659,28 @@ def repos_clone(classroom, assignment, dest, dryrun):
     rows = []
     for team, gh_repo in found:
         target = os.path.join(dest, team)
-        status = clone_or_update(gh_repo.clone_url, target, token)
-        rows.append([gh_repo.full_name, target, status])
+        status = git_ops.clone_or_update(gh_repo.clone_url, target, token)
+        row = [gh_repo.full_name, target, status]
+        if deadline:
+            row.append(_checkout_deadline(git_ops, gh_repo, target, status, deadline))
+        rows.append(row)
 
-    print_table(["REPO", "PATH", "STATUS"], rows)
+    headers = ["REPO", "PATH", "STATUS"] + (["AT"] if deadline else [])
+    print_table(headers, rows)
+
+
+def _checkout_deadline(git_ops, gh_repo, target, status, deadline):
+    """leave the clone at its deadline commit; the AT cell describing it."""
+    if status not in ("cloned", "updated", "up-to-date"):
+        return "-"
+    try:
+        at = git_ops.checkout_before(target, deadline)
+    except RuntimeError as exc:
+        error(f"{gh_repo.full_name}: {exc}")
+        return "checkout failed"
+    if at is None:
+        error(f"{gh_repo.full_name}: no commit before {deadline:%Y-%m-%d %H:%M};"
+              " left at its latest commit")
+        return "none before deadline"
+    sha, when = at
+    return f"{sha} ({when})"

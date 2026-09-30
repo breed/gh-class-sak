@@ -117,7 +117,17 @@ def _echo(message, fg=None, err=False):
     click.echo(click.style(message, fg=fg) if fg else message, err=err)
 
 
+# what the running command has said so far: the dry-run footer and the
+# end-of-run summaries read it. reset at the start of every invocation
+said = {"would": 0, "warn": 0, "error": 0}
+
+# ctx.meta key set by the renamed (pre-course) commands: their output stays
+# exactly as it was, so no footer, summary, or next-step hint
+LEGACY = "gh_class_sak.legacy"
+
+
 def error(message):
+    said["error"] += 1
     _echo(message, fg="red", err=True)
 
 
@@ -126,6 +136,7 @@ def info(message):
 
 
 def warn(message):
+    said["warn"] += 1
     _echo(message, fg="yellow", err=True)
 
 
@@ -133,9 +144,20 @@ def output(message):
     _echo(message)
 
 
+def _warning_line(message):
+    output(f"\N{WARNING SIGN}\N{VARIATION SELECTOR-16}  {message}")
+
+
 def would(message):
     """print what a mutating command would do, per the --dryrun convention."""
-    output(f"\N{WARNING SIGN}\N{VARIATION SELECTOR-16}  {message}")
+    said["would"] += 1
+    _warning_line(message)
+
+
+def is_legacy():
+    """whether a renamed command is running, whose output must not change."""
+    ctx = click.get_current_context(silent=True)
+    return bool(ctx and ctx.meta.get(LEGACY))
 
 
 def progress(items, label, length=None):
@@ -165,15 +187,37 @@ def progress(items, label, length=None):
 
 
 def _announce_dryrun(ctx, param, value):
-    """the first thing a previewing command says is that it is previewing."""
+    """the first thing a previewing command says is that it is previewing —
+    and, when it previewed anything, the last thing too, since a long
+    preview scrolls the first line away."""
     if value:
-        would("dry run: no changes will be made. add --no-dryrun to apply")
+        if ctx.meta.get(LEGACY):
+            _warning_line("dry run: no changes will be made. add --no-dryrun to apply")
+        else:
+            _warning_line("dry run: no changes will be made. add --apply to make them")
+        ctx.call_on_close(lambda: _dryrun_footer(ctx))
     return value
 
 
+def announce_dryrun():
+    """the dryrun option's announcement, for a command that previews only
+    some of the time (a settings command that shows when given nothing)."""
+    ctx = click.get_current_context()
+    _announce_dryrun(ctx, None, True)
+
+
+def _dryrun_footer(ctx):
+    if said["would"] and not ctx.meta.get(LEGACY):
+        _warning_line("that was a preview: nothing changed. add --apply to make"
+                      " these changes")
+
+
+# --apply is the plain-words spelling of --no-dryrun; both work
+DRYRUN_FLAGS = ("--dryrun/--no-dryrun", " /--apply")
+DRYRUN_HELP = "preview changes (default); --apply (or --no-dryrun) makes them"
+
 dryrun_option = click.option(
-    "--dryrun/--no-dryrun", default=True, callback=_announce_dryrun,
-    help="preview changes (default); --no-dryrun applies them",
+    *DRYRUN_FLAGS, default=True, callback=_announce_dryrun, help=DRYRUN_HELP,
 )
 
 
@@ -315,6 +359,26 @@ def add_org_to_config(org):
         f.write(text)
 
 
+def add_canvas_to_config(url, token):
+    """append a [CANVAS] section, creating the file if needed. the token is a
+    secret, so the file is made readable by its owner only."""
+    text = ""
+    if os.path.exists(config_ini):
+        with open(config_ini) as f:
+            text = f.read()
+    if text and not text.endswith("\n"):
+        text += "\n"
+    if text:
+        text += "\n"
+    text += f"[CANVAS]\nurl = {url}\ntoken = {token}\n"
+    parent = os.path.dirname(config_ini)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with open(config_ini, "w") as f:
+        f.write(text)
+    os.chmod(config_ini, 0o600)
+
+
 def match_org(name, orgs):
     """the configured org a partial name means, or None when nothing matches.
 
@@ -358,7 +422,7 @@ def resolve_classroom(gh, name):
             if _names_overlap(name, classroom_dir):
                 candidates.append((org, classroom_dir))
     if len(candidates) > 1:
-        error(f'ambiguous classroom "{name}", matches several classrooms:')
+        error(f'ambiguous course "{name}", matches several courses:')
         for org, classroom_dir in candidates:
             error(f"    {org}: {classroom_dir}")
         sys.exit(2)
@@ -367,14 +431,97 @@ def resolve_classroom(gh, name):
     return name, None
 
 
+def resolve_course(gh, name, org=None):
+    """resolve a COURSE argument to (github org, classroom dir).
+
+    unlike resolve_classroom the argument is always a course, never an org:
+    it matches the classroom directories of --org, or else of every
+    configured org. an exact name beats partial overlaps.
+    """
+    from gh_class_sak.meta_store import read_meta_classrooms, report_missing_meta
+
+    if org:
+        orgs = [match_org(org, configured_orgs()) or org]
+    else:
+        orgs = configured_orgs()
+        if not orgs:
+            error(f'which org hosts course "{name}"? pass --org ORG, or list'
+                  f" orgs in the [ORGS] section of {config_ini}")
+            sys.exit(2)
+
+    candidates = []
+    unreadable = []
+    for candidate_org in orgs:
+        classrooms, why = read_meta_classrooms(gh, candidate_org, get_token())
+        if not classrooms:
+            unreadable.append((candidate_org, why))
+        candidates.extend((candidate_org, classroom_dir)
+                          for classroom_dir in classrooms
+                          if _names_overlap(name, classroom_dir))
+    exact = [c for c in candidates if c[1] == normalize_course_name(name)]
+    if len(exact) == 1:
+        return exact[0]
+    if len(candidates) > 1:
+        error(f'ambiguous course "{name}", matches several courses:')
+        for candidate_org, classroom_dir in candidates:
+            error(f"    {candidate_org}: {classroom_dir}")
+        sys.exit(2)
+    if candidates:
+        return candidates[0]
+
+    for candidate_org, why in unreadable:
+        report_missing_meta(gh, candidate_org, why)
+    error(f'no course "{name}" recorded in {", ".join(orgs)}.'
+          " run: course list")
+    if not org and any(_names_overlap(name, o) for o in orgs):
+        error(f'"{name}" looks like an org: pass it as --org {name}')
+    sys.exit(2)
+
+
 def _interactive():
     """warnings are for humans at a terminal, not for pipes or the test suite."""
     return sys.stderr.isatty()
 
 
-@click.group()
+def renamed(old, new):
+    """point a human at the new name of a renamed command; scripts see nothing."""
+    if _interactive():
+        warn(f'"{old}" is renamed: use {new}')
+
+
+class UsageOrderGroup(click.Group):
+    """a group whose --help lists its commands in the order they're used —
+    setup first — instead of alphabetically. commands the order doesn't
+    name follow, alphabetically."""
+
+    def __init__(self, *args, order=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.order = list(order)
+
+    def list_commands(self, ctx):
+        names = super().list_commands(ctx)
+        return ([name for name in self.order if name in names]
+                + [name for name in names if name not in self.order])
+
+
+@click.group(cls=UsageOrderGroup, order=(
+    "help-me-setup", "demo", "course", "assignment", "sync", "repos", "canvas",
+    "migrate-github-classroom", "completion"))
 @click.version_option(version=version("gh-class-sak"), prog_name="gh-class-sak")
 def gh_class_sak():
+    """Manage a course's GitHub repos from the command line.
+
+    \b
+    course      one per Canvas course, hosted in a GitHub org
+    assignment  one repo per student or group in a course, e.g. hw1 gives
+                cs101-hw1-alice, cs101-hw1-bob
+    \b
+    New here? Run help-me-setup to check your setup — or demo to try every
+    command on a made-up course first — then course init, then assignment
+    create, then sync whenever the roster changes.
+    """
+    for key in said:
+        said[key] = 0
     if not _interactive():
         return
     warn("this is beta code to replace github classroom, which is going away")

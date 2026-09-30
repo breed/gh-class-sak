@@ -27,6 +27,7 @@ import click
 from gh_class_sak.core import error, warn
 from gh_class_sak.github_api import (
     get_org_repo,
+    github_safe_name,
     token_visibility_hint,
 )
 
@@ -185,6 +186,49 @@ def parse_students_tsv(text):
             "repo": None if repo == EMPTY else repo,
             "repo_id": None if repo_id == EMPTY else int(repo_id),
         })
+    return rows
+
+
+def parse_roster(text):
+    """an instructor's --roster file: a plain list or a NAME STUDENTS table.
+
+    a plain list has one identity per line (EMAIL/GITHUBID, an email, or a
+    github id) and makes one repo per person, named by the github id when
+    known, else the email's local part. anything else is read as a table
+    like the recorded tsvs. raises ValueError, naming the line, for a file
+    that mixes the two or has a malformed row.
+    """
+    lines = [(n, line.split()) for n, line in enumerate(text.splitlines(), 1)
+             if line.strip() and not line.lstrip().startswith("#")]
+    if lines and all(len(cols) == 1 for _n, cols in lines):
+        for n, (entry,) in lines:
+            if parse_identity(entry) == (None, None):
+                raise ValueError(f'line {n}: "{entry}" is not an identity; use an'
+                                 " email, a /GITHUBID, or EMAIL/GITHUBID")
+        return _rows_from_list([cols[0] for _n, cols in lines])
+    for n, cols in lines:
+        if [c.upper() for c in cols[:2]] == ["NAME", "STUDENTS"]:
+            continue
+        if len(cols) == 1:
+            raise ValueError(f"line {n}: a table row needs NAME and STUDENTS,"
+                             f" but this one has one column")
+        if len(cols) > len(STUDENTS_HEADERS):
+            raise ValueError(f"line {n}: {len(cols)} columns, a table has at most"
+                             f" {len(STUDENTS_HEADERS)} ({' '.join(STUDENTS_HEADERS)})")
+        if len(cols) == 4 and cols[3] != EMPTY and not cols[3].isdigit():
+            raise ValueError(f'line {n}: REPO_ID "{cols[3]}" is not a number')
+    return parse_students_tsv(text)
+
+
+def _rows_from_list(entries):
+    """one row per identity. namesakes keep the same NAME here: numbering
+    them is uniquify_names's job, by identity, so it survives reordering."""
+    rows = []
+    for entry in entries:
+        email, github = parse_identity(entry)
+        rows.append({"name": github_safe_name(github or email.partition("@")[0]),
+                     "students": [format_identity(email, github)],
+                     "repo": None, "repo_id": None})
     return rows
 
 
@@ -400,7 +444,7 @@ def read_meta_classrooms(gh, org, token=None):
         try:
             classrooms[classroom] = load_classroom(checkout, classroom)
         except (ValueError, ConfigParserError) as exc:
-            warn(f"ignoring classroom {classroom} in the classroom-meta repo: {exc}")
+            warn(f"ignoring course {classroom} in the classroom-meta repo: {exc}")
     return classrooms, "ok" if classrooms else "empty"
 
 
@@ -423,14 +467,14 @@ def report_missing_meta(gh, org, why="no-repo", report=error, prefix=""):
     """
     if why == "empty":
         report(f'{prefix}the {META_REPO_NAME} repo in "{org}" records no'
-               " classrooms. create one with: meta init")
+               " courses. create one with: gh-class-sak course init")
         return
     if why == "unreadable":
         report(f'{prefix}cannot read the {META_REPO_NAME} repo in "{org}"'
                " (see the warning above)")
         return
     report(f'{prefix}no {META_REPO_NAME} repo visible in "{org}"')
-    report(f"{prefix}  if it does not exist yet, create one with: meta init")
+    report(f"{prefix}  if it does not exist yet, create one with: gh-class-sak course init")
     report(f"{prefix}  if it does exist, this token cannot see it"
            " (github 404s both alike):")
     for line in token_visibility_hint(gh, org):
