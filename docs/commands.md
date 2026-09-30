@@ -241,8 +241,11 @@ not from commit dates, which students' machines set. So a wrong clock, a faked c
 date, or a force push after the deadline can't change which commit is graded. A commit
 that a later force push took off the branch is fetched by its id. A repo with no push
 before the deadline is a loud error and stays at its latest commit. A repo GitHub has
-no push record for at all falls back to commit dates, with a warning saying so, and
-its `AT` cell reads `committed` instead of `pushed`. The next clone returns a detached
+no push record for at all — or that GitHub definitively won't share one for — falls
+back to commit dates, with a warning saying so, and its `AT` cell reads `committed`
+instead of `pushed`. A push record GitHub can't serve right now (a server error, a rate
+limit, bad credentials) is that repo's error, with a retry hint; it never falls back,
+since that would quietly grade by commit dates because of a passing outage. The next clone returns a detached
 checkout to its branch before pulling (a checkout whose local edits block that is left
 alone and reported as `cannot-reattach`).
 

@@ -487,6 +487,24 @@ class TestReposCloneBefore:
         assert f"{ORG}/project-team-12: cannot fetch it" in result.output
         assert "checkout failed" in result.output
 
+    def test_an_unreadable_push_record_is_an_error_not_a_fallback(
+            self, cli, no_config, tmp_path, monkeypatch):
+        from gh_class_sak import git_ops, github_api
+
+        def outage(repo, when):
+            raise RuntimeError("couldn't read github's push record (502)")
+        monkeypatch.setattr(github_api, "pushed_before", outage)
+        monkeypatch.setattr(git_ops, "clone_or_update", lambda *a, **k: "cloned")
+        fell_back = []
+        monkeypatch.setattr(git_ops, "checkout_before",
+                            lambda dest, when: fell_back.append(dest))
+        result = run(cli, "repos", "clone", ORG, "project", "--dest",
+                     str(tmp_path / "grading"), "--before", "2026-10-01", "--apply")
+        assert fell_back == []
+        assert f"{ORG}/project-team-12: couldn't read github's push record" \
+            in result.output
+        assert "checkout failed" in result.output
+
     def test_the_preview_names_the_deadline(self, cli, no_config, tmp_path):
         result = run(cli, "repos", "clone", ORG, "project", "--dest",
                      str(tmp_path / "grading"), "--before", "2026-10-01")
@@ -550,3 +568,84 @@ class TestPushedBefore:
         from github import GithubException
         refused = GithubException(403, {"message": "Forbidden"}, None)
         assert self.lookup(monkeypatch, refused) is None
+
+    def test_no_record_endpoint_is_no_record(self, monkeypatch):
+        from github import GithubException
+        missing = GithubException(404, {"message": "Not Found"}, None)
+        assert self.lookup(monkeypatch, missing) is None
+
+    @pytest.mark.parametrize("failure", ["server", "rate limit", "credentials"])
+    def test_a_transient_failure_is_an_error_never_a_fallback(self, monkeypatch,
+                                                              failure):
+        # falling back would quietly grade by student-set commit dates
+        from github import BadCredentialsException, GithubException, RateLimitExceededException
+        exc = {"server": GithubException(502, {"message": "Bad Gateway"}, None),
+               "rate limit": RateLimitExceededException(
+                   403, {"message": "API rate limit exceeded"}, None),
+               "credentials": BadCredentialsException(
+                   401, {"message": "Bad credentials"}, None)}[failure]
+        with pytest.raises(RuntimeError, match="couldn't read github's push record"):
+            self.lookup(monkeypatch, exc)
+
+
+class FakeRequester:
+    """PyGithub's http layer, serving canned /activity pages the way github
+    does: a JSON list per page, the next page's url in a Link header."""
+
+    per_page = 30
+
+    def __init__(self, pages):
+        self.pages = list(pages)
+        self.calls = []
+
+    def requestJsonAndCheck(self, verb, url, parameters=None, headers=None,
+                            input=None, **_kwargs):
+        self.calls.append((verb, url, parameters))
+        return self.pages.pop(0)
+
+    def check_me(self, obj):
+        pass
+
+
+class TestBranchPushesOverTheRealAdapter:
+    """branch_pushes and BranchPush against github-shaped responses, through
+    PyGithub's own PaginatedList — nothing monkeypatched."""
+
+    URL = "https://api.github.com/repos/cs101-fall/hw1-jdoe"
+    NEXT = "https://api.github.com/repositories/42/activity?ref=refs%2Fheads%2Fmain&after=CUR"
+
+    def payload(self, when, after, kind="push", before="0" * 40):
+        return {"id": 1, "node_id": "RA_x", "before": before, "after": after,
+                "ref": "refs/heads/main", "timestamp": when,
+                "activity_type": kind, "actor": {"login": "jdoe", "id": 7}}
+
+    def repo(self):
+        pages = [
+            ({"link": f'<{self.NEXT}>; rel="next"'},
+             [self.payload("2026-10-03T08:00:00Z", "c" * 40, "force_push"),
+              self.payload("2026-10-01T20:00:00Z", "b" * 40)]),
+            ({}, [self.payload("2026-09-28T10:00:00Z", "a" * 40,
+                               "branch_creation")]),
+        ]
+        return SimpleNamespace(_requester=FakeRequester(pages), url=self.URL,
+                               default_branch="main")
+
+    def test_reads_every_page_of_the_branchs_record(self):
+        from gh_class_sak.github_api import branch_pushes
+        repo = self.repo()
+        pushes = list(branch_pushes(repo, "main"))
+        assert [(p.activity_type, p.after[:1]) for p in pushes] == [
+            ("force_push", "c"), ("push", "b"), ("branch_creation", "a")]
+        assert pushes[1].timestamp == datetime(2026, 10, 1, 20, 0, tzinfo=timezone.utc)
+        assert pushes[0].before == "0" * 40
+        (verb, url, params), (_, next_url, next_params) = repo._requester.calls
+        assert (verb, url) == ("GET", f"{self.URL}/activity")
+        assert params == {"ref": "refs/heads/main", "direction": "desc",
+                          "per_page": 100}
+        assert next_url == self.NEXT and not next_params
+
+    def test_pushed_before_on_real_payloads(self):
+        from gh_class_sak.github_api import pushed_before
+        deadline = datetime(2026, 10, 1, 23, 59, 59, tzinfo=timezone.utc)
+        assert pushed_before(self.repo(), deadline) == (
+            "b" * 40, datetime(2026, 10, 1, 20, 0, tzinfo=timezone.utc))

@@ -684,8 +684,10 @@ def _checkout_deadline(git_ops, gh_repo, target, status, deadline, token=None):
     if status not in ("cloned", "updated", "up-to-date"):
         return "-"
     cutoff = f"{deadline:%Y-%m-%d %H:%M}"
-    pushed = github_api.pushed_before(gh_repo, deadline)
     try:
+        # a push record github can't serve right now is this repo's error,
+        # never a quiet switch to commit dates
+        pushed = github_api.pushed_before(gh_repo, deadline)
         if pushed is None:
             warn(f"{gh_repo.full_name}: github has no push record for"
                  f" {gh_repo.default_branch}; used commit dates, which students'"

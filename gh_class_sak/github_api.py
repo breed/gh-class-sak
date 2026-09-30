@@ -2,7 +2,11 @@ import sys
 import unicodedata
 from collections import Counter
 
-from github import GithubException
+from github import (
+    BadCredentialsException,
+    GithubException,
+    RateLimitExceededException,
+)
 from github.GithubObject import NonCompletableGithubObject, NotSet
 from github.PaginatedList import PaginatedList
 
@@ -59,8 +63,13 @@ def pushed_before(repo, when):
 
     returns (sha, pushed_at) for the last push at or before `when`; ("", None)
     when the record starts after it, or ("", deleted_at) when the branch was
-    deleted then; None when github has no push record for the branch at all
-    (or won't share it), so the caller can say it fell back to commit dates.
+    deleted then; None when github has no push record for the branch at all,
+    or answers definitively that it won't share one (404, 410, a 403 that
+    isn't a rate limit), so the caller can say it fell back to commit dates.
+
+    any other failure — a 5xx, a rate limit, bad credentials — raises
+    RuntimeError: falling back then would quietly grade by commit dates,
+    which students' machines set, because of a passing outage.
     """
     seen = False
     try:
@@ -69,8 +78,16 @@ def pushed_before(repo, when):
             if push.timestamp <= when:
                 sha = "" if push.after in (None, NO_COMMIT) else push.after
                 return sha, push.timestamp
-    except GithubException:
-        return None
+    except GithubException as exc:
+        definitive = exc.status in (404, 410) or (
+            exc.status == 403
+            and not isinstance(exc, (RateLimitExceededException,
+                                     BadCredentialsException)))
+        if definitive:
+            return None
+        raise RuntimeError(f"couldn't read github's push record ({exc.status}:"
+                           f" {_exc_message(exc)}); retry — commit dates were"
+                           " not used") from None
     return ("", None) if seen else None
 
 

@@ -8,7 +8,8 @@
   force push after the deadline can't change which commit is graded, and a
   commit a later force push took off the branch is fetched by its id. A repo
   GitHub has no push record for falls back to commit dates and says so; the
-  `AT` column says `pushed` or `committed`
+  `AT` column says `pushed` or `committed`. A push record GitHub can't serve
+  right now (an outage, a rate limit) is that repo's error, never a fallback
 - `gh-class-sak demo COMMAND...` runs any command on the invented course
   the docs are built on — offline, with nothing kept, so even `--apply` is
   safe to try. `gh-class-sak demo` alone describes the course
