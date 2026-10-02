@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- a Canvas profile link into someone else's repo (`github.com/OWNER/REPO/…`) is
+  no longer read as the student's GitHub account. Before, the first
+  `github.com/…` link on a profile won, so a link to another project's
+  releases page recorded — and invited — that project's owner. Only
+  account links (`github.com/NAME`) count now, and a link titled "github"
+  wins over the others
 - `gh-class-sak demo COMMAND...` runs any command on the invented course
   the docs are built on — offline, with nothing kept, so even `--apply` is
   safe to try. `gh-class-sak demo` alone describes the course

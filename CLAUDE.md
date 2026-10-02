@@ -89,7 +89,7 @@ github classroom is gone, so nothing may call `gh classroom` or the `/classrooms
 
 ### determine github information for students and instructors
 
-find the github ids of all the students and instructors using the canvas REST API to get the profile for the given user id and look for the github link
+find the github ids of all the students and instructors using the canvas REST API to get the profile for the given user id and look for the github link. only account links count (`github.com/NAME`, optionally ending in `/`, a query, or a fragment) — a link into a repo (`github.com/OWNER/REPO/…`) names the repo's owner, often someone else, and is never read as the student's account. a profile link titled "github" wins, then other profile links in order, then the bio (repos.extract_github_username)
 
 # subcommands
 
