@@ -964,6 +964,35 @@ class TestMetaAssignFromCanvas:
         assert "would record teams rows" in result.output
         assert "sam-one" not in result.output and "sam-two" not in result.output
 
+    def test_an_unknown_member_id_never_falls_back_to_a_name(self, env, canvas):
+        # canvas named a member id that isn't on the enrollment list; the
+        # one enrollee who happens to share the name must not be assumed
+        canvas._courses[0]._categories.append(FakeGroupCategory("Teams", [
+            FakeCanvasGroup("Team A", [("Alice Adams", 999)])]))
+        seed_meta(env)
+        result = run(env.runner, "meta", "assign", ORG, "--from-canvas",
+                     "--assignment", "teams", "--canvas-group", "Teams")
+        assert result.exit_code == 1
+        assert ('cannot find an enrollment for group member "Alice Adams"'
+                " (canvas id 999)") in result.output
+        assert "alice@sjsu.edu" not in result.output
+
+    def test_a_group_with_an_unmatched_member_keeps_its_recorded_row(self, env,
+                                                                      canvas):
+        # dropping the member that couldn't be matched would overwrite the
+        # recorded roster, and a later sync could revoke a real student
+        self.namesakes_in_two_groups(canvas, with_ids=False)
+        recorded = ["sam.one@sjsu.edu/sam-one"]
+        seed_meta(env, assignments={"teams": [
+            {"name": "Team-A", "students": recorded, "repo": None, "repo_id": None}]})
+        result = run(env.runner, "meta", "assign", ORG, "--from-canvas",
+                     "--assignment", "teams", "--canvas-group", "Teams", "--no-dryrun")
+        assert result.exit_code == 1
+        assert ('"Team-A" keeps its recorded students: a member of the canvas'
+                ' group "Team A" couldn\'t be matched') in result.output
+        rows = {row["name"]: row for row in meta_state(env)["assignments"]["teams"]}
+        assert rows["Team-A"]["students"] == recorded
+
     def test_profiles_fetch_at_most_once_per_session(self, env, canvas):
         # the roster is consulted twice (rows, then the email resolver);
         # each person's profile must still be fetched only once

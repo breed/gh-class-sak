@@ -1124,25 +1124,35 @@ def _rows_from_canvas(room, canvas_group, unresolvable):
     for group in fetch_canvas_groups(room, canvas_group):
         entries = []
         ids = group.get("member_ids") or [None] * len(group["members"])
+        complete = True
         for member, member_id in zip(group["members"], ids):
-            person = by_id.get(member_id) if member_id else None
-            if person is None:
+            if member_id:
+                # an id canvas supplied is the only evidence: an unknown one
+                # never falls back to whoever shares the name
+                person = by_id.get(member_id)
+                if person is None:
+                    error(f'cannot find an enrollment for group member "{member}"'
+                          f" (canvas id {member_id})")
+            else:
                 namesakes = by_name.get(normalize_name(member), [])
+                person = namesakes[0] if len(namesakes) == 1 else None
                 if len(namesakes) > 1:
                     error(f'several enrolled people are named "{member}"; can\'t'
                           f' tell which one is in group "{group["name"]}"')
-                    unresolvable.append(member)
-                    continue
-                person = namesakes[0] if namesakes else None
-            if person is None:
-                error(f'cannot find an enrollment for group member "{member}"')
-                unresolvable.append(member)
-                continue
-            entry = _entry(person)
+                elif person is None:
+                    error(f'cannot find an enrollment for group member "{member}"')
+            entry = _entry(person) if person is not None else None
             if entry:
                 entries.append(entry)
+            else:
+                if person is None:
+                    unresolvable.append(member)
+                complete = False
         rows.append({"name": github_safe_name(group["name"]),
-                     "students": entries, "repo": None, "repo_id": None})
+                     "students": entries, "repo": None, "repo_id": None,
+                     # a member couldn't be matched: the row is partial, and
+                     # must not overwrite a recorded one
+                     "incomplete": not complete, "group": group["name"]})
     return rows
 
 
@@ -1257,6 +1267,12 @@ def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
         # NAMEs, so neither replaces the other's row in the merge
         incoming = ms.uniquify_names(incoming, data["assignments"].get(name, []),
                                      by_person=canvas_group is None)
+        recorded = {row["name"]: row for row in data["assignments"].get(name, [])}
+        for i, row in enumerate(incoming):
+            if row.get("incomplete") and row["name"] in recorded:
+                warn(f'"{row["name"]}" keeps its recorded students: a member of the'
+                     f' canvas group "{row["group"]}" couldn\'t be matched')
+                incoming[i] = {**row, "students": list(recorded[row["name"]]["students"])}
         if canvas_group and data["group_sets"].get(name) != canvas_group:
             group_set_changed = True
             data["group_sets"] = {**data["group_sets"], name: canvas_group}

@@ -78,8 +78,12 @@ gh-class-sak assignment create COURSE project --from-canvas --canvas-group "Proj
 
 builds one row per **group** in that Canvas group set instead: the row `NAME` is the
 GitHub-safe group name, and its `STUDENTS` are the group's members, mapped from the
-group roster to enrollments by Canvas user id — never by name alone, since two students
-can share a name — and then to identities. The group set's
+group roster to enrollments by Canvas user id, since two students can share a name, and
+then to identities. Only a member Canvas lists without an id is matched by name, and
+only when exactly one enrolled student has that name; several namesakes, or an id that
+isn't on the enrollment list, is an error rather than a guess. A group whose members
+can't all be matched keeps the students already recorded for it, so a re-import never
+drops a real student. The group set's
 name is recorded in `classroom.ini` under `[GROUP_SETS]` as `project = Project Groups`,
 so the course remembers where each assignment's teams came from.
 
