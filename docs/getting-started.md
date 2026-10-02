@@ -235,8 +235,9 @@ $ gh-class-sak repos clone cs101-fall project --dest grading
 ```
 
 Add `--apply` and it actually clones, fast-forwarding any repo you already have. Add
-`--before 2026-10-01` too, and each repo is left at its last commit before that
-deadline (the end of that day), ready to grade.
+`--before 2026-10-01` too, and each repo is left at what its last push before that
+deadline (the end of that day) put on the branch, ready to grade — by GitHub's clock,
+not the student's.
 
 Starting next term's course? `course init CS-101-spring --like CS-101` copies the TAs,
 templates, and repo settings over.

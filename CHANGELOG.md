@@ -6,6 +6,21 @@
   Canvas user id. It matched by name, so with two enrolled students of the
   same name, both groups got whichever one Canvas listed last and the other
   student was in no group
+- `repos clone --before DEADLINE` goes by GitHub's own push times instead of
+  commit dates: each repo is left at what its last push at or before the
+  deadline put on the branch. A student's clock, a faked commit date, or a
+  force push after the deadline can't change which commit is graded, and a
+  commit a later force push took off the branch is fetched by its id. A repo
+  GitHub has no push record for falls back to commit dates and says so; the
+  `AT` column says `pushed` or `committed`. A push record GitHub can't serve
+  right now (an outage, a rate limit) is that repo's error, never a fallback
+  to commit dates
+- a Canvas profile link into someone else's repo (`github.com/OWNER/REPO/…`) is
+  no longer read as the student's GitHub account. Before, the first
+  `github.com/…` link on a profile won, so a link to another project's
+  releases page recorded — and invited — that project's owner. Only
+  account links (`github.com/NAME`) count now, and a link titled "github"
+  wins over the others
 - `gh-class-sak demo COMMAND...` runs any command on the invented course
   the docs are built on — offline, with nothing kept, so even `--apply` is
   safe to try. `gh-class-sak demo` alone describes the course

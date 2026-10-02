@@ -1,6 +1,8 @@
 import os
 import re
 import shutil
+from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -438,20 +440,212 @@ class TestReposCloneBefore:
         assert result.exit_code == 2
         assert "YYYY-MM-DD" in result.output
 
-    def test_each_repo_is_left_at_its_deadline_commit(self, cli, no_config,
-                                                      tmp_path, monkeypatch):
-        from gh_class_sak import git_ops
+    def test_each_repo_is_left_at_its_last_push_before_the_deadline(
+            self, cli, no_config, tmp_path, monkeypatch):
+        # github's push record, not commit dates, decides: team-12 pushed in
+        # time, red-team only after, and github has no record for empty
+        from gh_class_sak import git_ops, github_api
+        pushed = datetime(2026, 10, 1, 20, 0, tzinfo=timezone.utc)
+        records = {"project-team-12": ("a" * 40, pushed),
+                   "project-red-team": ("", None),
+                   "project-empty": None}
+        monkeypatch.setattr(github_api, "pushed_before",
+                            lambda repo, when: records[repo.name])
         monkeypatch.setattr(git_ops, "clone_or_update", lambda *a, **k: "cloned")
-        at = iter([("1a2b3c4", "2026-10-01 22:00"), None, None, None])
-        monkeypatch.setattr(git_ops, "checkout_before", lambda dest, when: next(at))
+        checked_out = []
+        monkeypatch.setattr(git_ops, "checkout_commit",
+                            lambda dest, sha, token=None: checked_out.append(sha)
+                            or sha[:7])
+        monkeypatch.setattr(git_ops, "checkout_before",
+                            lambda dest, when: ("1b2c3d4", "2026-10-01 22:00"))
         result = run(cli, "repos", "clone", ORG, "project", "--dest",
                      str(tmp_path / "grading"), "--before", "2026-10-01", "--apply")
         assert result.exit_code == 0, result.output
-        assert "1a2b3c4 (2026-10-01 22:00)" in result.output
-        assert "no commit before 2026-10-01 23:59; left at its latest commit" \
+        assert checked_out == ["a" * 40]
+        local = pushed.astimezone().strftime("%Y-%m-%d %H:%M")
+        assert f"aaaaaaa (pushed {local})" in result.output
+        assert (f"{ORG}/project-red-team: no push before 2026-10-01 23:59;"
+                " left at its latest commit") in result.output
+        # no push record at all: commit dates, said out loud
+        assert (f"{ORG}/project-empty: github has no push record for main;"
+                " used commit dates, which students' machines set") in result.output
+        assert "1b2c3d4 (committed 2026-10-01 22:00)" in result.output
+
+    def test_a_pushed_commit_that_cant_be_had_is_an_error(self, cli, no_config,
+                                                           tmp_path, monkeypatch):
+        from gh_class_sak import git_ops, github_api
+        pushed = datetime(2026, 10, 1, 20, 0, tzinfo=timezone.utc)
+        monkeypatch.setattr(github_api, "pushed_before",
+                            lambda repo, when: ("a" * 40, pushed))
+        monkeypatch.setattr(git_ops, "clone_or_update", lambda *a, **k: "cloned")
+
+        def unfetchable(dest, sha, token=None):
+            raise RuntimeError("cannot fetch it")
+        monkeypatch.setattr(git_ops, "checkout_commit", unfetchable)
+        result = run(cli, "repos", "clone", ORG, "project", "--dest",
+                     str(tmp_path / "grading"), "--before", "2026-10-01", "--apply")
+        assert f"{ORG}/project-team-12: cannot fetch it" in result.output
+        assert "checkout failed" in result.output
+
+    def test_an_unreadable_push_record_is_an_error_not_a_fallback(
+            self, cli, no_config, tmp_path, monkeypatch):
+        from gh_class_sak import git_ops, github_api
+
+        def outage(repo, when):
+            raise RuntimeError("couldn't read github's push record (502)")
+        monkeypatch.setattr(github_api, "pushed_before", outage)
+        monkeypatch.setattr(git_ops, "clone_or_update", lambda *a, **k: "cloned")
+        fell_back = []
+        monkeypatch.setattr(git_ops, "checkout_before",
+                            lambda dest, when: fell_back.append(dest))
+        result = run(cli, "repos", "clone", ORG, "project", "--dest",
+                     str(tmp_path / "grading"), "--before", "2026-10-01", "--apply")
+        assert fell_back == []
+        assert f"{ORG}/project-team-12: couldn't read github's push record" \
             in result.output
+        assert "checkout failed" in result.output
 
     def test_the_preview_names_the_deadline(self, cli, no_config, tmp_path):
         result = run(cli, "repos", "clone", ORG, "project", "--dest",
                      str(tmp_path / "grading"), "--before", "2026-10-01")
-        assert "at its last commit before 2026-10-01 23:59" in result.output
+        assert "at its last push before 2026-10-01 23:59" in result.output
+
+
+def _push(timestamp, after, kind="push"):
+    return SimpleNamespace(timestamp=datetime.fromisoformat(timestamp),
+                           after=after, activity_type=kind)
+
+
+class TestPushedBefore:
+    """the branch's commit at the deadline, from github's push record: server
+    time, which no student's clock can move."""
+
+    DEADLINE = datetime.fromisoformat("2026-10-01T23:59:59+00:00")
+
+    def lookup(self, monkeypatch, pushes):
+        from gh_class_sak import github_api
+        seen = []
+
+        def branch_pushes(repo, branch):
+            seen.append(branch)
+            if isinstance(pushes, Exception):
+                raise pushes
+            return iter(pushes)  # newest first, like the api
+        monkeypatch.setattr(github_api, "branch_pushes", branch_pushes)
+        got = github_api.pushed_before(SimpleNamespace(default_branch="main"),
+                                       self.DEADLINE)
+        assert seen == ["main"]
+        return got
+
+    def test_the_last_push_before_the_deadline_wins_over_a_later_force_push(
+            self, monkeypatch):
+        got = self.lookup(monkeypatch, [
+            _push("2026-10-03T08:00:00+00:00", "c" * 40, "force_push"),
+            _push("2026-10-01T20:00:00+00:00", "b" * 40),
+            _push("2026-09-28T10:00:00+00:00", "a" * 40)])
+        assert got == ("b" * 40, datetime.fromisoformat("2026-10-01T20:00:00+00:00"))
+
+    def test_a_force_push_before_the_deadline_counts(self, monkeypatch):
+        got = self.lookup(monkeypatch, [
+            _push("2026-10-01T10:00:00+00:00", "f" * 40, "force_push"),
+            _push("2026-09-28T10:00:00+00:00", "a" * 40)])
+        assert got[0] == "f" * 40
+
+    def test_a_branch_deleted_before_the_deadline_had_no_commit(self, monkeypatch):
+        got = self.lookup(monkeypatch, [
+            _push("2026-10-01T10:00:00+00:00", "0" * 40, "branch_deletion"),
+            _push("2026-09-28T10:00:00+00:00", "a" * 40)])
+        assert got == ("", datetime.fromisoformat("2026-10-01T10:00:00+00:00"))
+
+    def test_only_pushes_after_the_deadline(self, monkeypatch):
+        got = self.lookup(monkeypatch, [_push("2026-10-02T10:00:00+00:00", "b" * 40)])
+        assert got == ("", None)
+
+    def test_no_push_record_at_all(self, monkeypatch):
+        assert self.lookup(monkeypatch, []) is None
+
+    def test_github_refusing_the_record_is_no_record(self, monkeypatch):
+        from github import GithubException
+        refused = GithubException(403, {"message": "Forbidden"}, None)
+        assert self.lookup(monkeypatch, refused) is None
+
+    def test_no_record_endpoint_is_no_record(self, monkeypatch):
+        from github import GithubException
+        missing = GithubException(404, {"message": "Not Found"}, None)
+        assert self.lookup(monkeypatch, missing) is None
+
+    @pytest.mark.parametrize("failure", ["server", "rate limit", "credentials"])
+    def test_a_transient_failure_is_an_error_never_a_fallback(self, monkeypatch,
+                                                              failure):
+        # falling back would quietly grade by student-set commit dates
+        from github import BadCredentialsException, GithubException, RateLimitExceededException
+        exc = {"server": GithubException(502, {"message": "Bad Gateway"}, None),
+               "rate limit": RateLimitExceededException(
+                   403, {"message": "API rate limit exceeded"}, None),
+               "credentials": BadCredentialsException(
+                   401, {"message": "Bad credentials"}, None)}[failure]
+        with pytest.raises(RuntimeError, match="couldn't read github's push record"):
+            self.lookup(monkeypatch, exc)
+
+
+class FakeRequester:
+    """PyGithub's http layer, serving canned /activity pages the way github
+    does: a JSON list per page, the next page's url in a Link header."""
+
+    per_page = 30
+
+    def __init__(self, pages):
+        self.pages = list(pages)
+        self.calls = []
+
+    def requestJsonAndCheck(self, verb, url, parameters=None, headers=None,
+                            input=None, **_kwargs):
+        self.calls.append((verb, url, parameters))
+        return self.pages.pop(0)
+
+    def check_me(self, obj):
+        pass
+
+
+class TestBranchPushesOverTheRealAdapter:
+    """branch_pushes and BranchPush against github-shaped responses, through
+    PyGithub's own PaginatedList — nothing monkeypatched."""
+
+    URL = "https://api.github.com/repos/cs101-fall/hw1-jdoe"
+    NEXT = "https://api.github.com/repositories/42/activity?ref=refs%2Fheads%2Fmain&after=CUR"
+
+    def payload(self, when, after, kind="push", before="0" * 40):
+        return {"id": 1, "node_id": "RA_x", "before": before, "after": after,
+                "ref": "refs/heads/main", "timestamp": when,
+                "activity_type": kind, "actor": {"login": "jdoe", "id": 7}}
+
+    def repo(self):
+        pages = [
+            ({"link": f'<{self.NEXT}>; rel="next"'},
+             [self.payload("2026-10-03T08:00:00Z", "c" * 40, "force_push"),
+              self.payload("2026-10-01T20:00:00Z", "b" * 40)]),
+            ({}, [self.payload("2026-09-28T10:00:00Z", "a" * 40,
+                               "branch_creation")]),
+        ]
+        return SimpleNamespace(_requester=FakeRequester(pages), url=self.URL,
+                               default_branch="main")
+
+    def test_reads_every_page_of_the_branchs_record(self):
+        from gh_class_sak.github_api import branch_pushes
+        repo = self.repo()
+        pushes = list(branch_pushes(repo, "main"))
+        assert [(p.activity_type, p.after[:1]) for p in pushes] == [
+            ("force_push", "c"), ("push", "b"), ("branch_creation", "a")]
+        assert pushes[1].timestamp == datetime(2026, 10, 1, 20, 0, tzinfo=timezone.utc)
+        assert pushes[0].before == "0" * 40
+        (verb, url, params), (_, next_url, next_params) = repo._requester.calls
+        assert (verb, url) == ("GET", f"{self.URL}/activity")
+        assert params == {"ref": "refs/heads/main", "direction": "desc",
+                          "per_page": 100}
+        assert next_url == self.NEXT and not next_params
+
+    def test_pushed_before_on_real_payloads(self):
+        from gh_class_sak.github_api import pushed_before
+        deadline = datetime(2026, 10, 1, 23, 59, 59, tzinfo=timezone.utc)
+        assert pushed_before(self.repo(), deadline) == (
+            "b" * 40, datetime(2026, 10, 1, 20, 0, tzinfo=timezone.utc))

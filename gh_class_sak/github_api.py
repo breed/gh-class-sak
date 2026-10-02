@@ -2,9 +2,93 @@ import sys
 import unicodedata
 from collections import Counter
 
-from github import GithubException
+from github import (
+    BadCredentialsException,
+    GithubException,
+    RateLimitExceededException,
+)
+from github.GithubObject import NonCompletableGithubObject, NotSet
+from github.PaginatedList import PaginatedList
 
 from gh_class_sak.core import error, warn
+
+NO_COMMIT = "0" * 40  # a push record's sha when the branch didn't exist
+
+
+class BranchPush(NonCompletableGithubObject):
+    """one entry of github's push record for a branch: when it moved, by
+    whose push (or force push, merge, creation, deletion), and to which
+    commit. PyGithub has no class for GET /repos/{owner}/{repo}/activity."""
+
+    def _initAttributes(self):
+        self._timestamp = NotSet
+        self._activity_type = NotSet
+        self._before = NotSet
+        self._after = NotSet
+
+    @property
+    def timestamp(self):
+        return self._timestamp.value
+
+    @property
+    def activity_type(self):
+        return self._activity_type.value
+
+    @property
+    def before(self):
+        return self._before.value
+
+    @property
+    def after(self):
+        return self._after.value
+
+    def _useAttributes(self, attributes):
+        if "timestamp" in attributes:
+            self._timestamp = self._makeDatetimeAttribute(attributes["timestamp"])
+        for name in ("activity_type", "before", "after"):
+            if name in attributes:
+                setattr(self, f"_{name}", self._makeStringAttribute(attributes[name]))
+
+
+def branch_pushes(repo, branch):
+    """github's push record for one branch, newest first. the times are
+    github's own, so no student's clock can move them."""
+    return PaginatedList(BranchPush, repo._requester, f"{repo.url}/activity",
+                         {"ref": f"refs/heads/{branch}", "direction": "desc",
+                          "per_page": 100})
+
+
+def pushed_before(repo, when):
+    """the default branch's commit at `when`, from github's push record.
+
+    returns (sha, pushed_at) for the last push at or before `when`; ("", None)
+    when the record starts after it, or ("", deleted_at) when the branch was
+    deleted then; None when github has no push record for the branch at all,
+    or answers definitively that it won't share one (404, 410, a 403 that
+    isn't a rate limit), so the caller can say it fell back to commit dates.
+
+    any other failure — a 5xx, a rate limit, bad credentials — raises
+    RuntimeError: falling back then would quietly grade by commit dates,
+    which students' machines set, because of a passing outage.
+    """
+    seen = False
+    try:
+        for push in branch_pushes(repo, repo.default_branch):
+            seen = True
+            if push.timestamp <= when:
+                sha = "" if push.after in (None, NO_COMMIT) else push.after
+                return sha, push.timestamp
+    except GithubException as exc:
+        definitive = exc.status in (404, 410) or (
+            exc.status == 403
+            and not isinstance(exc, (RateLimitExceededException,
+                                     BadCredentialsException)))
+        if definitive:
+            return None
+        raise RuntimeError(f"couldn't read github's push record ({exc.status}:"
+                           f" {_exc_message(exc)}); retry — commit dates were"
+                           " not used") from None
+    return ("", None) if seen else None
 
 
 def _exc_message(exc):
