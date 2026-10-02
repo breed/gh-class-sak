@@ -221,22 +221,37 @@ def fetch_canvas_groups(room, group_category, canvas_ctx=None):
     return groups_data
 
 
-_github_re = re.compile(r'github\.com/([a-zA-Z0-9_-]+)')
+# github.com/NAME, then whatever path follows it: an account link has none
+# (or just "/"); github.com/OWNER/REPO/… points into OWNER's repo instead.
+# the host must be github.com itself (or www.): nothing that could be part
+# of a hostname may come right before it, so notgithub.com and
+# gist.github.com never match
+_github_re = re.compile(
+    r'(?<![\w.-])(?:www\.)?github\.com/([a-zA-Z0-9_-]+)(/[^\s?#"\'<>()]*)?')
+
+
+def _github_accounts(text):
+    """the logins text links to as accounts — never the owner of a repo
+    it links into, which is usually someone else's project."""
+    return [m.group(1) for m in _github_re.finditer(text)
+            if m.group(2) in (None, "/")]
 
 
 def extract_github_username(profile):
-    """Extract GitHub username from a Canvas user profile."""
+    """The GitHub login a Canvas user profile links to, or None.
+
+    Only account links count (github.com/NAME), never links into a repo.
+    A profile link titled "github" wins, then any other profile link, then
+    the bio.
+    """
+    titled, other = [], []
     for link in profile.get("links", []):
         url = link.get("url", "") if isinstance(link, dict) else str(link)
-        m = _github_re.search(url)
-        if m:
-            return m.group(1)
-    bio = profile.get("bio", "")
-    if bio:
-        m = _github_re.search(bio)
-        if m:
-            return m.group(1)
-    return None
+        title = link.get("title", "") if isinstance(link, dict) else ""
+        (titled if "github" in (title or "").lower() else other).extend(
+            _github_accounts(url))
+    accounts = titled + other + _github_accounts(profile.get("bio") or "")
+    return accounts[0] if accounts else None
 
 
 def _github_from_canvas_profiles(course, people):

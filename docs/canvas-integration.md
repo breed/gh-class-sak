@@ -25,6 +25,9 @@ matches the Canvas course "FA26: CS-101 Sec 01".
 
 The link lives in the **Canvas profile**: a student adds their GitHub URL to the
 *links* section of their Canvas profile (a `github.com/...` URL in the bio works too).
+Only a link to the account itself counts — `github.com/their-name` — never a link into a
+repo, which names the repo's owner (often someone else's project). When a profile has
+several, a link titled "github" wins.
 That's the one thing to ask students to do at the start of the term — and
 [`canvas message-missing`](#messaging-students-with-problems) chases the stragglers
 for you, messaging everyone whose link is missing or broken, or who never accepted
