@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `--from-canvas --canvas-group` matches each group member to an enrollment by
+  Canvas user id. It matched by name, so with two enrolled students of the
+  same name, both groups got whichever one Canvas listed last and the other
+  student was in no group
 - `gh-class-sak demo COMMAND...` runs any command on the invented course
   the docs are built on — offline, with nothing kept, so even `--apply` is
   safe to try. `gh-class-sak demo` alone describes the course

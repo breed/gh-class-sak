@@ -1113,12 +1113,27 @@ def _rows_from_canvas(room, canvas_group, unresolvable):
                              "students": [entry], "repo": None, "repo_id": None})
         return rows
 
-    by_name = {normalize_name(p["name"]): p for p in people if p.get("name")}
+    # a member is matched by canvas user id; two enrolled people can share
+    # a name, so a bare name is only trusted when exactly one person has it
+    by_id = {str(p["id"]): p for p in people if p.get("id")}
+    by_name = {}
+    for p in people:
+        if p.get("name"):
+            by_name.setdefault(normalize_name(p["name"]), []).append(p)
     rows = []
     for group in fetch_canvas_groups(room, canvas_group):
         entries = []
-        for member in group["members"]:
-            person = by_name.get(normalize_name(member))
+        ids = group.get("member_ids") or [None] * len(group["members"])
+        for member, member_id in zip(group["members"], ids):
+            person = by_id.get(member_id) if member_id else None
+            if person is None:
+                namesakes = by_name.get(normalize_name(member), [])
+                if len(namesakes) > 1:
+                    error(f'several enrolled people are named "{member}"; can\'t'
+                          f' tell which one is in group "{group["name"]}"')
+                    unresolvable.append(member)
+                    continue
+                person = namesakes[0] if namesakes else None
             if person is None:
                 error(f'cannot find an enrollment for group member "{member}"')
                 unresolvable.append(member)
