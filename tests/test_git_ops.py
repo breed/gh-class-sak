@@ -106,3 +106,41 @@ class TestCheckoutBefore:
         late = origin.index.commit("late").hexsha
         assert git_ops.clone_or_update(str(tmp_path / "origin"), dest) == "updated"
         assert GitRepo(dest).head.commit.hexsha == late
+
+
+class TestCheckoutCommit:
+    """--before detaches at the commit github's push record names."""
+
+    def test_detaches_at_a_commit_on_the_branch(self, tmp_path):
+        _origin, shas = dated_origin(tmp_path, "2026-09-28T10:00:00+00:00",
+                                     "2026-10-02T09:00:00+00:00")
+        dest = str(tmp_path / "clone")
+        git_ops.clone_or_update(str(tmp_path / "origin"), dest)
+        assert git_ops.checkout_commit(dest, shas[0]) == shas[0][:7]
+        assert GitRepo(dest).head.commit.hexsha == shas[0]
+
+    def test_a_commit_force_pushed_off_the_branch_is_fetched_by_id(self, tmp_path):
+        # the pushed commit was later force-pushed over: no branch the clone
+        # fetched still has it, so it is fetched by its id
+        origin, shas = dated_origin(tmp_path, "2026-09-28T10:00:00+00:00",
+                                    "2026-10-01T20:00:00+00:00")
+        origin.git.config("uploadpack.allowAnySHA1InWant", "true")
+        origin.git.reset("--hard", shas[0])
+        (tmp_path / "origin" / "work.txt").write_text("rewritten\n")
+        origin.index.add(["work.txt"])
+        origin.index.commit("rewritten after the deadline")
+        dest = str(tmp_path / "clone")
+        # file:// makes git send only what a remote would, as github does,
+        # rather than copying every object the way a plain path does
+        git_ops.clone_or_update(f"file://{tmp_path / 'origin'}", dest)
+        with pytest.raises(GitCommandError):  # not in the fresh clone
+            GitRepo(dest).git.cat_file("-e", f"{shas[1]}^{{commit}}")
+        assert git_ops.checkout_commit(dest, shas[1]) == shas[1][:7]
+        assert GitRepo(dest).head.commit.hexsha == shas[1]
+
+    def test_a_commit_that_cant_be_fetched_is_a_runtime_error(self, tmp_path):
+        dated_origin(tmp_path, "2026-09-28T10:00:00+00:00")
+        dest = str(tmp_path / "clone")
+        git_ops.clone_or_update(str(tmp_path / "origin"), dest)
+        with pytest.raises(RuntimeError, match="cannot get the pushed commit"):
+            git_ops.checkout_commit(dest, "f" * 40)

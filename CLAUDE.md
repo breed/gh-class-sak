@@ -91,7 +91,7 @@ github classroom is gone, so nothing may call `gh classroom` or the `/classrooms
 
 ### determine github information for students and instructors
 
-find the github ids of all the students and instructors using the canvas REST API to get the profile for the given user id and look for the github link
+find the github ids of all the students and instructors using the canvas REST API to get the profile for the given user id and look for the github link. only account links count (`github.com/NAME`, optionally ending in `/`, a query, or a fragment) — a link into a repo (`github.com/OWNER/REPO/…`) names the repo's owner, often someone else, and is never read as the student's account. a profile link titled "github" wins, then other profile links in order, then the bio (repos.extract_github_username)
 
 # subcommands
 
@@ -105,7 +105,7 @@ find the github ids of all the students and instructors using the canvas REST AP
     - if the `--alt` flag is given, any alternative repo names (previous names for the repo) will be shown as an extra column
 - repos members: list the members of each repo with names and emails mined from commit history
 - repos missing: list canvas students, or canvas groups with `--group`, that have no repo
-- repos clone: clone or fast-forward every repo for an assignment. pass the token to git through the environment so it never lands in argv, the clone url, or `.git/config`. `--before DEADLINE` (a bare date = the end of that day, or YYYY-MM-DD HH:MM; local time) leaves each clone detached at its last commit dated at or before it (git_ops.checkout_before, by commit date) and adds an AT column; no commit that old is a loud error and the clone stays at its latest; clone_or_update re-attaches a detached checkout to its branch before pulling
+- repos clone: clone or fast-forward every repo for an assignment. pass the token to git through the environment so it never lands in argv, the clone url, or `.git/config`. `--before DEADLINE` (a bare date = the end of that day, or YYYY-MM-DD HH:MM; local time) leaves each clone detached at the commit its default branch held after its last push at or before it, by github's push record — GET /repos/{owner}/{repo}/activity, read through PyGithub's PaginatedList with github_api.BranchPush (github_api.pushed_before), never commit dates, which students' machines set. a commit a later force push took off the branch is fetched by id (git_ops.checkout_commit). AT reads `SHA (pushed …)`; no push before the deadline (or the branch deleted then) is a loud error and the clone stays at its latest; a repo github has no push record for, or definitively won't share one for (404, 410, a 403 that isn't a rate limit), falls back to commit dates (git_ops.checkout_before) with a warning, and AT reads `(committed …)`; any other failure (5xx, rate limit, bad credentials) raises RuntimeError from pushed_before and is that repo's error — never a fallback to student-set dates. tests drive branch_pushes through the real PaginatedList with a fake requester serving github-shaped pages. clone_or_update re-attaches a detached checkout to its branch before pulling
 - repos update: takes a file with the same format as `repos list` that will update the repo with the give members and admins
     - if any of the ids are emails, first resolve the email to the github id. print a noticeable error if the email does not resolve
 
