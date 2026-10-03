@@ -322,14 +322,18 @@ class FakeGithub:
 # --- canvas ---------------------------------------------------------------
 
 class FakeCanvasUser:
-    def __init__(self, name):
+    def __init__(self, name, id=None):
         self.name = name
+        if id is not None:
+            self.id = id
 
 
 class FakeCanvasGroup:
     def __init__(self, name, members):
+        """members are names, or (name, canvas user id) pairs."""
         self.name = name
-        self._members = [FakeCanvasUser(m) for m in members]
+        self._members = [FakeCanvasUser(*m) if isinstance(m, tuple)
+                         else FakeCanvasUser(m) for m in members]
 
     def get_users(self):
         return list(self._members)

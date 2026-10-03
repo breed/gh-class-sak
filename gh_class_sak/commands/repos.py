@@ -213,10 +213,13 @@ def fetch_canvas_groups(room, group_category, canvas_ctx=None):
     groups = list_groups_in_category(category)
     groups_data = []
     for g in groups:
-        users = list_group_users(g)
+        users = [u for u in list_group_users(g) if u.name]
         groups_data.append({
             "name": g.name,
-            "members": [u.name for u in users if u.name],
+            "members": [u.name for u in users],
+            # canvas user ids, parallel to members: names can repeat, ids
+            # can't, so matching a member to an enrollment goes by id
+            "member_ids": [str(getattr(u, "id", "") or "") or None for u in users],
         })
     return groups_data
 

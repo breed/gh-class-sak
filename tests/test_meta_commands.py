@@ -7,7 +7,14 @@ from gh_class_sak import core
 from gh_class_sak import meta_store as ms
 from gh_class_sak.commands import repos as repos_cmd
 from tests.conftest import ORG, run
-from tests.fakes import FakeBranchProtection, FakeNamedUser, FakeOrg, FakeRepo
+from tests.fakes import (
+    FakeBranchProtection,
+    FakeCanvasGroup,
+    FakeGroupCategory,
+    FakeNamedUser,
+    FakeOrg,
+    FakeRepo,
+)
 
 PREFIX = "sp26-cmpe-195a"
 ASSIGNMENT = "project"
@@ -919,6 +926,72 @@ class TestMetaAssignFromCanvas:
         assert rows["Project-Group-1"]["students"] == ["alice@sjsu.edu/alice", "bob@sjsu.edu/bob"]
         assert rows["Project-Group-2"]["students"] == ["carol@sjsu.edu/carol"]
         assert state["group_sets"] == {"project": "Project"}
+
+    def namesakes_in_two_groups(self, canvas, with_ids=True):
+        """two different students both named Sam Lee, one in each group."""
+        for uid, email, login in (("7", "sam.one@sjsu.edu", "sam-one"),
+                                  ("8", "sam.two@sjsu.edu", "sam-two")):
+            canvas._enrollments.append(
+                {"role": {"name": "StudentEnrollment"},
+                 "user": {"_id": uid, "name": "Sam Lee", "email": email},
+                 "courseSectionId": "s1"})
+            canvas._profiles[uid] = {"links": [{"url": f"https://github.com/{login}"}]}
+        first, second = (("Sam Lee", 7), ("Sam Lee", 8)) if with_ids \
+            else ("Sam Lee", "Sam Lee")
+        canvas._courses[0]._categories.append(FakeGroupCategory("Teams", [
+            FakeCanvasGroup("Team A", [first]),
+            FakeCanvasGroup("Team B", [second])]))
+
+    def test_namesakes_land_in_their_own_groups(self, env, canvas):
+        # matched by name, both groups got whichever Sam Lee canvas listed
+        # last, and the other Sam was in no group at all
+        self.namesakes_in_two_groups(canvas)
+        seed_meta(env)
+        run(env.runner, "meta", "assign", ORG, "--from-canvas",
+            "--assignment", "teams", "--canvas-group", "Teams", "--no-dryrun")
+        rows = {row["name"]: row for row in meta_state(env)["assignments"]["teams"]}
+        assert rows["Team-A"]["students"] == ["sam.one@sjsu.edu/sam-one"]
+        assert rows["Team-B"]["students"] == ["sam.two@sjsu.edu/sam-two"]
+
+    def test_namesakes_without_ids_are_an_error_not_a_guess(self, env, canvas):
+        self.namesakes_in_two_groups(canvas, with_ids=False)
+        seed_meta(env)
+        result = run(env.runner, "meta", "assign", ORG, "--from-canvas",
+                     "--assignment", "teams", "--canvas-group", "Teams")
+        assert result.exit_code == 1
+        assert 'several enrolled people are named "Sam Lee"; can\'t tell which' \
+            ' one is in group "Team A"' in result.output
+        assert "would record teams rows" in result.output
+        assert "sam-one" not in result.output and "sam-two" not in result.output
+
+    def test_an_unknown_member_id_never_falls_back_to_a_name(self, env, canvas):
+        # canvas named a member id that isn't on the enrollment list; the
+        # one enrollee who happens to share the name must not be assumed
+        canvas._courses[0]._categories.append(FakeGroupCategory("Teams", [
+            FakeCanvasGroup("Team A", [("Alice Adams", 999)])]))
+        seed_meta(env)
+        result = run(env.runner, "meta", "assign", ORG, "--from-canvas",
+                     "--assignment", "teams", "--canvas-group", "Teams")
+        assert result.exit_code == 1
+        assert ('cannot find an enrollment for group member "Alice Adams"'
+                " (canvas id 999)") in result.output
+        assert "alice@sjsu.edu" not in result.output
+
+    def test_a_group_with_an_unmatched_member_keeps_its_recorded_row(self, env,
+                                                                      canvas):
+        # dropping the member that couldn't be matched would overwrite the
+        # recorded roster, and a later sync could revoke a real student
+        self.namesakes_in_two_groups(canvas, with_ids=False)
+        recorded = ["sam.one@sjsu.edu/sam-one"]
+        seed_meta(env, assignments={"teams": [
+            {"name": "Team-A", "students": recorded, "repo": None, "repo_id": None}]})
+        result = run(env.runner, "meta", "assign", ORG, "--from-canvas",
+                     "--assignment", "teams", "--canvas-group", "Teams", "--no-dryrun")
+        assert result.exit_code == 1
+        assert ('"Team-A" keeps its recorded students: a member of the canvas'
+                ' group "Team A" couldn\'t be matched') in result.output
+        rows = {row["name"]: row for row in meta_state(env)["assignments"]["teams"]}
+        assert rows["Team-A"]["students"] == recorded
 
     def test_profiles_fetch_at_most_once_per_session(self, env, canvas):
         # the roster is consulted twice (rows, then the email resolver);

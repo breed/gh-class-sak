@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `--from-canvas --canvas-group` matches each group member to an enrollment by
+  Canvas user id. It matched by name, so with two enrolled students of the
+  same name, both groups got whichever one Canvas listed last and the other
+  student was in no group
 - an audit trail: every change the tool makes to who can reach a course's
   repos — repos created or adopted, invitations, revokes, cancelled
   invitations, TA team changes — is appended to the course's `audit.log` in
