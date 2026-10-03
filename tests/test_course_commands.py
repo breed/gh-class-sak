@@ -497,7 +497,7 @@ class TestHelpOrder:
 
     def test_course_starts_with_init(self, course_env):
         assert self.listed(course_env.runner, "course") == [
-            "init", "list", "status", "show", "ta", "settings", "delete"]
+            "init", "list", "status", "show", "audit", "ta", "settings", "delete"]
 
     def test_course_ta(self, course_env):
         assert self.listed(course_env.runner, "course", "ta") == ["add", "remove"]

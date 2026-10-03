@@ -56,7 +56,7 @@ def _org_or_configured(org):
 
 
 @gh_class_sak.group("course", cls=UsageOrderGroup, order=(
-    "init", "list", "status", "show", "ta", "settings", "delete"))
+    "init", "list", "status", "show", "audit", "ta", "settings", "delete"))
 def course_group():
     """Set up and inspect courses, each hosted in a github org."""
     pass
@@ -120,6 +120,34 @@ def course_list(course, org):
         m._list(gh, [org], classroom_dir, "COURSE")
     else:
         m._list(gh, _org_or_configured(org), None, "COURSE")
+
+
+@course_group.command("audit")
+@click.argument("course")
+@org_option
+def course_audit(course, org):
+    """Check who has access to COURSE's repos against who should.
+
+    Flags anyone on a repo, or invited to one, whom no row lists; one
+    account on rows for different people; and, with a [CANVAS] config, an
+    account sharing no part of the enrolled person's name (student,
+    instructor, or TA) or a recorded id their Canvas profile no longer
+    links. Each problem comes with its fix.
+    Read-only; exits 1 when it finds a problem. A real sync runs it too.
+    What the tool itself changed, and why, is in the course's audit.log in
+    the classroom-meta repo.
+
+    \\b
+    Examples:
+      gh-class-sak course audit CS-101
+    """
+    gh = get_github()
+    org, classroom_dir, _checkout, data = _open_course(gh, course, org)
+    by_id = {r.id: r for r in list_org_repos(gh, org)}
+    problems, notes = m._audit_course(gh, org, classroom_dir, data, by_id)
+    m._print_audit(classroom_dir, problems, notes)
+    if problems:
+        sys.exit(1)
 
 
 @course_group.command("show")
@@ -215,7 +243,8 @@ def _change_tas(gh, org, classroom_dir, checkout, data, tas, dryrun):
     by_id = {r.id: r for r in all_repos}
     universe = m._classroom_universe(gh, org, data, all_repos, by_id)
     m._reconcile_tas_team(gh, org, classroom_dir, logins, universe, dryrun,
-                          actions, failures)
+                          actions, failures, m._ta_reasons(data["tas"], resolve))
+    m._commit_audit(gh, checkout, f"audit {classroom_dir}", dryrun)
     if not actions:
         output("nothing to do")
     m._summarize(actions, dryrun)

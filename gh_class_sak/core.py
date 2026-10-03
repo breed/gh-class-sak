@@ -522,6 +522,9 @@ def gh_class_sak():
     """
     for key in said:
         said[key] = 0
+    from gh_class_sak import audit
+
+    audit.reset()
     if not _interactive():
         return
     warn("this is beta code to replace github classroom, which is going away")

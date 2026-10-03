@@ -2,11 +2,13 @@ import os
 import re
 import shutil
 import sys
+import unicodedata
 
 import click
 from git import GitCommandError
 from github import GithubException
 
+from gh_class_sak import audit
 from gh_class_sak import meta_store as ms
 from gh_class_sak.commands.repos import (
     Classroom,
@@ -60,6 +62,7 @@ from gh_class_sak.github_api import (
     split_collaborators,
     team_name,
     team_pending_invitations,
+    token_login,
 )
 
 REPO_SETTING_KEYS = ("protection", "linear_history", "force_push")
@@ -107,14 +110,20 @@ def _derived_course_prefix(entries):
     return heads.pop() if len(heads) == 1 else None
 
 
-def _perform(dryrun, message, fn, actions):
-    """the --dryrun convention: preview with ⚠️, or do it and say so."""
+def _perform(dryrun, message, fn, actions, logged=None):
+    """the --dryrun convention: preview with ⚠️, or do it and say so.
+
+    logged is the change's audit-trail entry — (course dir, action, repo,
+    who, why) — recorded only once the change has actually happened.
+    """
     actions.append(message)
     if dryrun:
         would(f"would {message}")
     else:
         fn()
         output(message)
+        if logged:
+            audit.record(*logged)
 
 
 def _word():
@@ -135,12 +144,21 @@ def _sync_hint(classroom_dir, org):
     return f"gh-class-sak sync {classroom_dir} --org {org} --apply"
 
 
-def _perform_grant(dryrun, message, fn, actions, login, failures):
+def _commit_audit(gh, checkout, message, dryrun):
+    """write the run's audit-trail entries into the checkout and push them.
+    a dry run changed nothing, so it has nothing to log."""
+    if dryrun:
+        return
+    if audit.flush(checkout, token_login(gh) or "-"):
+        ms.commit_and_push(checkout, message, get_token())
+
+
+def _perform_grant(dryrun, message, fn, actions, login, failures, logged=None):
     """_perform for access grants: github 404s a grant to a login that
     doesn't exist (a github.com/dashboard pasted into canvas, a typo'd id),
     and one bad account must not abort the rest of the run."""
     try:
-        _perform(dryrun, message, fn, actions)
+        _perform(dryrun, message, fn, actions, logged)
     except GithubException as exc:
         if exc.status != 404:
             raise
@@ -221,10 +239,13 @@ def _open_meta(gh, org, required=True):
             sys.exit(2)
         return None, None
     try:
-        return repo, ms.checkout_meta(repo.clone_url, org, get_token())
+        checkout = ms.checkout_meta(repo.clone_url, org, get_token())
     except RuntimeError as exc:
         error(str(exc))
         sys.exit(2)
+    # the audit trail's entries belong here, even if the command stops early
+    audit.bind(checkout, gh)
+    return repo, checkout
 
 
 def _resolve_classroom_dir(checkout, partial, classroom):
@@ -333,6 +354,21 @@ def _resolve_tas(tas, resolve, unresolved):
             error(f'cannot resolve TA "{entry}" to a github id')
             unresolved.append(entry)
     return logins
+
+
+def _row_reasons(assignment, row, resolve):
+    """login (lowercased) -> why that account belongs on the row's repo, for
+    the audit trail: the row and identity it came from, and whether the
+    github id was read off the person's canvas profile link."""
+    reasons = {}
+    for entry in row["students"]:
+        login = resolve(entry)
+        if login:
+            why = f"{assignment}.tsv row {row['name']}: {entry}"
+            if not ms.parse_identity(entry)[1]:
+                why += " (github id from the canvas profile link)"
+            reasons[login.lower()] = why
+    return reasons
 
 
 def _resolve_row_students(row, resolve):
@@ -515,13 +551,17 @@ def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions,
                 warn(f"{default} is taken by {holder}; using {repo_name}")
             claims.claim(classroom_dir, assignment, row,
                          f"{org}/{repo_name}")
+            row_label = f"{assignment}.tsv row {row['name']}"
+            reasons = _row_reasons(assignment, row, resolve)
 
             made = {}
             if existing is not None:
                 def _adopt(existing=existing, made=made):
                     made["repo"] = existing
                 _perform(dryrun, f"adopt existing {existing.full_name} for {row['name']}",
-                         _adopt, actions)
+                         _adopt, actions,
+                         (classroom_dir, "adopt repo", existing.full_name, None,
+                          row_label))
                 if not _seed_empty_repo(existing, classroom_dir, desired,
                                         dryrun, actions):
                     _reconcile_repo_protection(existing, desired, dryrun, actions)
@@ -555,7 +595,9 @@ def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions,
                                                        template=template)
                 try:
                     _perform(dryrun, f"create private {org}/{repo_name}{source}",
-                             _create, actions)
+                             _create, actions,
+                             (classroom_dir, "create repo", f"{org}/{repo_name}",
+                              None, row_label))
                 except RuntimeError as exc:
                     error(str(exc))
                     failures.append(repo_name)
@@ -579,7 +621,9 @@ def _realize_classroom(gh, org, classroom_dir, data, resolve, dryrun, actions,
                 def _grant(login=login, made=made):
                     add_collaborator(made["repo"], login, "push")
                 _perform_grant(dryrun, f"grant push to {login} on {org}/{repo_name}",
-                               _grant, actions, login, failures)
+                               _grant, actions, login, failures,
+                               (classroom_dir, "invite", f"{org}/{repo_name}",
+                                login, reasons.get(login.lower())))
 
             if not dryrun:
                 row["repo"] = made["repo"].html_url
@@ -595,7 +639,8 @@ def _cancel_invitation(repo, login):
 
 
 def _reconcile_row_collaborators(gh, repo, logins, remove_unlisted, dryrun,
-                                 actions, failures):
+                                 actions, failures, course_dir=None,
+                                 row_label=None, reasons=None):
     """grant the row's students push; handle collaborators the row doesn't list.
 
     an unaccepted invitation counts as present — re-granting would re-invite
@@ -610,12 +655,18 @@ def _reconcile_row_collaborators(gh, repo, logins, remove_unlisted, dryrun,
     # a listed admin is already present: github answers a grant to an org
     # admin with a no-op, so re-granting would repeat on every run
     present = current.keys() | invited.keys() | {a.login.lower() for a in admins}
+    reasons = reasons or {}
+
+    def _logged(action, login, why):
+        return (course_dir, action, repo.full_name, login, why) if course_dir else None
     for lowered, login in desired.items():
         if lowered not in present:
             def _grant(login=login):
                 add_collaborator(repo, login, "push")
             _perform_grant(dryrun, f"grant push to {login} on {repo.full_name}",
-                           _grant, actions, login, failures)
+                           _grant, actions, login, failures,
+                           _logged("invite", login, reasons.get(lowered)))
+    unlisted = f"not listed in {row_label}" if row_label else "not listed in its row"
     for lowered, login in current.items():
         if lowered not in desired:
             if not remove_unlisted:
@@ -624,7 +675,8 @@ def _reconcile_row_collaborators(gh, repo, logins, remove_unlisted, dryrun,
                 continue
             def _revoke(login=login):
                 remove_collaborator(repo, login)
-            _perform(dryrun, f"revoke {login} from {repo.full_name}", _revoke, actions)
+            _perform(dryrun, f"revoke {login} from {repo.full_name}", _revoke, actions,
+                     _logged("revoke", login, unlisted))
     for lowered, login in invited.items():
         if lowered not in desired:
             if not remove_unlisted:
@@ -634,7 +686,8 @@ def _reconcile_row_collaborators(gh, repo, logins, remove_unlisted, dryrun,
             def _cancel(login=login):
                 _cancel_invitation(repo, login)
             _perform(dryrun, f"cancel the invitation for {login}"
-                     f" on {repo.full_name}", _cancel, actions)
+                     f" on {repo.full_name}", _cancel, actions,
+                     _logged("cancel invitation", login, unlisted))
 
 
 def _covered(data, only):
@@ -661,10 +714,10 @@ def _reconcile_recorded_repos(gh, org, classroom_dir, data, resolve,
         for r in all_repos:
             if matches_prefix(r.name, joined):
                 universe[r.full_name] = r
-    recorded = [row for assignment in assignments
+    recorded = [(assignment, row) for assignment in assignments
                 for row in data["assignments"][assignment]
                 if row["repo_id"] is not None]
-    for row in progress(recorded, f"checking {classroom_dir}"):
+    for assignment, row in progress(recorded, f"checking {classroom_dir}"):
         repo = by_id.get(row["repo_id"]) or get_repo_by_id(gh, row["repo_id"])
         if repo is None:
             warn(f"recorded repo for {row['name']} (id {row['repo_id']}) is gone")
@@ -678,8 +731,10 @@ def _reconcile_recorded_repos(gh, org, classroom_dir, data, resolve,
             warn(f"{row['name']}: leaving collaborators untouched until"
                  " every identity resolves")
         else:
-            _reconcile_row_collaborators(gh, repo, logins, remove_unlisted,
-                                         dryrun, actions, failures)
+            _reconcile_row_collaborators(
+                gh, repo, logins, remove_unlisted, dryrun, actions, failures,
+                classroom_dir, f"{assignment}.tsv row {row['name']}",
+                _row_reasons(assignment, row, resolve))
         if not _seed_empty_repo(repo, classroom_dir, desired, dryrun, actions):
             _reconcile_repo_protection(repo, desired, dryrun, actions)
     return universe
@@ -831,6 +886,8 @@ def _init(classroom, org, prefix, template, canvas_course, dryrun,
 
     # the classroom's TA team exists from day one, with read access to
     # whatever repos the classroom already has (usually none yet)
+    if not dryrun:
+        audit.bind(ms.meta_checkout_dir(org), gh)  # a new meta repo's checkout
     resolve = _make_resolver(org, canvas_course or classroom_dir)
     unresolved = []
     ta_logins = _resolve_tas(tas, resolve, unresolved)
@@ -840,7 +897,8 @@ def _init(classroom, org, prefix, template, canvas_course, dryrun,
         by_id = {r.id: r for r in all_repos}
         universe = _classroom_universe(gh, org, existing, all_repos, by_id)
     _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe, dryrun,
-                        actions, unresolved)
+                        actions, unresolved, _ta_reasons(tas, resolve))
+    _commit_audit(gh, ms.meta_checkout_dir(org), f"audit {classroom_dir}", dryrun)
     if remember_org and org.lower() not in {o.lower() for o in configured_orgs()}:
         def _add_org():
             add_org_to_config(org)
@@ -871,6 +929,150 @@ def _mark_students(row, repo, resolve):
         else:
             cells.append(f"\N{CROSS MARK}{student}")
     return ",".join(cells) or ms.EMPTY
+
+
+def _name_words(text):
+    """a name's words: lowercased, accents dropped, split on anything that
+    isn't a letter or digit in any script — 王小明 and Иван keep theirs."""
+    plain = unicodedata.normalize("NFKD", text or "")
+    plain = "".join(ch for ch in plain if not unicodedata.combining(ch)).lower()
+    return {word for word in re.split(r"[\W_]+", plain) if word}
+
+
+def _looks_like(github_name, login, canvas_name):
+    """whether a github account plausibly belongs to the canvas person.
+
+    github names are free-form — a first name, a nickname, a handle — so
+    anything shared counts: a word of the canvas name in the github name,
+    or a 3+-letter word of it inside the login or the github name run
+    together ("snehan"). only no overlap at all is worth flagging.
+    """
+    theirs = _name_words(canvas_name)
+    if theirs & _name_words(github_name):
+        return True
+    squashed = login.lower() + " " + "".join(sorted(_name_words(github_name)))
+    return any(len(word) >= 3 and word in squashed for word in theirs)
+
+
+def _canvas_people(org, course):
+    """everyone enrolled in the canvas course — name, email, and the github
+    id their profile links — or None without a [CANVAS] config."""
+    if not has_canvas_config():
+        return None
+    data = fetch_enrollment_data(Classroom(org, course), resolve_students=True)
+    return data["students"] + data["instructors"]
+
+
+def _audit_course(gh, org, classroom_dir, data, by_id):
+    """who has access to the course's repos, checked against who should.
+
+    returns (problems, notes): each problem is (what is wrong, the command
+    or edit that fixes it). flagged: someone on a repo (or invited) whom no
+    row lists; one account on rows for different people; and, with canvas,
+    an account sharing no part of the person's canvas name, or a recorded id
+    their canvas profile no longer links. rows cover whoever canvas enrolls —
+    students, instructors, TAs — so "person", not "student". read-only.
+    """
+    course = data["canvas_course"] or classroom_dir
+    resolve = _make_resolver(org, course)
+    people = _canvas_people(org, course)
+    by_email, by_github = {}, {}
+    for person in people or []:
+        if person.get("email"):
+            by_email[person["email"].lower()] = person
+        if person.get("github"):
+            by_github[person["github"].lower()] = person
+    sync_unlisted = (f"gh-class-sak sync {classroom_dir} --org {org}"
+                     " --remove-unlisted-contributors --apply")
+    problems, notes = [], []
+    github_names = {}
+
+    def github_name(login):
+        if login.lower() not in github_names:
+            try:
+                github_names[login.lower()] = gh.get_user(login).name
+            except GithubException:
+                github_names[login.lower()] = None
+        return github_names[login.lower()]
+
+    for assignment, rows in data["assignments"].items():
+        group_set = data["group_sets"].get(assignment)
+        reimport = (f"gh-class-sak assignment create {classroom_dir} {assignment}"
+                    f" --org {org} --from-canvas"
+                    + (f' --canvas-group "{group_set}"' if group_set else "")
+                    + " --apply")
+        on_rows = {}
+        for row in progress(rows, f"auditing {classroom_dir}/{assignment}"):
+            where = f"{assignment}/{row['name']}"
+            logins, unresolved = [], []
+            for entry in row["students"]:
+                login = resolve(entry)
+                if not login:
+                    unresolved.append(entry)
+                    continue
+                logins.append(login)
+                on_rows.setdefault(login.lower(), {}).setdefault(row["name"], entry)
+                email, github = ms.parse_identity(entry)
+                person = (by_email.get(email.lower()) if email else None) \
+                    or by_github.get(login.lower())
+                if not person:
+                    continue
+                link = person.get("github")
+                if github and link and link.lower() != github.lower():
+                    problems.append((
+                        f"{where}: recorded {github} for {email or person['name']},"
+                        f" but their Canvas profile now links {link}", reimport))
+                named = github_name(login)
+                if named and person.get("name") \
+                        and not _looks_like(named, login, person["name"]):
+                    problems.append((
+                        f'{where}: {login} is named "{named}" on GitHub, but'
+                        f' Canvas has them as "{person["name"]}"'
+                        + (f" ({email})" if email else ""),
+                        f"check their Canvas GitHub link; if the account is"
+                        f" wrong, fix the row in {assignment}.tsv, then"
+                        f" {sync_unlisted}"))
+            if row["repo_id"] is None or unresolved:
+                continue  # no repo yet, or a partial list that would misjudge
+            repo = by_id.get(row["repo_id"]) or get_repo_by_id(gh, row["repo_id"])
+            if repo is None:
+                continue
+            expected = {login.lower() for login in logins}
+            members, _admins = split_collaborators(repo)
+            for member in members:
+                if member.login.lower() not in expected:
+                    problems.append((f"{where}: {member.login} has access to"
+                                     f" {repo.full_name} but no row lists them",
+                                     sync_unlisted))
+            for login in pending_invitees(repo):
+                if login.lower() not in expected:
+                    problems.append((f"{where}: {login} is invited to"
+                                     f" {repo.full_name} but no row lists them",
+                                     sync_unlisted))
+        for login, found in on_rows.items():
+            if len(found) > 1 and len(set(found.values())) > 1:
+                problems.append((
+                    f"{assignment}: {login} is on {len(found)} rows"
+                    f" ({', '.join(found)}) for different people",
+                    f"edit {assignment}.tsv in the classroom-meta repo so each"
+                    f" person has their own github id, then {sync_unlisted}"))
+    if people is None:
+        notes.append("name and Canvas-link checks skipped: no [CANVAS] section"
+                     " in the config")
+    return problems, notes
+
+
+def _print_audit(classroom_dir, problems, notes):
+    if problems:
+        output(f"audit {classroom_dir}:"
+               f" {_count(len(problems), 'problem', 'problems')}")
+        for what, fix in problems:
+            output(f"  {what}")
+            output(f"      fix: {fix}")
+    else:
+        output(f"audit {classroom_dir}: no problems found")
+    for note in notes:
+        output(f"  note: {note}")
 
 
 def _tas_team_line(gh, org, classroom_dir, configured_tas, resolve):
@@ -1341,7 +1543,8 @@ def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
     if whole_classroom:
         ta_logins = _resolve_tas(data["tas"], resolve, unresolved)
         _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe,
-                            dryrun, actions, failures)
+                            dryrun, actions, failures,
+                            _ta_reasons(data["tas"], resolve))
     else:
         _grant_tas_team(gh, org, classroom_dir, universe, dryrun, actions)
 
@@ -1354,7 +1557,10 @@ def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
                           assignments={n: data["assignments"][n]
                                        for n in sorted(to_save)},
                           **_ini_settings(data))
+        # the roster and the log of what it led to land in one commit
+        audit.flush(checkout, token_login(gh) or "-")
         ms.commit_and_push(checkout, f"assign {classroom_dir}/{name}", get_token())
+    _commit_audit(gh, checkout, f"audit {classroom_dir}/{name}", dryrun)
 
     if not actions:
         output("nothing to do")
@@ -1387,11 +1593,22 @@ def _grant_tas_team(gh, org, classroom_dir, universe, dryrun, actions):
                      _grant, actions)
 
 
+def _ta_reasons(tas, resolve):
+    """TA login (lowercased) -> the [TAS] line that put them on the team."""
+    reasons = {}
+    for entry in tas:
+        login = resolve(entry)
+        if login:
+            reasons.setdefault(login.lower(), f"[TAS] {entry}")
+    return reasons
+
+
 def _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe, dryrun,
-                        actions, failures):
+                        actions, failures, ta_reasons=None):
     """the classroom's team exists, has exactly the tas, and reads exactly
     the classroom's repos. unrelated team-repo grants are left alone only
-    for the meta repo itself."""
+    for the meta repo itself. ta_reasons feeds the audit trail."""
+    ta_reasons = ta_reasons or {}
     name = tas_team_name(classroom_dir)
     team = get_team(gh, org, tas_team_slug(classroom_dir))
     made_team = {}
@@ -1413,13 +1630,17 @@ def _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe, dryrun,
             def _add(login=login):
                 (team or made_team["team"]).add_membership(gh.get_user(login))
             _perform_grant(dryrun, f'add {login} to team "{name}"', _add,
-                           actions, login, failures)
+                           actions, login, failures,
+                           (classroom_dir, "add to TAs team", name, login,
+                            ta_reasons.get(lowered)))
     for lowered, member in current_members.items():
         if lowered not in desired_members:
             def _remove(member=member):
                 team.remove_membership(member)
             _perform(dryrun, f'remove {member.login} from team "{name}"',
-                     _remove, actions)
+                     _remove, actions,
+                     (classroom_dir, "remove from TAs team", name, member.login,
+                      "not in [TAS]"))
 
     team_repos = {r.full_name: r for r in team.get_repos()} if team else {}
     for full_name, repo in universe.items():
@@ -1478,6 +1699,7 @@ def _apply(gh, org, partial, classroom, remove_unlisted, dryrun):
     claims = _RepoClaims(checkout)
     all_repos = list_org_repos(gh, org)
     by_id = {r.id: r for r in all_repos}
+    synced = []
 
     for classroom_dir in classroom_dirs:
         data = _load_classroom(checkout, classroom_dir)
@@ -1506,12 +1728,22 @@ def _apply(gh, org, partial, classroom, remove_unlisted, dryrun):
         # 3. the classroom's TA team reads exactly the classroom's repos
         ta_logins = _resolve_tas(data["tas"], resolve, any_unresolved)
         _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe,
-                            dryrun, actions, any_failures)
+                            dryrun, actions, any_failures,
+                            _ta_reasons(data["tas"], resolve))
+        synced.append((classroom_dir, data))
 
     if not dryrun:
+        # the recorded repos and the log of what the run did, in one commit
+        audit.flush(checkout, token_login(gh) or "-")
         ms.commit_and_push(checkout, "apply", get_token())
     if not actions:
         output("nothing to do")
+    if not dryrun and not is_legacy():
+        # a real sync ends by checking who has access against who should;
+        # it reports, it doesn't change sync's outcome
+        for classroom_dir, data in synced:
+            _print_audit(classroom_dir,
+                         *_audit_course(gh, org, classroom_dir, data, by_id))
     _summarize(actions, dryrun)
     if any_unresolved or any_failures:
         sys.exit(1)
