@@ -371,6 +371,32 @@ team, and a to-do list — each gap with the command that closes it (`sync`, or
 `canvas message-missing` to chase invitations when Canvas is configured) — or
 `all set` when there's nothing left. Read-only.
 
+## course audit
+
+Check who has access to a course's repos against who should:
+
+```
+gh-class-sak course audit COURSE [--org ORG]
+```
+
+It flags, each with the command or edit that fixes it:
+
+- someone who has access to a repo, or an invitation to it, whom no row lists
+- one GitHub account on rows for different people
+- with a `[CANVAS]` config: an account that shares no part of the enrolled person's
+  Canvas name — no word of it in the GitHub profile name, and no 3+-letter word of it in
+  the login — the telltale of a wrong account; and a recorded GitHub id the person's
+  Canvas profile no longer links. Rows cover everyone Canvas enrolls — students,
+  instructors, and TAs — so all of them are checked. GitHub names are free-form, so a
+  first name, nickname, or handle that shares anything with the person's name passes;
+  names in any script count. What's left is worth a look, not necessarily wrong
+
+A row whose identities don't all resolve is skipped for the first check, since a partial
+list would misjudge who belongs. Without Canvas, the last two checks are skipped and the
+output says so. Read-only; exits `1` when it finds a problem, `0` otherwise. A real
+`sync` runs it at the end for every course it synced. What the tool itself changed, and
+why, is in the course's [`audit.log`](classroom-meta-files.md#auditlog).
+
 ## course show
 
 Print a course's recorded state — prefix, template, TAs, effective repo settings, and
@@ -573,7 +599,12 @@ classroom-meta repo itself excepted.
 
 What a run **writes back**: `REPO` and `REPO_ID` on the rows it realized — only the
 tsvs that changed are rewritten, so hand-written `#` comments in untouched files
-survive — committed and pushed as author `gh-class-sak`. What a run **never does**:
+survive — plus a line in each course's
+[`audit.log`](classroom-meta-files.md#auditlog) for every repo created or adopted and
+every invitation, revoke, and TA team change, with the reason for it; all committed and
+pushed as author `gh-class-sak`. A real run then ends with
+[`course audit`](#course-audit)'s check of each course it synced, printing any problem
+with its fix — it reports, and doesn't change sync's exit status. What a run **never does**:
 touch an org admin, modify the contents of an existing repo, remove branch
 protection, delete a tsv, or delete a repo (beyond rolling back a shell it created
 moments earlier in the seed-failure case above).

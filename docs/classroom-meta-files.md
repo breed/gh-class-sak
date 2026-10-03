@@ -16,6 +16,7 @@ classroom-meta/
     classroom.ini                  everything but the rosters (sections below)
     hw1.tsv                        one file per assignment, named by its stem
     project.tsv
+    audit.log                      what the tool changed on GitHub, and why
   cs210_spring/                    an org hosts as many courses as you need
     classroom.ini
     lab1.tsv
@@ -27,6 +28,28 @@ file, and its `[CLASSROOM]` section keep their names from the tool's GitHub Clas
 days. An
 **assignment** is any `*.tsv` file in the directory, named by its basename. Deleting
 an assignment is a hand `git rm` — the tool never deletes a tsv it didn't write.
+
+## audit.log
+
+Every change the tool makes to who can reach a course's repos is appended to the
+course's `audit.log`: a repo created or adopted, an invitation sent, a collaborator
+revoked, an invitation cancelled, a TA added to or removed from the TAs team. Each line
+is tab-separated:
+
+```
+TIME                  BY          COMMAND            ACTION  REPO                     WHO     WHY
+2026-10-01T18:04:11Z  profbeth    gh-class-sak sync  invite  cs101-fall/hw1-jane-doe  janed   hw1.tsv row jane-doe: jane@school.edu/ (github id from the canvas profile link)
+```
+
+`BY` is the account the tool ran as. `WHY` is the reason the tool had for the change:
+the tsv row and identity an invitation came from, and whether the GitHub id was read
+off the person's Canvas profile link (students, instructors, and TAs can all be on
+rows) — the usual way a wrong account gets in. Only real runs log; a dry run changed
+nothing. The log is committed with the rest of each run, so its history can't be
+quietly rewritten; a run that stops partway still commits the entries for the changes
+it made, and only those — not its half-finished edits to the rosters. It ends in `.log`, not `.tsv`, because every
+`.tsv` here is an assignment. `gh-class-sak course audit` checks the live repos against
+the rows ([commands reference](commands.md#course-audit)).
 
 ## classroom.ini
 
