@@ -146,3 +146,44 @@ class TestFormatLabel:
 
     def test_missing_values_are_skipped(self):
         assert format_label("dave", name=None, show_name=True) == "dave"
+
+
+class TestProfileFetchFailures:
+    """a profile canvas refuses is tried once and reported once a session,
+    however many times the roster is consulted."""
+
+    def test_a_refused_profile_is_fetched_and_reported_once(self, fake_canvas,
+                                                            capsys):
+        from gh_class_sak.commands.repos import _github_from_canvas_profiles
+        course = fake_canvas._courses[0]
+        from canvasapi.exceptions import Forbidden
+        fake_canvas._profiles["9"] = Forbidden("user not authorized")
+        for _ in range(3):
+            people = {"9": {"name": "Beth Reed"}}
+            _github_from_canvas_profiles(course, people)
+            assert people["9"]["github"] is None
+        assert course.profile_requests.count("9") == 1
+        err = capsys.readouterr().err
+        assert err.count("cannot read the canvas profile of Beth Reed") == 1
+
+    def test_a_transient_failure_is_retried(self, fake_canvas, capsys):
+        # a timeout or outage is not canvas saying no: the next consultation
+        # of the roster must ask again, or the student stays unresolved
+        from gh_class_sak.commands.repos import _github_from_canvas_profiles
+        course = fake_canvas._courses[0]
+        real_get_user = course.get_user
+        calls = []
+
+        def flaky(user_id):
+            calls.append(user_id)
+            if len(calls) == 1:
+                raise ConnectionError("canvas timed out")
+            return real_get_user(user_id)
+        course.get_user = flaky
+        people = {"9": {"name": "Beth Reed"}}
+        _github_from_canvas_profiles(course, people)
+        assert people["9"]["github"] is None
+        people = {"9": {"name": "Beth Reed"}}
+        _github_from_canvas_profiles(course, people)
+        assert people["9"]["github"] == "profbeth"
+        assert len(calls) == 2

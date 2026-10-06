@@ -640,13 +640,15 @@ def _cancel_invitation(repo, login):
 
 def _reconcile_row_collaborators(gh, repo, logins, remove_unlisted, dryrun,
                                  actions, failures, course_dir=None,
-                                 row_label=None, reasons=None):
+                                 row_label=None, reasons=None, grant_only=False):
     """grant the row's students push; handle collaborators the row doesn't list.
 
     an unaccepted invitation counts as present — re-granting would re-invite
     on every run. an unlisted collaborator (or invitation) is only warned
     about unless remove_unlisted asks for the revoke: taking a human's
-    access away is opt-in, not a side effect.
+    access away is opt-in, not a side effect. grant_only (logins is not the
+    whole roster yet) grants and does nothing else: an "unlisted" person may
+    be the very member who didn't resolve.
     """
     members, admins = split_collaborators(repo)
     invited = {login.lower(): login for login in pending_invitees(repo)}
@@ -666,6 +668,8 @@ def _reconcile_row_collaborators(gh, repo, logins, remove_unlisted, dryrun,
             _perform_grant(dryrun, f"grant push to {login} on {repo.full_name}",
                            _grant, actions, login, failures,
                            _logged("invite", login, reasons.get(lowered)))
+    if grant_only:
+        return
     unlisted = f"not listed in {row_label}" if row_label else "not listed in its row"
     for lowered, login in current.items():
         if lowered not in desired:
@@ -727,14 +731,16 @@ def _reconcile_recorded_repos(gh, org, classroom_dir, data, resolve,
         unresolved.extend(row_unresolved)
         if row_unresolved:
             # a shrunken list must never masquerade as the full roster:
-            # reconciling with it would revoke a real student's access
-            warn(f"{row['name']}: leaving collaborators untouched until"
-                 " every identity resolves")
-        else:
-            _reconcile_row_collaborators(
-                gh, repo, logins, remove_unlisted, dryrun, actions, failures,
-                classroom_dir, f"{assignment}.tsv row {row['name']}",
-                _row_reasons(assignment, row, resolve))
+            # revoking against it would take a real student's access. but
+            # granting the members it can name is always safe, so one
+            # teammate without a github link holds up nobody else
+            warn(f"{row['name']}: inviting the members it can resolve; removals"
+                 " wait until every identity resolves")
+        _reconcile_row_collaborators(
+            gh, repo, logins, remove_unlisted, dryrun, actions, failures,
+            classroom_dir, f"{assignment}.tsv row {row['name']}",
+            _row_reasons(assignment, row, resolve),
+            grant_only=bool(row_unresolved))
         if not _seed_empty_repo(repo, classroom_dir, desired, dryrun, actions):
             _reconcile_repo_protection(repo, desired, dryrun, actions)
     return universe

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `sync` and `assignment create` invite every member of a group they can
+  resolve, even while a teammate has no GitHub link yet. Before, one
+  unresolved teammate held up the whole group's invitations; removals still
+  wait until every identity resolves
+- a Canvas profile Canvas refuses to show (a restricted staff profile) is
+  tried once per run and reported once, instead of on every repo an audit
+  checked
 - `--from-canvas --canvas-group` matches each group member to an enrollment by
   Canvas user id. It matched by name, so with two enrolled students of the
   same name, both groups got whichever one Canvas listed last and the other
