@@ -82,11 +82,24 @@ def graphql_enrollments(canvas, course_id):
 
 
 _profile_cache = {}
+# profiles canvas refused (a staff member's restricted profile, say), kept
+# for the session like the good ones: asking again only gets the same "no",
+# slowly, once per repo an audit looks at
+_profile_failures = {}
+_profile_failures_reported = set()
 
 
 def profile_cached(user_id):
-    """whether the session already holds this user's profile."""
-    return user_id in _profile_cache
+    """whether the session already has an answer for this user's profile."""
+    return user_id in _profile_cache or user_id in _profile_failures
+
+
+def first_report_of_profile_failure(user_id):
+    """True the first time a refused profile is reported this session."""
+    if user_id in _profile_failures_reported:
+        return False
+    _profile_failures_reported.add(user_id)
+    return True
 
 
 def get_user_profile(course, user_id):
@@ -100,7 +113,13 @@ def get_user_profile(course, user_id):
     resolution) fetches each profile once. canvas user ids are global, so
     the cache keys on the id alone.
     """
+    if user_id in _profile_failures:
+        raise _profile_failures[user_id]
     if user_id not in _profile_cache:
-        _profile_cache[user_id] = \
-            course.get_user(user_id).get_profile(include=["links"])
+        try:
+            _profile_cache[user_id] = \
+                course.get_user(user_id).get_profile(include=["links"])
+        except Exception as exc:
+            _profile_failures[user_id] = exc
+            raise
     return _profile_cache[user_id]

@@ -146,3 +146,21 @@ class TestFormatLabel:
 
     def test_missing_values_are_skipped(self):
         assert format_label("dave", name=None, show_name=True) == "dave"
+
+
+class TestProfileFetchFailures:
+    """a profile canvas refuses is tried once and reported once a session,
+    however many times the roster is consulted."""
+
+    def test_a_refused_profile_is_fetched_and_reported_once(self, fake_canvas,
+                                                            capsys):
+        from gh_class_sak.commands.repos import _github_from_canvas_profiles
+        course = fake_canvas._courses[0]
+        fake_canvas._profiles["9"] = PermissionError("user not authorized")
+        for _ in range(3):
+            people = {"9": {"name": "Beth Reed"}}
+            _github_from_canvas_profiles(course, people)
+            assert people["9"]["github"] is None
+        assert course.profile_requests.count("9") == 1
+        err = capsys.readouterr().err
+        assert err.count("cannot read the canvas profile of Beth Reed") == 1
