@@ -1,4 +1,5 @@
 from canvasapi import Canvas
+from canvasapi.exceptions import Forbidden, ResourceDoesNotExist, Unauthorized
 
 
 def get_canvas(config):
@@ -87,6 +88,8 @@ _profile_cache = {}
 # slowly, once per repo an audit looks at
 _profile_failures = {}
 _profile_failures_reported = set()
+# canvas's lasting answers about one profile; only these are kept
+PROFILE_REFUSALS = (Forbidden, Unauthorized, ResourceDoesNotExist)
 
 
 def profile_cached(user_id):
@@ -119,7 +122,10 @@ def get_user_profile(course, user_id):
         try:
             _profile_cache[user_id] = \
                 course.get_user(user_id).get_profile(include=["links"])
-        except Exception as exc:
+        except PROFILE_REFUSALS as exc:
+            # canvas said no for this profile: asking again only repeats it.
+            # anything else (a timeout, an outage, a rate limit) is left
+            # retryable, or a passing blip would strand the student
             _profile_failures[user_id] = exc
             raise
     return _profile_cache[user_id]
