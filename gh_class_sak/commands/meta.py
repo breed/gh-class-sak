@@ -342,8 +342,10 @@ def _classroom_universe(gh, org, data, all_repos, by_id):
     return universe
 
 
-def _resolve_tas(tas, resolve, unresolved):
-    """unique TA logins; each unresolvable entry errors into unresolved."""
+def _resolve_tas(tas, resolve, unresolved, classroom_dir="COURSE"):
+    """unique TA logins; each unresolvable entry errors into unresolved.
+
+    an email-only TA's error says how to record their github id."""
     logins = []
     for entry in tas:
         login = resolve(entry)
@@ -351,7 +353,13 @@ def _resolve_tas(tas, resolve, unresolved):
             if login not in logins:
                 logins.append(login)
         else:
-            error(f'cannot resolve TA "{entry}" to a github id')
+            hint = ""
+            email, github = ms.parse_identity(entry)
+            if email and not github and not is_legacy():
+                hint = (f"; record their GitHub id: gh-class-sak course ta remove"
+                        f" {classroom_dir} {email}, then gh-class-sak course ta add"
+                        f" {classroom_dir} {email}/GITHUBID")
+            error(f'cannot resolve TA "{entry}" to a github id{hint}')
             unresolved.append(entry)
     return logins
 
@@ -890,7 +898,7 @@ def _init(classroom, org, prefix, template, canvas_course, dryrun,
         audit.bind(ms.meta_checkout_dir(org), gh)  # a new meta repo's checkout
     resolve = _make_resolver(org, canvas_course or classroom_dir)
     unresolved = []
-    ta_logins = _resolve_tas(tas, resolve, unresolved)
+    ta_logins = _resolve_tas(tas, resolve, unresolved, classroom_dir)
     universe = {}
     if existing and existing["assignments"]:
         all_repos = list_org_repos(gh, org)
@@ -1541,7 +1549,7 @@ def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
                                          all_repos, by_id, unresolved, failures,
                                          only)
     if whole_classroom:
-        ta_logins = _resolve_tas(data["tas"], resolve, unresolved)
+        ta_logins = _resolve_tas(data["tas"], resolve, unresolved, classroom_dir)
         _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe,
                             dryrun, actions, failures,
                             _ta_reasons(data["tas"], resolve))
@@ -1726,7 +1734,7 @@ def _apply(gh, org, partial, classroom, remove_unlisted, dryrun):
                                              any_unresolved, any_failures)
 
         # 3. the classroom's TA team reads exactly the classroom's repos
-        ta_logins = _resolve_tas(data["tas"], resolve, any_unresolved)
+        ta_logins = _resolve_tas(data["tas"], resolve, any_unresolved, classroom_dir)
         _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe,
                             dryrun, actions, any_failures,
                             _ta_reasons(data["tas"], resolve))
