@@ -420,3 +420,44 @@ class TestUniquifyNames:
                                   self.row("Team-B", "/c")],
                                  [self.row("Team-A", "/zzz")], by_person=False)
         assert [r["name"] for r in rows] == ["Team-A", "Team-A-2", "Team-B"]
+
+
+class TestMatchRenamedGroups:
+    def row(self, name, *students):
+        return {"name": name, "students": list(students), "repo": None,
+                "repo_id": None}
+
+    def names(self, incoming, existing):
+        return [r["name"] for r in ms.match_renamed_groups(incoming, existing)]
+
+    def test_a_renamed_group_takes_its_recorded_name(self):
+        existing = [self.row("Team-Old", "a@x.edu/a", "b@x.edu/b")]
+        incoming = [self.row("Team-New", "a@x.edu/a", "b@x.edu/b")]
+        assert self.names(incoming, existing) == ["Team-Old"]
+
+    def test_a_case_only_rename_is_matched_too(self):
+        existing = [self.row("Group-7-Ada-de-Lee", "a@x.edu/a", "b@x.edu/b")]
+        incoming = [self.row("Group-7-Ada-De-Lee", "a@x.edu/a", "b@x.edu/b")]
+        assert self.names(incoming, existing) == ["Group-7-Ada-de-Lee"]
+
+    def test_members_who_linked_github_since_still_match(self):
+        existing = [self.row("Team-Old", "a@x.edu/", "b@x.edu/b", "c@x.edu/")]
+        incoming = [self.row("Team-New", "a@x.edu/a-gh", "b@x.edu/b", "c@x.edu/")]
+        assert self.names(incoming, existing) == ["Team-Old"]
+
+    def test_a_group_of_different_people_is_new(self):
+        existing = [self.row("Team-Old", "a@x.edu/a", "b@x.edu/b")]
+        incoming = [self.row("Team-New", "c@x.edu/c", "d@x.edu/d")]
+        assert self.names(incoming, existing) == ["Team-New"]
+
+    def test_a_group_still_on_the_roster_is_never_taken(self):
+        existing = [self.row("Team-Old", "a@x.edu/a", "b@x.edu/b")]
+        incoming = [self.row("Team-Old", "a@x.edu/a"),
+                    self.row("Team-New", "a@x.edu/a", "b@x.edu/b")]
+        assert self.names(incoming, existing) == ["Team-Old", "Team-New"]
+
+    def test_an_ambiguous_match_is_left_alone(self):
+        existing = [self.row("Old-1", "a@x.edu/a", "b@x.edu/b"),
+                    self.row("Old-2", "a@x.edu/a", "b@x.edu/b")]
+        incoming = [self.row("Team-New", "a@x.edu/a", "b@x.edu/b")]
+        assert self.names(incoming, existing) == ["Team-New"]

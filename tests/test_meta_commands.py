@@ -993,6 +993,25 @@ class TestMetaAssignFromCanvas:
         rows = {row["name"]: row for row in meta_state(env)["assignments"]["teams"]}
         assert rows["Team-A"]["students"] == recorded
 
+    def test_a_renamed_canvas_group_keeps_its_repo(self, env, canvas):
+        # canvas renamed the group after the import; read by name it looked
+        # new, so it got a second repo and the real one looked dropped
+        repo = FakeRepo(ORG, f"{PREFIX}-teams-Team-Old")
+        env.org._repos.append(repo)
+        seed_meta(env, assignments={"teams": [
+            {"name": "Team-Old", "students": ["alice@sjsu.edu/alice", "bob@sjsu.edu/bob"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        canvas._courses[0]._categories.append(FakeGroupCategory("Teams", [
+            FakeCanvasGroup("Team New", [("Alice Adams", 1), ("Bob Baker", 2)])]))
+        result = run(env.runner, "meta", "assign", ORG, "--from-canvas",
+                     "--assignment", "teams", "--canvas-group", "Teams", "--no-dryrun")
+        assert env.org.created_repos == []
+        assert [row["name"] for row in meta_state(env)["assignments"]["teams"]] == [
+            "Team-Old"]
+        assert ('canvas group "Team New" is the recorded "Team-Old", renamed;'
+                " it keeps its repo") in result.output
+        assert "no longer on the canvas roster" not in result.output
+
     def test_profiles_fetch_at_most_once_per_session(self, env, canvas):
         # the roster is consulted twice (rows, then the email resolver);
         # each person's profile must still be fetched only once

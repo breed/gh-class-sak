@@ -289,6 +289,47 @@ def uniquify_names(incoming, existing, by_person=True):
     return [{**row, "name": named.get(id(row), row["name"])} for row in incoming]
 
 
+def match_renamed_groups(incoming, existing):
+    """give a group canvas renamed its recorded NAME back, so it keeps its
+    row and repo instead of looking new (and the real one dropped).
+
+    a NAME that differs from a recorded one only by case is that group.
+    otherwise an incoming NAME that isn't recorded is a recorded group that
+    left the roster, renamed, when they share members — a person counts as
+    shared through an email or github half — making up at least half of
+    the larger group, and the match is one-to-one: an ambiguous group is
+    left as it is. returns new row dicts.
+    """
+    recorded = {row["name"] for row in existing}
+    by_lower = {name.lower(): name for name in recorded}
+    names = [row["name"] for row in incoming]
+    for i, name in enumerate(names):
+        same = by_lower.get(name.lower())
+        if name not in recorded and same is not None and same not in names:
+            names[i] = same
+    present = set(names)
+    departed = [row for row in existing if row["name"] not in present]
+
+    def people(row):
+        return [_halves(entry) for entry in row["students"]]
+
+    def same_group(a, b):
+        pa, pb = people(a), people(b)
+        shared = sum(1 for person in pa if any(person & other for other in pb))
+        return shared > 0 and 2 * shared >= max(len(pa), len(pb))
+
+    candidates = {i: [old["name"] for old in departed if same_group(row, old)]
+                  for i, row in enumerate(incoming) if names[i] not in recorded}
+    claims = {}
+    for matches in candidates.values():
+        for old in matches:
+            claims[old] = claims.get(old, 0) + 1
+    for i, matches in candidates.items():
+        if len(matches) == 1 and claims[matches[0]] == 1:
+            names[i] = matches[0]
+    return [{**row, "name": name} for row, name in zip(incoming, names)]
+
+
 def serialize_students_tsv(rows):
     """space-padded columns like the CLI's tables; last column unpadded."""
     table = [STUDENTS_HEADERS] + [
