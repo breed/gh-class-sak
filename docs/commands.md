@@ -597,7 +597,8 @@ every recorded id — so TAs accept one org invite ever and never gain access to
 another course's repos. Team grants outside the course are revoked, the
 classroom-meta repo itself excepted.
 
-What a run **writes back**: `REPO` and `REPO_ID` on the rows it realized — only the
+What a run **writes back**: `REPO` and `REPO_ID` on the rows it realized, and the new
+`REPO` url of a repo renamed on GitHub (it is found by its permanent id either way) — only the
 tsvs that changed are rewritten, so hand-written `#` comments in untouched files
 survive — plus a line in each course's
 [`audit.log`](classroom-meta-files.md#auditlog) for every repo created or adopted and
