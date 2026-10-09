@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- a repo renamed on GitHub gets its recorded `REPO` url updated by `sync` and
+  `assignment create`. It was always found by its permanent id; now the url
+  in the assignment's tsv, and what `course show` prints, follow the rename
 - `--from-canvas --canvas-group` matches each group member to an enrollment by
   Canvas user id. It matched by name, so with two enrolled students of the
   same name, both groups got whichever one Canvas listed last and the other

@@ -697,14 +697,18 @@ def _covered(data, only):
 
 def _reconcile_recorded_repos(gh, org, classroom_dir, data, resolve,
                               remove_unlisted, dryrun, actions, all_repos,
-                              by_id, unresolved, failures, only=None):
+                              by_id, unresolved, failures, only=None,
+                              refreshed=None):
     """converge every recorded row's repo — assign and apply share this.
 
     per repo: the row's students are exactly its push collaborators, an
     empty repo gets its welcome commit, and either way the default branch
     ends up carrying the classroom's protection. returns the classroom's
     repo universe (per-assignment prefix matches ∪ recorded ids) for the
-    TA team reconcile. only names the single assignment to cover.
+    TA team reconcile. only names the single assignment to cover. a repo
+    renamed on github (found by its id under a new url) gets its recorded
+    REPO url updated, and its assignment lands in refreshed for saving —
+    the renamed meta commands leave their output as it was.
     """
     desired = ms.effective_repo_settings(data)
     assignments = _covered(data, only)
@@ -723,6 +727,14 @@ def _reconcile_recorded_repos(gh, org, classroom_dir, data, resolve,
             warn(f"recorded repo for {row['name']} (id {row['repo_id']}) is gone")
             continue
         universe[repo.full_name] = repo
+        if refreshed is not None and row["repo"] != repo.html_url \
+                and not is_legacy():
+            def _refresh(row=row, url=repo.html_url):
+                row["repo"] = url
+            _perform(dryrun, f"record {assignment}/{row['name']} repo:"
+                     f" {repo.html_url} (was {row['repo'] or '-'})",
+                     _refresh, actions)
+            refreshed.add(assignment)
         logins, row_unresolved = _resolve_row_students(row, resolve)
         unresolved.extend(row_unresolved)
         if row_unresolved:
@@ -1536,10 +1548,11 @@ def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
     # here are TA-readable now, not after the next apply
     all_repos = list_org_repos(gh, org)
     by_id = {r.id: r for r in all_repos}
+    refreshed = set()
     universe = _reconcile_recorded_repos(gh, org, classroom_dir, data, resolve,
                                          remove_unlisted, dryrun, actions,
                                          all_repos, by_id, unresolved, failures,
-                                         only)
+                                         only, refreshed=refreshed)
     if whole_classroom:
         ta_logins = _resolve_tas(data["tas"], resolve, unresolved)
         _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe,
@@ -1548,7 +1561,7 @@ def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
     else:
         _grant_tas_team(gh, org, classroom_dir, universe, dryrun, actions)
 
-    to_save = set(changed)
+    to_save = set(changed) | refreshed
     if changed_names or removed:
         to_save.add(name)
     if not dryrun and (to_save or group_set_changed or template_changed):
@@ -1719,11 +1732,20 @@ def _apply(gh, org, partial, classroom, remove_unlisted, dryrun):
                                            for n in sorted(changed)},
                               **_ini_settings(data))
 
-        # 2. recorded rows converge: collaborators, seeding, protection
+        # 2. recorded rows converge: collaborators, seeding, protection,
+        # and the url of a repo renamed on github
+        refreshed = set()
         universe = _reconcile_recorded_repos(gh, org, classroom_dir, data,
                                              resolve, remove_unlisted, dryrun,
                                              actions, all_repos, by_id,
-                                             any_unresolved, any_failures)
+                                             any_unresolved, any_failures,
+                                             refreshed=refreshed)
+        if refreshed and not dryrun:
+            ms.save_classroom(checkout, classroom_dir, data["prefix"], data["template"],
+                              tas=data["tas"],
+                              assignments={n: data["assignments"][n]
+                                           for n in sorted(refreshed)},
+                              **_ini_settings(data))
 
         # 3. the classroom's TA team reads exactly the classroom's repos
         ta_logins = _resolve_tas(data["tas"], resolve, any_unresolved)

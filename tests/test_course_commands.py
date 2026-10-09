@@ -777,3 +777,47 @@ class TestAssignmentHelpNamesTheRoster:
         assert "one repo per enrolled person" in result.output
         for choice in self.CHOICES:
             assert choice in result.output
+
+
+class TestRenamedRepoUrls:
+    """a repo renamed on GitHub is still found by its id; the recorded
+    REPO url catches up instead of going stale."""
+
+    def renamed(self, env):
+        repo = FakeRepo(ORG, "team-1-new-name")  # renamed on github
+        env.org._repos.append(repo)
+        old_url = f"https://github.com/{ORG}/{REPO_PREFIX}-team-1"
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": [], "repo": old_url, "repo_id": repo.id}]})
+        return repo, old_url
+
+    def test_sync_records_the_new_url(self, course_env):
+        repo, old_url = self.renamed(course_env)
+        result = run(course_env.runner, "sync", COURSE, "--org", ORG, "--apply")
+        assert result.exit_code == 0, result.output
+        assert (f"record {ASSIGNMENT}/team-1 repo: {repo.html_url} (was {old_url})"
+                in result.output)
+        assert meta_state(course_env)["assignments"][ASSIGNMENT][0]["repo"] == \
+            repo.html_url
+        assert "1 record updated" in result.output
+
+    def test_a_dry_run_only_previews_it(self, course_env):
+        repo, old_url = self.renamed(course_env)
+        result = run(course_env.runner, "sync", COURSE, "--org", ORG)
+        assert f"would record {ASSIGNMENT}/team-1 repo: {repo.html_url}" in result.output
+        assert meta_state(course_env)["assignments"][ASSIGNMENT][0]["repo"] == old_url
+
+    def test_assignment_create_records_it_too(self, course_env, tmp_path):
+        repo, old_url = self.renamed(course_env)
+        roster = tmp_path / "roster.tsv"
+        roster.write_text("NAME\tSTUDENTS\nteam-1\t/msmith\n")
+        result = run(course_env.runner, "assignment", "create", COURSE, ASSIGNMENT,
+                     "--org", ORG, "--roster", str(roster), "--apply")
+        assert meta_state(course_env)["assignments"][ASSIGNMENT][0]["repo"] == \
+            repo.html_url, result.output
+
+    def test_the_renamed_meta_apply_is_unchanged(self, course_env):
+        repo, old_url = self.renamed(course_env)
+        result = run(course_env.runner, "meta", "apply", ORG, "--no-dryrun")
+        assert "repo:" not in result.output
+        assert meta_state(course_env)["assignments"][ASSIGNMENT][0]["repo"] == old_url
