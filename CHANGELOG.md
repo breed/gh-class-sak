@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- a Canvas group renamed after the import keeps its recorded row and repo.
+  Matched by name, a renamed group looked new: it got a second repo, its
+  students a second invitation, and the real row was reported as dropped.
+  A new group name is a recorded group that left the roster, renamed, when
+  the members they share are at least half of the larger group (counting
+  every Canvas member, matched or not) and no other group matches either of
+  them; a name that differs only in capitalization is that group too
 - `--from-canvas --canvas-group` matches each group member to an enrollment by
   Canvas user id. It matched by name, so with two enrolled students of the
   same name, both groups got whichever one Canvas listed last and the other

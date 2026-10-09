@@ -1354,7 +1354,8 @@ def _rows_from_canvas(room, canvas_group, unresolvable):
                      "students": entries, "repo": None, "repo_id": None,
                      # a member couldn't be matched: the row is partial, and
                      # must not overwrite a recorded one
-                     "incomplete": not complete, "group": group["name"]})
+                     "incomplete": not complete, "group": group["name"],
+                     "size": len(group["members"])})
     return rows
 
 
@@ -1465,6 +1466,15 @@ def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
     if from_canvas:
         incoming = _rows_from_canvas(Classroom(org, course), canvas_group,
                                      unresolvable)
+        if canvas_group:
+            # a group canvas renamed keeps its recorded row and repo
+            renamed = ms.match_renamed_groups(incoming,
+                                              data["assignments"].get(name, []))
+            for before, after in zip(incoming, renamed):
+                if before["name"] != after["name"]:
+                    warn(f'canvas group "{before["group"]}" is the recorded'
+                         f' "{after["name"]}", renamed; it keeps its repo')
+            incoming = renamed
         # namesakes (two Alice Adamses, two "Team A" groups) get numbered
         # NAMEs, so neither replaces the other's row in the merge
         incoming = ms.uniquify_names(incoming, data["assignments"].get(name, []),
