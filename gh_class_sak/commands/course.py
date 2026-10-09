@@ -249,7 +249,7 @@ def _change_tas(gh, org, classroom_dir, checkout, data, tas, dryrun):
                    actions)
     resolve = m._make_resolver(org, data["canvas_course"] or classroom_dir)
     failures = []
-    logins = m._resolve_tas(data["tas"], resolve, failures, classroom_dir)
+    logins = m._resolve_tas(data["tas"], resolve, failures, classroom_dir, org)
     all_repos = list_org_repos(gh, org)
     by_id = {r.id: r for r in all_repos}
     universe = m._classroom_universe(gh, org, data, all_repos, by_id)
@@ -298,8 +298,9 @@ def ta_add(course, identities, org, dryrun):
             current = next(ta for ta in tas if _same_person(entry, ta))
             email, github = ms.parse_identity(current)
             warn(f"{entry} is already a TA of {classroom_dir}; to change their"
-                 f" GitHub id, remove them first: gh-class-sak course ta remove"
-                 f" {classroom_dir} {email or '/' + github}")
+                 " GitHub id, remove them first: "
+                 + m._ta_command("remove", classroom_dir, org,
+                                 email or "/" + github))
         else:
             tas.append(entry)
     _change_tas(gh, org, classroom_dir, checkout, data, tas, dryrun)

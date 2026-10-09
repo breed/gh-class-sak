@@ -5,7 +5,8 @@
 - `course ta add --help` explains how to write a TA — `EMAIL/GITHUBID`, and
   that the GitHub id is what gives them access — with full examples. Adding
   a current TA and a TA that can't be resolved now say how to record their
-  GitHub id (remove, then add with both halves)
+  GitHub id (remove, then add with both halves), with commands that run as
+  printed: they name the org and add `--apply`
 - `--from-canvas --canvas-group` matches each group member to an enrollment by
   Canvas user id. It matched by name, so with two enrolled students of the
   same name, both groups got whichever one Canvas listed last and the other

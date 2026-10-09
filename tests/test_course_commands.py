@@ -798,15 +798,18 @@ class TestTaIdentityIsExplained:
                      "ta@sjsu.edu/ta-gh", "--org", ORG)
         assert ("ta@sjsu.edu/ta-gh is already a TA of cmpe_195a; to change their"
                 " GitHub id, remove them first:") in result.output
-        assert f"gh-class-sak course ta remove {COURSE} ta@sjsu.edu" in result.output
+        # runnable as printed: it applies, and finds the course without a config
+        assert (f"gh-class-sak course ta remove {COURSE} ta@sjsu.edu --org {ORG}"
+                " --apply") in result.output
 
     def test_an_unresolved_ta_says_how_to_record_their_id(self, course_env):
         seed_meta(course_env, tas=["ta@sjsu.edu/"])
         result = run(course_env.runner, "sync", COURSE, "--org", ORG)
         assert 'cannot resolve TA "ta@sjsu.edu/" to a github id' in result.output
         assert (f"record their GitHub id: gh-class-sak course ta remove {COURSE}"
-                f" ta@sjsu.edu, then gh-class-sak course ta add {COURSE}"
-                " ta@sjsu.edu/GITHUBID") in result.output
+                f" ta@sjsu.edu --org {ORG} --apply, then gh-class-sak course ta"
+                f" add {COURSE} ta@sjsu.edu/GITHUBID --org {ORG} --apply"
+                ) in result.output
 
     def test_the_renamed_meta_apply_keeps_its_message(self, course_env):
         seed_meta(course_env, tas=["ta@sjsu.edu/"])
