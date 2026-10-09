@@ -1354,7 +1354,8 @@ def _rows_from_canvas(room, canvas_group, unresolvable):
                      "students": entries, "repo": None, "repo_id": None,
                      # a member couldn't be matched: the row is partial, and
                      # must not overwrite a recorded one
-                     "incomplete": not complete, "group": group["name"]})
+                     "incomplete": not complete, "group": group["name"],
+                     "size": len(group["members"])})
     return rows
 
 

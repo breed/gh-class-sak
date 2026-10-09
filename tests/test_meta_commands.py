@@ -1012,6 +1012,20 @@ class TestMetaAssignFromCanvas:
                 " it keeps its repo") in result.output
         assert "no longer on the canvas roster" not in result.output
 
+    def test_a_partly_matched_group_is_not_taken_for_a_renamed_one(self, env,
+                                                                    canvas):
+        # only one of the four members matched an enrollment: one shared
+        # person is a quarter of the group, not all of it
+        seed_meta(env, assignments={"teams": [
+            {"name": "Team-Old", "students": ["alice@sjsu.edu/alice"],
+             "repo": None, "repo_id": None}]})
+        canvas._courses[0]._categories.append(FakeGroupCategory("Teams", [
+            FakeCanvasGroup("Team New", [("Alice Adams", 1), ("Una Known", 997),
+                                         ("Una Seen", 998), ("Una Met", 999)])]))
+        result = run(env.runner, "meta", "assign", ORG, "--from-canvas",
+                     "--assignment", "teams", "--canvas-group", "Teams")
+        assert "renamed" not in result.output
+
     def test_profiles_fetch_at_most_once_per_session(self, env, canvas):
         # the roster is consulted twice (rows, then the email resolver);
         # each person's profile must still be fetched only once

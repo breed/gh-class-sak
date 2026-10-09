@@ -298,7 +298,9 @@ def match_renamed_groups(incoming, existing):
     left the roster, renamed, when they share members — a person counts as
     shared through an email or github half — making up at least half of
     the larger group, and the match is one-to-one: an ambiguous group is
-    left as it is. returns new row dicts.
+    left as it is. an incoming row's "size", when given, is its canvas
+    member count, so members that couldn't be matched still count toward
+    the group's size. returns new row dicts.
     """
     recorded = {row["name"] for row in existing}
     by_lower = {name.lower(): name for name in recorded}
@@ -316,7 +318,8 @@ def match_renamed_groups(incoming, existing):
     def same_group(a, b):
         pa, pb = people(a), people(b)
         shared = sum(1 for person in pa if any(person & other for other in pb))
-        return shared > 0 and 2 * shared >= max(len(pa), len(pb))
+        size = max(a.get("size", len(pa)), len(pa))
+        return shared > 0 and 2 * shared >= max(size, len(pb))
 
     candidates = {i: [old["name"] for old in departed if same_group(row, old)]
                   for i, row in enumerate(incoming) if names[i] not in recorded}

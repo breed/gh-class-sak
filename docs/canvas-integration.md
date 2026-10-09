@@ -88,10 +88,14 @@ isn't on the enrollment list, is an error rather than a guess. A group whose mem
 can't all be matched keeps the students already recorded for it, so a re-import never
 drops a real student.
 
-A group renamed in Canvas keeps its recorded row and repo: a new name whose members are
-the same people as a recorded group that just left the roster (at least half of them,
-one-to-one) is that group renamed, and so is a name that differs only in capitalization.
-The run says which groups it matched that way. The group set's
+A group renamed in Canvas keeps its recorded row and repo. A new group name is taken
+for a recorded group that just left the roster when the people the two share make up at
+least half of the larger group, counting every Canvas member, matched or not. So a
+four-person group needs two of them in common, and a group may have changed members and
+still keep its repo. The match must be one-to-one: when a group could be either of two
+recorded groups, or two groups could be the same one, nothing is matched and the group
+is new. A name that differs only in capitalization is always that group. The run says
+which groups it matched that way. The group set's
 name is recorded in `classroom.ini` under `[GROUP_SETS]` as `project = Project Groups`,
 so the course remembers where each assignment's teams came from.
 

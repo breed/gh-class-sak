@@ -461,3 +461,14 @@ class TestMatchRenamedGroups:
                     self.row("Old-2", "a@x.edu/a", "b@x.edu/b")]
         incoming = [self.row("Team-New", "a@x.edu/a", "b@x.edu/b")]
         assert self.names(incoming, existing) == ["Team-New"]
+
+    def test_an_incomplete_group_counts_its_unmatched_members(self):
+        # one of four canvas members resolved: the overlap is 1 of 4, not 1 of 1
+        existing = [self.row("Team-Old", "a@x.edu/a")]
+        incoming = [{**self.row("Team-New", "a@x.edu/a"), "size": 4}]
+        assert self.names(incoming, existing) == ["Team-New"]
+
+    def test_a_complete_group_with_its_size_still_matches(self):
+        existing = [self.row("Team-Old", "a@x.edu/a", "b@x.edu/b")]
+        incoming = [{**self.row("Team-New", "a@x.edu/a", "b@x.edu/b"), "size": 2}]
+        assert self.names(incoming, existing) == ["Team-Old"]
