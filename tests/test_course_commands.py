@@ -166,6 +166,47 @@ class TestSync:
         assert "pass a COURSE, or --org ORG" in result.output
 
 
+class TestTeamAccessIsNotUnlisted:
+    """a TA reaches every repo through the COURSE-TAs team, and github lists
+    team access among a repo's collaborators; that is not someone added to
+    the repo who no row lists."""
+
+    def setup(self, env):
+        repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1",
+                        collaborators=[FakeNamedUser("msmith", role_name="write")])
+        env.org._repos.append(repo)
+        team = FakeTeam(env.org, f"{COURSE}-tas")
+        team._members["ta-one"] = FakeNamedUser("ta-one")
+        env.org._teams[team.slug] = team
+        seed_meta(env, tas=["/ta-one"], assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["/msmith"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        return repo
+
+    def test_sync_does_not_warn_about_a_ta(self, course_env):
+        repo = self.setup(course_env)
+        run(course_env.runner, "sync", COURSE, "--org", ORG, "--apply")
+        result = run(course_env.runner, "sync", COURSE, "--org", ORG, "--apply")
+        assert result.exit_code == 0, result.output
+        assert f"unlisted collaborator ta-one on {repo.full_name}" \
+            not in result.output
+        assert "ta-one has access" not in result.output
+
+    def test_removing_unlisted_contributors_leaves_a_ta_alone(self, course_env):
+        repo = self.setup(course_env)
+        run(course_env.runner, "sync", COURSE, "--org", ORG, "--apply")
+        run(course_env.runner, "sync", COURSE, "--org", ORG, "--apply",
+            "--remove-unlisted-contributors")
+        assert ("remove", "ta-one", None) not in repo.collab_log
+
+    def test_course_audit_does_not_flag_a_ta(self, course_env):
+        self.setup(course_env)
+        run(course_env.runner, "sync", COURSE, "--org", ORG, "--apply")
+        result = run(course_env.runner, "course", "audit", COURSE, "--org", ORG)
+        assert "ta-one" not in result.output
+        assert result.exit_code == 0, result.output
+
+
 class TestAssignmentCreateScope:
     """assignment create sets up its own repos; the rest of the course is
     sync's job."""

@@ -236,10 +236,14 @@ def infer_assignment_prefixes(repo_names):
 
 
 def split_collaborators(repo):
-    """return (members, admins) as lists of NamedUser, admins excluded from members."""
+    """return (members, admins) as lists of NamedUser, admins excluded from members.
+
+    only the people added to the repo itself: github's default list also
+    holds everyone who reaches it through a team (the course's TAs team),
+    and they are neither members nor anyone a revoke could remove."""
     members = []
     admins = []
-    for c in repo.get_collaborators():
+    for c in repo.get_collaborators(affiliation="direct"):
         if _is_admin(c):
             admins.append(c)
         else:

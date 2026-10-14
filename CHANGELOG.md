@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- a TA who isn't an org admin is no longer reported as an "unlisted
+  collaborator" on every repo, and `course audit` no longer says no row
+  lists them. GitHub counts access through the TAs team as collaborator
+  access, so `sync` warned about each TA on every repo and suggested
+  `--remove-unlisted-contributors`, which tried to revoke them. Only people
+  added to a repo directly are checked now
 - a repo renamed on GitHub gets its recorded `REPO` url updated by `sync` and
   `assignment create`. It was always found by its permanent id; now the url
   in the assignment's tsv, and what `course show` prints, follow the rename

@@ -109,6 +109,7 @@ class FakeRepo:
                                       for login in reject_collaborators}
         self.file_log = []
         self.deleted = False
+        self._teams = []  # teams granted this repo; their members reach it too
 
     def get_pending_invitations(self):
         return list(self._invitations)
@@ -143,8 +144,20 @@ class FakeRepo:
         self.file_log.append((path, message, content))
         self._has_branch = True
 
-    def get_collaborators(self):
-        return list(self._collaborators)
+    def get_collaborators(self, affiliation=None):
+        # like github: the default (affiliation "all") also lists everyone
+        # who reaches the repo through a team; "direct" lists only the people
+        # added to the repo itself
+        direct = list(self._collaborators)
+        if affiliation == "direct":
+            return direct
+        logins = {c.login.lower() for c in direct}
+        for team in self._teams:
+            for member in team.get_members():
+                if member.login.lower() not in logins:
+                    logins.add(member.login.lower())
+                    direct.append(FakeNamedUser(member.login, role_name="read"))
+        return direct
 
     def add_to_collaborators(self, collaborator, permission="push"):
         login = getattr(collaborator, "login", collaborator)
@@ -220,11 +233,15 @@ class FakeTeam:
     def update_team_repository(self, repo, permission):
         self.log.append(("grant", repo.full_name, permission))
         self._repos[repo.full_name] = (repo, permission)
+        if self not in getattr(repo, "_teams", [self]):
+            repo._teams.append(self)
         return True
 
     def remove_from_repos(self, repo):
         self.log.append(("revoke", repo.full_name))
         self._repos.pop(repo.full_name, None)
+        if self in getattr(repo, "_teams", []):
+            repo._teams.remove(self)
 
 
 class FakeOrg:
