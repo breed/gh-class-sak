@@ -777,3 +777,42 @@ class TestAssignmentHelpNamesTheRoster:
         assert "one repo per enrolled person" in result.output
         for choice in self.CHOICES:
             assert choice in result.output
+
+
+class TestTaIdentityIsExplained:
+    """the GitHub id is what gets a TA access, so the help and the
+    messages say how to write it and how to add it later."""
+
+    def test_ta_add_help_explains_the_identity(self, course_env):
+        result = run(course_env.runner, "course", "ta", "add", "--help")
+        assert result.exit_code == 0, result.output
+        flat = " ".join(result.output.split())  # help text wraps mid-phrase
+        for text in ("EMAIL/GITHUBID", "jane@school.edu/janedoe", "/janedoe",
+                     "email only", "the GitHub id is what gives a TA access",
+                     "remove them, then add them again"):
+            assert text in flat, text
+
+    def test_adding_a_current_ta_says_how_to_change_their_id(self, course_env):
+        seed_meta(course_env, tas=["ta@sjsu.edu/"])
+        result = run(course_env.runner, "course", "ta", "add", COURSE,
+                     "ta@sjsu.edu/ta-gh", "--org", ORG)
+        assert ("ta@sjsu.edu/ta-gh is already a TA of cmpe_195a; to change their"
+                " GitHub id, remove them first:") in result.output
+        # runnable as printed: it applies, and finds the course without a config
+        assert (f"gh-class-sak course ta remove {COURSE} ta@sjsu.edu --org {ORG}"
+                " --apply") in result.output
+
+    def test_an_unresolved_ta_says_how_to_record_their_id(self, course_env):
+        seed_meta(course_env, tas=["ta@sjsu.edu/"])
+        result = run(course_env.runner, "sync", COURSE, "--org", ORG)
+        assert 'cannot resolve TA "ta@sjsu.edu/" to a github id' in result.output
+        assert (f"record their GitHub id: gh-class-sak course ta remove {COURSE}"
+                f" ta@sjsu.edu --org {ORG} --apply, then gh-class-sak course ta"
+                f" add {COURSE} ta@sjsu.edu/GITHUBID --org {ORG} --apply"
+                ) in result.output
+
+    def test_the_renamed_meta_apply_keeps_its_message(self, course_env):
+        seed_meta(course_env, tas=["ta@sjsu.edu/"])
+        result = run(course_env.runner, "meta", "apply", ORG)
+        assert 'cannot resolve TA "ta@sjsu.edu/" to a github id' in result.output
+        assert "record their GitHub id" not in result.output

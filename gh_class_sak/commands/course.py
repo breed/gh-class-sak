@@ -221,8 +221,19 @@ def _same_person(a, b):
 def ta_group():
     """Add or remove a course's TAs: the record and the TAs team together.
 
-    An IDENTITY is EMAIL/GITHUBID, EMAIL/ (resolved via the canvas profile's
-    github link), or /GITHUBID.
+    \b
+    Write each TA as EMAIL/GITHUBID, the two halves joined by a slash:
+      jane@school.edu/janedoe   email and GitHub id (best)
+      /janedoe                  GitHub id only
+      jane@school.edu/          email only: works only once their Canvas
+                                profile links their GitHub account
+
+    The GitHub id is what gives a TA access to the course's repos.
+
+    \b
+    Examples:
+      gh-class-sak course ta add CS-101 jane@school.edu/janedoe --apply
+      gh-class-sak course ta remove CS-101 jane@school.edu --apply
     """
     pass
 
@@ -238,7 +249,7 @@ def _change_tas(gh, org, classroom_dir, checkout, data, tas, dryrun):
                    actions)
     resolve = m._make_resolver(org, data["canvas_course"] or classroom_dir)
     failures = []
-    logins = m._resolve_tas(data["tas"], resolve, failures)
+    logins = m._resolve_tas(data["tas"], resolve, failures, classroom_dir, org)
     all_repos = list_org_repos(gh, org)
     by_id = {r.id: r for r in all_repos}
     universe = m._classroom_universe(gh, org, data, all_repos, by_id)
@@ -261,8 +272,22 @@ def ta_add(course, identities, org, dryrun):
     """Add TAs to COURSE: record them and invite them to its TAs team.
 
     \b
+    Write each TA as EMAIL/GITHUBID, the two halves joined by a slash:
+      jane@school.edu/janedoe   email and GitHub id (best)
+      /janedoe                  GitHub id only
+      jane@school.edu/          email only: works only once their Canvas
+                                profile links their GitHub account
+
+    Include the GitHub id when you know it: the GitHub id is what gives a TA
+    access, and a TA recorded by email alone stays unresolved until Canvas
+    knows their GitHub link. To add the GitHub id of a TA you already
+    added, remove them, then add them again with both halves — adding the
+    same email again changes nothing.
+
+    \b
     Examples:
-      gh-class-sak course ta add CS-101 jane@school.edu/ /msmith --apply
+      gh-class-sak course ta add CS-101 jane@school.edu/janedoe --apply
+      gh-class-sak course ta add CS-101 /janedoe /msmith --apply
     """
     wanted = [_identity(entry) for entry in identities]
     gh = get_github()
@@ -270,7 +295,12 @@ def ta_add(course, identities, org, dryrun):
     tas = list(data["tas"])
     for entry in wanted:
         if any(_same_person(entry, ta) for ta in tas):
-            warn(f"{entry} is already a TA of {classroom_dir}")
+            current = next(ta for ta in tas if _same_person(entry, ta))
+            email, github = ms.parse_identity(current)
+            warn(f"{entry} is already a TA of {classroom_dir}; to change their"
+                 " GitHub id, remove them first: "
+                 + m._ta_command("remove", classroom_dir, org,
+                                 email or "/" + github))
         else:
             tas.append(entry)
     _change_tas(gh, org, classroom_dir, checkout, data, tas, dryrun)
@@ -284,7 +314,8 @@ def ta_add(course, identities, org, dryrun):
 def ta_remove(course, identities, org, dryrun):
     """Remove TAs from COURSE: from the record and from its TAs team.
 
-    Either half of an identity is enough to name the TA.
+    Name each TA by email or GitHub id: either half of their identity is
+    enough (jane@school.edu, /janedoe, or jane@school.edu/janedoe).
 
     \b
     Examples:

@@ -449,11 +449,34 @@ gh-class-sak course ta add COURSE IDENTITY... [--org ORG] [--apply]
 gh-class-sak course ta remove COURSE IDENTITY... [--org ORG] [--apply]
 ```
 
-An `IDENTITY` is `EMAIL/GITHUBID`, `EMAIL/` (resolved via the Canvas profile's GitHub
-link), or `/GITHUBID`. `add` records the new TAs and invites them to the team, which
-already reads every one of the course's repos; adding a current TA only warns. `remove`
-takes either half of an identity, drops the matching TAs from the record, and removes
-them from the team; naming someone who isn't a TA is an error and changes nothing.
+Write each TA as `EMAIL/GITHUBID` — the two halves joined by a slash:
+
+| Identity | Means |
+|---|---|
+| `jane@school.edu/janedoe` | email and GitHub id — best |
+| `/janedoe` | GitHub id only |
+| `jane@school.edu/` | email only — works only once their Canvas profile links their GitHub account |
+
+The GitHub id is what gives a TA access, so include it when you know it; a TA recorded
+by email alone stays unresolved (and `sync` says how to fix it) until Canvas knows their
+GitHub link.
+
+```bash
+gh-class-sak course ta add CS-101 jane@school.edu/janedoe --apply
+```
+
+`add` records the new TAs and invites them to the team, which already reads every one of
+the course's repos. Adding a current TA changes nothing — so to give a TA you already
+added their GitHub id, remove them, then add them again with both halves:
+
+```bash
+gh-class-sak course ta remove CS-101 jane@school.edu --apply
+gh-class-sak course ta add CS-101 jane@school.edu/janedoe --apply
+```
+
+`remove` takes either half of an identity, drops the matching TAs from the record, and
+removes them from the team; naming someone who isn't a TA is an error and changes
+nothing.
 
 ## course settings
 

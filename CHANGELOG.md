@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `course ta add --help` explains how to write a TA — `EMAIL/GITHUBID`, and
+  that the GitHub id is what gives them access — with full examples. Adding
+  a current TA and a TA that can't be resolved now say how to record their
+  GitHub id (remove, then add with both halves), with commands that run as
+  printed: they name the org and add `--apply`
 - a Canvas group renamed after the import keeps its recorded row and repo.
   Matched by name, a renamed group looked new: it got a second repo, its
   students a second invitation, and the real row was reported as dropped.
