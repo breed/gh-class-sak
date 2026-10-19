@@ -449,11 +449,34 @@ gh-class-sak course ta add COURSE IDENTITY... [--org ORG] [--apply]
 gh-class-sak course ta remove COURSE IDENTITY... [--org ORG] [--apply]
 ```
 
-An `IDENTITY` is `EMAIL/GITHUBID`, `EMAIL/` (resolved via the Canvas profile's GitHub
-link), or `/GITHUBID`. `add` records the new TAs and invites them to the team, which
-already reads every one of the course's repos; adding a current TA only warns. `remove`
-takes either half of an identity, drops the matching TAs from the record, and removes
-them from the team; naming someone who isn't a TA is an error and changes nothing.
+Write each TA as `EMAIL/GITHUBID` — the two halves joined by a slash:
+
+| Identity | Means |
+|---|---|
+| `jane@school.edu/janedoe` | email and GitHub id — best |
+| `/janedoe` | GitHub id only |
+| `jane@school.edu/` | email only — works only once their Canvas profile links their GitHub account |
+
+The GitHub id is what gives a TA access, so include it when you know it; a TA recorded
+by email alone stays unresolved (and `sync` says how to fix it) until Canvas knows their
+GitHub link.
+
+```bash
+gh-class-sak course ta add CS-101 jane@school.edu/janedoe --apply
+```
+
+`add` records the new TAs and invites them to the team, which already reads every one of
+the course's repos. Adding a current TA changes nothing — so to give a TA you already
+added their GitHub id, remove them, then add them again with both halves:
+
+```bash
+gh-class-sak course ta remove CS-101 jane@school.edu --apply
+gh-class-sak course ta add CS-101 jane@school.edu/janedoe --apply
+```
+
+`remove` takes either half of an identity, drops the matching TAs from the record, and
+removes them from the team; naming someone who isn't a TA is an error and changes
+nothing.
 
 ## course settings
 
@@ -581,9 +604,10 @@ re-invited run after run. Collaborators and pending invitations the row does *no
 list are warned about and left in place — `--remove-unlisted-contributors` revokes
 the collaborators and cancels the invitations instead. Org admins are never touched
 either way. One safety rule overrides everything: if **any** identity in a row fails
-to resolve (a removed Canvas link, a Canvas outage), that row's collaborators are
-left entirely alone — a shrunken list must never masquerade as the roster — and the
-run exits 1.
+to resolve (a student with no GitHub link yet, a Canvas outage), nothing is removed
+from that row's repo and no unlisted collaborator is reported — a shrunken list must
+never masquerade as the roster — but the members who *do* resolve are still invited,
+so one teammate without a GitHub link holds up nobody else. The run exits 1.
 
 **3. Protection matches the settings.** Every recorded repo's default branch carries
 the course's `protection`/`linear_history`/`force_push` — mechanics and caveats

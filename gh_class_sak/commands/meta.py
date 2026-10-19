@@ -342,8 +342,17 @@ def _classroom_universe(gh, org, data, all_repos, by_id):
     return universe
 
 
-def _resolve_tas(tas, resolve, unresolved):
-    """unique TA logins; each unresolvable entry errors into unresolved."""
+def _ta_command(verb, classroom_dir, org, identity):
+    """a course ta command that runs as printed: it applies, and names the
+    org so the course is found without a config."""
+    return (f"gh-class-sak course ta {verb} {classroom_dir} {identity}"
+            f" --org {org} --apply")
+
+
+def _resolve_tas(tas, resolve, unresolved, classroom_dir, org):
+    """unique TA logins; each unresolvable entry errors into unresolved.
+
+    an email-only TA's error says how to record their github id."""
     logins = []
     for entry in tas:
         login = resolve(entry)
@@ -351,7 +360,15 @@ def _resolve_tas(tas, resolve, unresolved):
             if login not in logins:
                 logins.append(login)
         else:
-            error(f'cannot resolve TA "{entry}" to a github id')
+            hint = ""
+            email, github = ms.parse_identity(entry)
+            if email and not github and not is_legacy():
+                hint = ("; record their GitHub id: "
+                        + _ta_command("remove", classroom_dir, org, email)
+                        + ", then "
+                        + _ta_command("add", classroom_dir, org,
+                                      f"{email}/GITHUBID"))
+            error(f'cannot resolve TA "{entry}" to a github id{hint}')
             unresolved.append(entry)
     return logins
 
@@ -640,13 +657,15 @@ def _cancel_invitation(repo, login):
 
 def _reconcile_row_collaborators(gh, repo, logins, remove_unlisted, dryrun,
                                  actions, failures, course_dir=None,
-                                 row_label=None, reasons=None):
+                                 row_label=None, reasons=None, grant_only=False):
     """grant the row's students push; handle collaborators the row doesn't list.
 
     an unaccepted invitation counts as present — re-granting would re-invite
     on every run. an unlisted collaborator (or invitation) is only warned
     about unless remove_unlisted asks for the revoke: taking a human's
-    access away is opt-in, not a side effect.
+    access away is opt-in, not a side effect. grant_only (logins is not the
+    whole roster yet) grants and does nothing else: an "unlisted" person may
+    be the very member who didn't resolve.
     """
     members, admins = split_collaborators(repo)
     invited = {login.lower(): login for login in pending_invitees(repo)}
@@ -666,6 +685,8 @@ def _reconcile_row_collaborators(gh, repo, logins, remove_unlisted, dryrun,
             _perform_grant(dryrun, f"grant push to {login} on {repo.full_name}",
                            _grant, actions, login, failures,
                            _logged("invite", login, reasons.get(lowered)))
+    if grant_only:
+        return
     unlisted = f"not listed in {row_label}" if row_label else "not listed in its row"
     for lowered, login in current.items():
         if lowered not in desired:
@@ -739,14 +760,16 @@ def _reconcile_recorded_repos(gh, org, classroom_dir, data, resolve,
         unresolved.extend(row_unresolved)
         if row_unresolved:
             # a shrunken list must never masquerade as the full roster:
-            # reconciling with it would revoke a real student's access
-            warn(f"{row['name']}: leaving collaborators untouched until"
-                 " every identity resolves")
-        else:
-            _reconcile_row_collaborators(
-                gh, repo, logins, remove_unlisted, dryrun, actions, failures,
-                classroom_dir, f"{assignment}.tsv row {row['name']}",
-                _row_reasons(assignment, row, resolve))
+            # revoking against it would take a real student's access. but
+            # granting the members it can name is always safe, so one
+            # teammate without a github link holds up nobody else
+            warn(f"{row['name']}: inviting the members it can resolve; removals"
+                 " wait until every identity resolves")
+        _reconcile_row_collaborators(
+            gh, repo, logins, remove_unlisted, dryrun, actions, failures,
+            classroom_dir, f"{assignment}.tsv row {row['name']}",
+            _row_reasons(assignment, row, resolve),
+            grant_only=bool(row_unresolved))
         if not _seed_empty_repo(repo, classroom_dir, desired, dryrun, actions):
             _reconcile_repo_protection(repo, desired, dryrun, actions)
     return universe
@@ -902,7 +925,7 @@ def _init(classroom, org, prefix, template, canvas_course, dryrun,
         audit.bind(ms.meta_checkout_dir(org), gh)  # a new meta repo's checkout
     resolve = _make_resolver(org, canvas_course or classroom_dir)
     unresolved = []
-    ta_logins = _resolve_tas(tas, resolve, unresolved)
+    ta_logins = _resolve_tas(tas, resolve, unresolved, classroom_dir, org)
     universe = {}
     if existing and existing["assignments"]:
         all_repos = list_org_repos(gh, org)
@@ -1366,7 +1389,8 @@ def _rows_from_canvas(room, canvas_group, unresolvable):
                      "students": entries, "repo": None, "repo_id": None,
                      # a member couldn't be matched: the row is partial, and
                      # must not overwrite a recorded one
-                     "incomplete": not complete, "group": group["name"]})
+                     "incomplete": not complete, "group": group["name"],
+                     "size": len(group["members"])})
     return rows
 
 
@@ -1477,6 +1501,15 @@ def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
     if from_canvas:
         incoming = _rows_from_canvas(Classroom(org, course), canvas_group,
                                      unresolvable)
+        if canvas_group:
+            # a group canvas renamed keeps its recorded row and repo
+            renamed = ms.match_renamed_groups(incoming,
+                                              data["assignments"].get(name, []))
+            for before, after in zip(incoming, renamed):
+                if before["name"] != after["name"]:
+                    warn(f'canvas group "{before["group"]}" is the recorded'
+                         f' "{after["name"]}", renamed; it keeps its repo')
+            incoming = renamed
         # namesakes (two Alice Adamses, two "Team A" groups) get numbered
         # NAMEs, so neither replaces the other's row in the merge
         incoming = ms.uniquify_names(incoming, data["assignments"].get(name, []),
@@ -1554,7 +1587,8 @@ def _assign(gh, org, partial, classroom, table_file, name, from_canvas,
                                          all_repos, by_id, unresolved, failures,
                                          only, refreshed=refreshed)
     if whole_classroom:
-        ta_logins = _resolve_tas(data["tas"], resolve, unresolved)
+        ta_logins = _resolve_tas(data["tas"], resolve, unresolved, classroom_dir,
+                                 org)
         _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe,
                             dryrun, actions, failures,
                             _ta_reasons(data["tas"], resolve))
@@ -1748,7 +1782,8 @@ def _apply(gh, org, partial, classroom, remove_unlisted, dryrun):
                               **_ini_settings(data))
 
         # 3. the classroom's TA team reads exactly the classroom's repos
-        ta_logins = _resolve_tas(data["tas"], resolve, any_unresolved)
+        ta_logins = _resolve_tas(data["tas"], resolve, any_unresolved,
+                                 classroom_dir, org)
         _reconcile_tas_team(gh, org, classroom_dir, ta_logins, universe,
                             dryrun, actions, any_failures,
                             _ta_reasons(data["tas"], resolve))

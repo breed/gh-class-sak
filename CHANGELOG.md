@@ -5,6 +5,25 @@
 - a repo renamed on GitHub gets its recorded `REPO` url updated by `sync` and
   `assignment create`. It was always found by its permanent id; now the url
   in the assignment's tsv, and what `course show` prints, follow the rename
+- `course ta add --help` explains how to write a TA — `EMAIL/GITHUBID`, and
+  that the GitHub id is what gives them access — with full examples. Adding
+  a current TA and a TA that can't be resolved now say how to record their
+  GitHub id (remove, then add with both halves), with commands that run as
+  printed: they name the org and add `--apply`
+- a Canvas group renamed after the import keeps its recorded row and repo.
+  Matched by name, a renamed group looked new: it got a second repo, its
+  students a second invitation, and the real row was reported as dropped.
+  A new group name is a recorded group that left the roster, renamed, when
+  the members they share are at least half of the larger group (counting
+  every Canvas member, matched or not) and no other group matches either of
+  them; a name that differs only in capitalization is that group too
+- `sync` and `assignment create` invite every member of a group they can
+  resolve, even while a teammate has no GitHub link yet. Before, one
+  unresolved teammate held up the whole group's invitations; removals still
+  wait until every identity resolves
+- a Canvas profile Canvas refuses to show (a restricted staff profile) is
+  tried once per run and reported once, instead of on every repo an audit
+  checked
 - `--from-canvas --canvas-group` matches each group member to an enrollment by
   Canvas user id. It matched by name, so with two enrolled students of the
   same name, both groups got whichever one Canvas listed last and the other
