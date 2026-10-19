@@ -414,4 +414,7 @@ class _FakeCanvasProfileHolder:
         self._profile = profile
 
     def get_profile(self, include=None):
+        # an exception stands for a profile canvas refuses to show
+        if isinstance(self._profile, Exception):
+            raise self._profile
         return FakeProfile(self._profile)

@@ -993,6 +993,39 @@ class TestMetaAssignFromCanvas:
         rows = {row["name"]: row for row in meta_state(env)["assignments"]["teams"]}
         assert rows["Team-A"]["students"] == recorded
 
+    def test_a_renamed_canvas_group_keeps_its_repo(self, env, canvas):
+        # canvas renamed the group after the import; read by name it looked
+        # new, so it got a second repo and the real one looked dropped
+        repo = FakeRepo(ORG, f"{PREFIX}-teams-Team-Old")
+        env.org._repos.append(repo)
+        seed_meta(env, assignments={"teams": [
+            {"name": "Team-Old", "students": ["alice@sjsu.edu/alice", "bob@sjsu.edu/bob"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        canvas._courses[0]._categories.append(FakeGroupCategory("Teams", [
+            FakeCanvasGroup("Team New", [("Alice Adams", 1), ("Bob Baker", 2)])]))
+        result = run(env.runner, "meta", "assign", ORG, "--from-canvas",
+                     "--assignment", "teams", "--canvas-group", "Teams", "--no-dryrun")
+        assert env.org.created_repos == []
+        assert [row["name"] for row in meta_state(env)["assignments"]["teams"]] == [
+            "Team-Old"]
+        assert ('canvas group "Team New" is the recorded "Team-Old", renamed;'
+                " it keeps its repo") in result.output
+        assert "no longer on the canvas roster" not in result.output
+
+    def test_a_partly_matched_group_is_not_taken_for_a_renamed_one(self, env,
+                                                                    canvas):
+        # only one of the four members matched an enrollment: one shared
+        # person is a quarter of the group, not all of it
+        seed_meta(env, assignments={"teams": [
+            {"name": "Team-Old", "students": ["alice@sjsu.edu/alice"],
+             "repo": None, "repo_id": None}]})
+        canvas._courses[0]._categories.append(FakeGroupCategory("Teams", [
+            FakeCanvasGroup("Team New", [("Alice Adams", 1), ("Una Known", 997),
+                                         ("Una Seen", 998), ("Una Met", 999)])]))
+        result = run(env.runner, "meta", "assign", ORG, "--from-canvas",
+                     "--assignment", "teams", "--canvas-group", "Teams")
+        assert "renamed" not in result.output
+
     def test_profiles_fetch_at_most_once_per_session(self, env, canvas):
         # the roster is consulted twice (rows, then the email resolver);
         # each person's profile must still be fetched only once
@@ -1259,6 +1292,23 @@ class TestMetaApply:
         assert result.exit_code == 1  # the failure is still loud
         assert 'cannot resolve "gone@nowhere.edu/"' in result.output
         assert ("remove", "jdoe", None) not in repo.collab_log
+
+    def test_resolvable_members_are_invited_while_a_teammate_is_not(self, env):
+        # one teammate without a github link must not keep the others from
+        # their invitation; only removals wait for the full roster
+        repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1", collaborators=[
+            FakeNamedUser("jdoe", role_name="write")])
+        env.org._repos.append(repo)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["gone@nowhere.edu/", "/msmith"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        result = run(env.runner, "meta", "apply", ORG,
+                     "--remove-unlisted-contributors", "--no-dryrun")
+        assert ("add", "msmith", "push") in repo.collab_log
+        assert ("remove", "jdoe", None) not in repo.collab_log
+        assert "unlisted collaborator jdoe" not in result.output
+        assert ("team-1: inviting the members it can resolve; removals wait until"
+                " every identity resolves") in result.output
 
     def test_realizes_hand_added_rows(self, env):
         seed_meta(env, assignments={ASSIGNMENT: [
