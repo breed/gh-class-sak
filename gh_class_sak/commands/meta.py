@@ -667,7 +667,8 @@ def _reconcile_row_collaborators(gh, repo, logins, remove_unlisted, dryrun,
     whole roster yet) grants and does nothing else: an "unlisted" person may
     be the very member who didn't resolve.
     """
-    members, admins = split_collaborators(repo)
+    # team access (the TAs) is the team's business, not the row's
+    members, admins = split_collaborators(repo, direct=True)
     invited = {login.lower(): login for login in pending_invitees(repo)}
     desired = {login.lower(): login for login in logins}
     current = {m.login.lower(): m.login for m in members}
@@ -1073,7 +1074,9 @@ def _audit_course(gh, org, classroom_dir, data, by_id):
             if repo is None:
                 continue
             expected = {login.lower() for login in logins}
-            members, _admins = split_collaborators(repo)
+            # a TA reads every repo through the TAs team; that's not access
+            # a row should list
+            members, _admins = split_collaborators(repo, direct=True)
             for member in members:
                 if member.login.lower() not in expected:
                     problems.append((f"{where}: {member.login} has access to"

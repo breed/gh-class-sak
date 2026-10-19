@@ -1938,6 +1938,25 @@ class TestMigrateGithubClassroom:
         assert not os.path.exists(core.config_ini)
         assert ms.load_meta_classrooms(env.gh, ORG) == {}
 
+    def test_students_who_reach_a_repo_through_a_team_are_recorded(self, env):
+        # github classroom gave group assignments their access through a team
+        from tests.fakes import FakeTeam
+        repos = self.seed_classroom_era_repos(env)
+        team1 = repos[0]
+        team1._collaborators = [c for c in team1._collaborators
+                                if c.login not in ("jdoe", "msmith")]
+        team = FakeTeam(env.org, "team-1")
+        team._members.update({login: FakeNamedUser(login)
+                              for login in ("jdoe", "msmith")})
+        team.update_team_repository(team1, "push")
+        result = self.migrate(env, "--no-dryrun",
+                              input="CMPE-30\n\nCMPE-195A\n\n")
+        assert result.exit_code == 0, result.output
+        state = ms.load_meta_classrooms(env.gh, ORG)
+        rows = {row["name"]: row
+                for row in state["cmpe_195a"]["assignments"]["project"]}
+        assert rows["team-1"]["students"] == ["/jdoe", "/msmith"]
+
     def test_no_dryrun_builds_courses_and_the_config(self, env):
         repos = self.seed_classroom_era_repos(env)
         result = self.migrate(env, "--no-dryrun",

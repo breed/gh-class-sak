@@ -177,6 +177,21 @@ class TestMessageMissing:
         recipients = [c["recipients"][0] for c in env.canvas.conversations]
         assert "1" not in recipients  # alice already collaborates
 
+    def test_a_collaborator_through_a_team_is_never_messaged(self, env):
+        # github lists team access among a repo's collaborators; alice can
+        # reach the repo, so she isn't stranded
+        from tests.fakes import FakeTeam
+        env.repo._collaborators = []
+        team = FakeTeam(env.gh.get_organization(ORG), "project-team-1")
+        team._members["alice"] = FakeNamedUser("alice", name="Alice Adams")
+        team.update_team_repository(env.repo, "push")
+        result = run(env.runner, "canvas", "message-missing", ORG, "project",
+                     "--no-dryrun")
+        recipients = [c["recipients"][0] for c in env.canvas.conversations]
+        assert "1" not in recipients
+        # nor reported as a student without access
+        assert "Alice Adams" not in result.output
+
     def test_nothing_to_do_when_everyone_collaborates(self, env):
         env.canvas._enrollments = [_student("1", "Alice Adams", "alice@sjsu.edu")]
         result = run(env.runner, "canvas", "message-missing", ORG, "project",
