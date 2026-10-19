@@ -581,9 +581,10 @@ re-invited run after run. Collaborators and pending invitations the row does *no
 list are warned about and left in place — `--remove-unlisted-contributors` revokes
 the collaborators and cancels the invitations instead. Org admins are never touched
 either way. One safety rule overrides everything: if **any** identity in a row fails
-to resolve (a removed Canvas link, a Canvas outage), that row's collaborators are
-left entirely alone — a shrunken list must never masquerade as the roster — and the
-run exits 1.
+to resolve (a student with no GitHub link yet, a Canvas outage), nothing is removed
+from that row's repo and no unlisted collaborator is reported — a shrunken list must
+never masquerade as the roster — but the members who *do* resolve are still invited,
+so one teammate without a GitHub link holds up nobody else. The run exits 1.
 
 **3. Protection matches the settings.** Every recorded repo's default branch carries
 the course's `protection`/`linear_history`/`force_push` — mechanics and caveats
