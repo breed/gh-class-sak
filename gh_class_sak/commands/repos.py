@@ -8,6 +8,7 @@ from datetime import datetime
 import click
 
 from gh_class_sak.canvas_api import (
+    first_report_of_profile_failure,
     get_user_profile,
     graphql_enrollments,
     list_courses,
@@ -267,7 +268,9 @@ def _github_from_canvas_profiles(course, people):
         try:
             return uid, extract_github_username(get_user_profile(course, uid))
         except Exception as exc:
-            warn(f"failed to fetch canvas profile for {people[uid]['name']}: {exc}")
+            if first_report_of_profile_failure(uid):
+                warn(f"cannot read the canvas profile of {people[uid]['name']}"
+                     f" ({exc}); their github id stays unknown")
             return uid, None
 
     with ThreadPoolExecutor(max_workers=8) as pool:

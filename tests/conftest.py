@@ -28,6 +28,8 @@ def _fresh_profile_cache():
     """the profile cache is per-session; each test is its own session."""
     from gh_class_sak import canvas_api
     canvas_api._profile_cache.clear()
+    canvas_api._profile_failures.clear()
+    canvas_api._profile_failures_reported.clear()
     yield
 
 

@@ -1260,6 +1260,23 @@ class TestMetaApply:
         assert 'cannot resolve "gone@nowhere.edu/"' in result.output
         assert ("remove", "jdoe", None) not in repo.collab_log
 
+    def test_resolvable_members_are_invited_while_a_teammate_is_not(self, env):
+        # one teammate without a github link must not keep the others from
+        # their invitation; only removals wait for the full roster
+        repo = FakeRepo(ORG, f"{REPO_PREFIX}-team-1", collaborators=[
+            FakeNamedUser("jdoe", role_name="write")])
+        env.org._repos.append(repo)
+        seed_meta(env, assignments={ASSIGNMENT: [
+            {"name": "team-1", "students": ["gone@nowhere.edu/", "/msmith"],
+             "repo": repo.html_url, "repo_id": repo.id}]})
+        result = run(env.runner, "meta", "apply", ORG,
+                     "--remove-unlisted-contributors", "--no-dryrun")
+        assert ("add", "msmith", "push") in repo.collab_log
+        assert ("remove", "jdoe", None) not in repo.collab_log
+        assert "unlisted collaborator jdoe" not in result.output
+        assert ("team-1: inviting the members it can resolve; removals wait until"
+                " every identity resolves") in result.output
+
     def test_realizes_hand_added_rows(self, env):
         seed_meta(env, assignments={ASSIGNMENT: [
             {"name": "late-team", "students": ["msmith"],
