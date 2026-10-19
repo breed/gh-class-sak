@@ -1,3 +1,5 @@
+@AGENTS.md
+
 # project description
 
 a swiss army knife for managing github classrooms now the official github classrooms is gone.
