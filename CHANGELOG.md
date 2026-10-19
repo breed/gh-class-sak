@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- a repo renamed on GitHub gets its recorded `REPO` url updated by `sync` and
+  `assignment create`. It was always found by its permanent id; now the url
+  in the assignment's tsv, and what `course show` prints, follow the rename
 - `course ta add --help` explains how to write a TA — `EMAIL/GITHUBID`, and
   that the GitHub id is what gives them access — with full examples. Adding
   a current TA and a TA that can't be resolved now say how to record their
