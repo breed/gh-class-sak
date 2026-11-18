@@ -1,12 +1,21 @@
+import os
+
 from canvasapi import Canvas
 from canvasapi.exceptions import Forbidden, ResourceDoesNotExist, Unauthorized
 
 
 def get_canvas(config):
+    """the CANVAS_API_TOKEN environment variable beats the config's token,
+    as GH_TOKEN does for github, so the token can live in a password
+    manager instead of the config file."""
     url = config.get("CANVAS", "url", fallback=None)
-    token = config.get("CANVAS", "token", fallback=None)
-    if not url or not token:
-        raise ValueError("missing url or token in [CANVAS] section")
+    token = os.environ.get("CANVAS_API_TOKEN") \
+        or config.get("CANVAS", "token", fallback=None)
+    if not url:
+        raise ValueError("missing url in [CANVAS] section")
+    if not token:
+        raise ValueError("no canvas token: set the CANVAS_API_TOKEN"
+                         " environment variable, or token in [CANVAS]")
     return Canvas(url, token)
 
 

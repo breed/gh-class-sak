@@ -104,7 +104,9 @@ story — how GitHub ids map to Canvas accounts, and building assignments straig
 enrollments or group sets — is in [Canvas integration](canvas-integration.md).
 
 > ⚠️ The config file holds your Canvas API token in plain text. Keep it readable only by
-> you.
+> you — or leave `token` out and set the `CANVAS_API_TOKEN` environment variable instead,
+> which takes precedence over the config, e.g. from a password manager:
+> `export CANVAS_API_TOKEN="$(pass canvas-api)"`.
 
 Rather than writing it by hand, let the tool write it — it asks for the org and the
 Canvas details, then checks everything:

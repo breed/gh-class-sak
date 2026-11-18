@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- the Canvas token can come from the `CANVAS_API_TOKEN` environment variable,
+  which takes precedence over `token` in `[CANVAS]` — as `GH_TOKEN` does for
+  GitHub — so it can live in a password manager rather than the config file.
+  `[CANVAS]` still holds the `url`
 - a TA who isn't an org admin is no longer reported as an "unlisted
   collaborator" on every repo, and `course audit` no longer says no row
   lists them. GitHub counts access through the TAs team as collaborator
