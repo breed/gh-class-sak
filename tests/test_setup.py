@@ -63,7 +63,7 @@ class TestHelpMeSetup:
         monkeypatch.setattr(core, "config_ini", str(path))
         result = run(cli, "help-me-setup")
         assert result.exit_code == 1
-        assert "missing url or token" in result.output
+        assert "no canvas token: set the CANVAS_API_TOKEN" in result.output
         assert "token = YOUR_CANVAS_API_TOKEN" in result.output
 
     def test_org_without_classroom_meta_is_flagged(self, cli, config_file,

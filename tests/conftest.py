@@ -43,6 +43,7 @@ def _no_ambient_credentials(monkeypatch):
     instead of on CI."""
     monkeypatch.setattr(core, "probe_token", lambda: (None, None))
     monkeypatch.setattr(core, "_token", None)
+    monkeypatch.delenv("CANVAS_API_TOKEN", raising=False)
     yield
 
 

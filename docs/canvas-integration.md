@@ -13,6 +13,9 @@ url = https://your-canvas-instance.instructure.com
 token = YOUR_CANVAS_API_TOKEN
 ```
 
+The `CANVAS_API_TOKEN` environment variable, when set, is used instead of `token`, so
+the token can stay out of the config file.
+
 ## Which Canvas course is meant
 
 A course maps to a Canvas course by name. The lookup partial is, in order: the
